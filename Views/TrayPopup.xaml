@@ -1,0 +1,39 @@
+<UserControl x:Class="DisplayController.Views.TrayPopup"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Width="300" CornerRadius="10" Background="{DynamicResource ThemeCardBackground}"
+            BorderBrush="{DynamicResource ThemeBorder}" BorderThickness="1" Padding="16">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.35" Color="Black" />
+        </Border.Effect>
+        <StackPanel>
+            <TextBlock Text="Display Controller" Foreground="{DynamicResource ThemePrimaryText}" FontSize="15" FontWeight="SemiBold" />
+
+            <DockPanel Margin="0,16,0,0">
+                <TextBlock Text="Brightness" Foreground="{DynamicResource ThemeSecondaryText}" DockPanel.Dock="Left" />
+                <TextBlock Text="{Binding Brightness, StringFormat={}{0}%}" Foreground="{DynamicResource ThemeSecondaryText}"
+                           DockPanel.Dock="Right" HorizontalAlignment="Right" />
+            </DockPanel>
+            <Slider Minimum="0" Maximum="100" Margin="0,4,0,0"
+                    Value="{Binding Brightness, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <DockPanel Margin="0,16,0,0">
+                <TextBlock Text="Color temperature" Foreground="{DynamicResource ThemeSecondaryText}" DockPanel.Dock="Left" />
+                <TextBlock Text="{Binding ColorTemperature, StringFormat={}{0}K}" Foreground="{DynamicResource ThemeSecondaryText}"
+                           DockPanel.Dock="Right" HorizontalAlignment="Right" />
+            </DockPanel>
+            <Slider Margin="0,4,0,0"
+                    Minimum="1200" Maximum="6600"
+                    IsEnabled="{Binding ManualColorEnabled}"
+                    Value="{Binding ColorTemperature, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <CheckBox Content="Automatic (time based)" Foreground="{DynamicResource ThemePrimaryText}" Margin="0,10,0,0"
+                      IsChecked="{Binding AutoColorTemperature, Mode=TwoWay}" />
+
+            <Button Content="Settings" Margin="0,16,0,0" Padding="10,6" HorizontalAlignment="Stretch"
+                    Foreground="{DynamicResource ThemePrimaryText}" Background="{DynamicResource ThemeControlBackground}"
+                    BorderBrush="{DynamicResource ThemeBorder}" BorderThickness="1"
+                    Command="{Binding OpenSettingsCommand}" />
+        </StackPanel>
+    </Border>
+</UserControl>

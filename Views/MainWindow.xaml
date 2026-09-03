@@ -1,0 +1,237 @@
+<Window x:Class="DisplayController.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings" Height="680" Width="470"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource ThemeWindowBackground}"
+        ResizeMode="CanMinimize">
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThemePrimaryText}" />
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource ThemeControlBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource ThemePrimaryText}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorder}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource ThemePrimaryText}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource ThemePrimaryText}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter TextElement.Foreground="{DynamicResource ThemePrimaryText}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeButtonHover}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{DynamicResource ThemePrimaryText}" />
+            <Setter Property="Background" Value="{DynamicResource ThemeControlBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton" Focusable="False" ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="{DynamicResource ThemeControlBackground}"
+                                                BorderBrush="{DynamicResource ThemeBorder}"
+                                                BorderThickness="1" CornerRadius="4">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="22" />
+                                                </Grid.ColumnDefinitions>
+                                                <Path Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      Data="M 0 0 L 4 4 L 8 0 Z" Fill="{DynamicResource ThemePrimaryText}" />
+                                            </Grid>
+                                        </Border>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                              Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center" HorizontalAlignment="Left"
+                                              TextElement.Foreground="{DynamicResource ThemePrimaryText}" />
+                            <Popup x:Name="Popup" Placement="Bottom" Focusable="False" AllowsTransparency="True"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="Slide">
+                                <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                        Background="{DynamicResource ThemeCardBackground}"
+                                        BorderBrush="{DynamicResource ThemeBorder}"
+                                        BorderThickness="1" CornerRadius="4" Margin="0,2,0,0">
+                                    <ScrollViewer>
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource ThemePrimaryText}" />
+            <Setter Property="Margin" Value="0,18,0,6" />
+        </Style>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ThemeCardBackground}" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+    </Window.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="22,20,22,20">
+        <StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Image x:Name="HeaderLogo" Width="34" Height="34" VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+                <Border Width="1" Height="28" Margin="12,0,0,0" VerticalAlignment="Center"
+                        Background="{DynamicResource ThemeSecondaryText}" />
+                <TextBlock Text="Display Controller" FontSize="21" FontWeight="Bold"
+                           VerticalAlignment="Center" Margin="12,0,0,0" />
+            </StackPanel>
+            <TextBlock Text="Adjust brightness and color temperature for your displays."
+                       Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,2,0,0" />
+
+            <TextBlock Text="Appearance" Style="{StaticResource SectionHeader}" />
+            <TextBlock Text="Themes follow Windows light/dark mode automatically."
+                       Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,0,0,6" TextWrapping="Wrap" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                    <TextBlock Text="Light mode theme" />
+                    <ComboBox Margin="0,4,0,0" ItemsSource="{Binding LightThemes}"
+                              SelectedItem="{Binding LightModeTheme, Mode=TwoWay}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                    <TextBlock Text="Dark mode theme" />
+                    <ComboBox Margin="0,4,0,0" ItemsSource="{Binding DarkThemes}"
+                              SelectedItem="{Binding DarkModeTheme, Mode=TwoWay}" />
+                </StackPanel>
+            </Grid>
+
+            <TextBlock Text="Detected displays" Style="{StaticResource SectionHeader}" />
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <ItemsControl ItemsSource="{Binding Displays}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Margin="0,3" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource ThemeStrongText}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="Refresh displays" Command="{Binding RefreshCommand}"
+                            HorizontalAlignment="Left" Margin="0,10,0,0" Padding="12,5" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="Automatic color temperature" Style="{StaticResource SectionHeader}" />
+            <CheckBox Content="Gradually shift color temperature by time of day"
+                      IsChecked="{Binding AutoColorTemperature, Mode=TwoWay}" />
+
+            <Grid Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Day (max) color temperature" />
+                <TextBlock Grid.Column="1" Text="{Binding DayColorTemp, StringFormat={}{0} K}" FontWeight="SemiBold" />
+            </Grid>
+            <Slider Minimum="1200" Maximum="6600" TickFrequency="100" IsSnapToTickEnabled="True" Margin="0,4,0,0"
+                    Value="{Binding DayColorTemp, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Grid Margin="0,14,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Night (min) color temperature" />
+                <TextBlock Grid.Column="1" Text="{Binding NightColorTemp, StringFormat={}{0} K}" FontWeight="SemiBold" />
+            </Grid>
+            <Slider Minimum="1200" Maximum="6600" TickFrequency="100" IsSnapToTickEnabled="True" Margin="0,4,0,0"
+                    Value="{Binding NightColorTemp, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <TextBlock Text="Clock format" Style="{StaticResource SectionHeader}" />
+            <StackPanel Orientation="Horizontal">
+                <RadioButton Content="24-hour" Margin="0,0,20,0"
+                             IsChecked="{Binding Use24HourFormat, Mode=TwoWay}" />
+                <RadioButton Content="12-hour (AM/PM)"
+                             IsChecked="{Binding Use12HourFormat, Mode=TwoWay}" />
+            </StackPanel>
+
+            <TextBlock Text="Morning transition (warm → cool)" Style="{StaticResource SectionHeader}" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                    <TextBlock Text="Start" />
+                    <TextBox Text="{Binding MorningStart, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             Padding="6,4" Margin="0,4,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                    <TextBlock Text="End" />
+                    <TextBox Text="{Binding MorningEnd, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             Padding="6,4" Margin="0,4,0,0" />
+                </StackPanel>
+            </Grid>
+            <TextBlock Text="The screen cools from the night value back up to the day value between these times."
+                       Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,6,0,0" TextWrapping="Wrap" />
+
+            <TextBlock Text="Evening transition (cool → warm)" Style="{StaticResource SectionHeader}" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                    <TextBlock Text="Start" />
+                    <TextBox Text="{Binding EveningStart, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             Padding="6,4" Margin="0,4,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                    <TextBlock Text="End" />
+                    <TextBox Text="{Binding EveningEnd, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             Padding="6,4" Margin="0,4,0,0" />
+                </StackPanel>
+            </Grid>
+            <TextBlock Text="The screen warms from the day value down to the night value between these times."
+                       Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,6,0,0" TextWrapping="Wrap" />
+
+            <TextBlock Text="Startup" Style="{StaticResource SectionHeader}" />
+            <CheckBox Content="Run Display Controller when I sign in"
+                      IsChecked="{Binding RunAtStartup, Mode=TwoWay}" />
+
+            <Button Content="Close" HorizontalAlignment="Right" Margin="0,24,0,0" Padding="18,6"
+                    Click="Close_Click" />
+        </StackPanel>
+    </ScrollViewer>
+</Window>
