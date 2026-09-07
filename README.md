@@ -53,6 +53,30 @@ bin\Release\net10.0-windows\DisplayController.exe
 
 ---
 
+## Package for distribution
+
+A single command builds **all four** distributable `DisplayController.exe` files — a portable executable and an installer, each in a self-contained (no .NET required) and a framework-dependent (needs the .NET runtime) flavor.
+
+```powershell
+# from the repository root
+dotnet build DisplayController.csproj -t:PackageAll
+```
+
+> The explicit project name is required while the folder contains generated `*_wpftmp.csproj` temp files. You can also run the script directly: `.\build.ps1`. Override the target runtime with `-p:PackageRuntime=win-arm64` (or pass `-Runtime win-arm64` to `build.ps1`).
+
+**Requirements:** the .NET 10 SDK, plus [Inno Setup 6](https://jrsoftware.org/isdl.php) for the installers. If Inno Setup isn't installed, the script attempts to install it via `winget`; if that fails, the two portable builds still complete and the installer steps are skipped with a warning.
+
+All four outputs share the same file name, each in its own folder under `bin\`:
+
+| Artifact | Folder | .NET runtime |
+| --- | --- | --- |
+| Portable executable | `bin\Portable-SelfContained\DisplayController.exe` | bundled (none needed) |
+| Portable executable | `bin\Portable-FrameworkDependent\DisplayController.exe` | required |
+| Installer | `bin\Installer-SelfContained\DisplayController.exe` | bundled (none needed) |
+| Installer | `bin\Installer-FrameworkDependent\DisplayController.exe` | required |
+
+---
+
 ## Usage
 
 - **Left-click the tray icon** to open the quick-control popup: brightness slider, color-temperature slider, an *Automatic (time based)* toggle, and a **Settings** button (which opens the full window and dismisses the popup).
