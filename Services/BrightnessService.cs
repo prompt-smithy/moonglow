@@ -1,4 +1,5 @@
 using System.Management;
+using System.Threading.Tasks;
 using static DisplayController.Native.NativeMethods;
 
 namespace DisplayController.Services;
@@ -6,7 +7,14 @@ namespace DisplayController.Services;
 /// <summary>Controls brightness: WMI for the internal panel, DDC/CI for external monitors.</summary>
 public sealed class BrightnessService
 {
+    /// <summary>Lowest brightness the app will apply; keeps the screen usable so it never blacks out.</summary>
+    public const int MinBrightnessPercent = 10;
+
     private readonly MonitorService _monitors;
+
+    private readonly object _applyGate = new();
+    private int _targetPercent = -1;
+    private bool _applying;
 
     public bool InternalPanelAvailable { get; private set; }
 
@@ -54,12 +62,50 @@ public sealed class BrightnessService
         return null;
     }
 
-    /// <summary>Sets brightness (0-100) on every controllable display.</summary>
+    /// <summary>Requests a brightness (clamped to a usable range); applied on a background worker
+    /// that coalesces rapid changes so dragging never blocks the UI thread.</summary>
     public void SetBrightness(int percent)
     {
-        percent = Math.Clamp(percent, 0, 100);
-        SetInternalBrightness(percent);
-        SetExternalBrightness(percent);
+        percent = Math.Clamp(percent, MinBrightnessPercent, 100);
+        lock (_applyGate)
+        {
+            _targetPercent = percent;
+            if (_applying)
+                return;
+            _applying = true;
+        }
+        Task.Run(ApplyLoop);
+    }
+
+    private void ApplyLoop()
+    {
+        while (true)
+        {
+            int target;
+            lock (_applyGate)
+            {
+                target = _targetPercent;
+            }
+
+            try
+            {
+                SetInternalBrightness(target);
+                SetExternalBrightness(target);
+            }
+            catch
+            {
+                // Hardware can transiently reject a value; keep serving the latest request.
+            }
+
+            lock (_applyGate)
+            {
+                if (_targetPercent == target)
+                {
+                    _applying = false;
+                    return;
+                }
+            }
+        }
     }
 
     private void SetInternalBrightness(int percent)
@@ -82,14 +128,11 @@ public sealed class BrightnessService
 
     private void SetExternalBrightness(int percent)
     {
-        foreach (var monitor in _monitors.Monitors)
+        _monitors.ForEachDdcMonitor(monitor =>
         {
-            if (!monitor.SupportsDdcBrightness)
-                continue;
-
             uint span = monitor.MaxBrightness - monitor.MinBrightness;
             uint value = monitor.MinBrightness + (uint)Math.Round(span * percent / 100.0);
             SetMonitorBrightness(monitor.PhysicalHandle, value);
-        }
+        });
     }
 }

@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using DisplayController.Infrastructure;
@@ -12,6 +13,7 @@ namespace DisplayController;
 
 public partial class App : Application
 {
+    private static Mutex? _instanceMutex;
     private TaskbarIcon? _tray;
     private MonitorService _monitors = null!;
     private BrightnessService _brightness = null!;
@@ -25,6 +27,15 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Only allow one instance per user session (RunAtStartup + a manual launch would otherwise duplicate).
+        _instanceMutex = new Mutex(true, @"Local\DisplayController.SingleInstance", out bool createdNew);
+        if (!createdNew)
+        {
+            Shutdown();
+            return;
+        }
+
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         _settingsService = new SettingsService();
@@ -35,7 +46,6 @@ public partial class App : Application
         _theme.ApplyForCurrentWindowsMode();
 
         _monitors = new MonitorService();
-        _monitors.Refresh();
 
         _brightness = new BrightnessService(_monitors);
         _color = new ColorTemperatureService(_monitors);
@@ -84,6 +94,10 @@ public partial class App : Application
 
     private void OpenSettings()
     {
+        // Collapse the tray popup when moving focus to the full settings window.
+        if (_tray?.TrayPopupResolved is { } popup)
+            popup.IsOpen = false;
+
         if (_settingsWindow is not null)
         {
             _settingsWindow.Activate();
@@ -119,6 +133,7 @@ public partial class App : Application
         _color?.Dispose();
         _monitors?.Dispose();
         _tray?.Dispose();
+        _instanceMutex?.Dispose();
         base.OnExit(e);
     }
 }

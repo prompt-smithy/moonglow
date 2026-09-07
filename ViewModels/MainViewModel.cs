@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using DisplayController.Infrastructure;
 using DisplayController.Models;
 using DisplayController.Services;
@@ -45,7 +44,7 @@ public sealed class MainViewModel : ObservableObject
         _monitors = monitors;
         _theme = theme;
 
-        _brightnessValue = Settings.ManualBrightness;
+        _brightnessValue = Math.Clamp(Settings.ManualBrightness, BrightnessService.MinBrightnessPercent, 100);
         _auto = Settings.AutoColorTemperature;
         _colorTemp = _auto ? _schedule.CurrentTargetTemperature() : Settings.ManualColorTempK;
 
@@ -73,7 +72,7 @@ public sealed class MainViewModel : ObservableObject
         get => _brightnessValue;
         set
         {
-            if (!SetProperty(ref _brightnessValue, Math.Clamp(value, 0, 100)))
+            if (!SetProperty(ref _brightnessValue, Math.Clamp(value, BrightnessService.MinBrightnessPercent, 100)))
                 return;
 
             _brightness.SetBrightness(_brightnessValue);
@@ -167,10 +166,6 @@ public sealed class MainViewModel : ObservableObject
             _settingsService.Save();
             OnPropertyChanged();
             OnPropertyChanged(nameof(Use12HourFormat));
-            OnPropertyChanged(nameof(MorningStart));
-            OnPropertyChanged(nameof(MorningEnd));
-            OnPropertyChanged(nameof(EveningStart));
-            OnPropertyChanged(nameof(EveningEnd));
         }
     }
 
@@ -182,91 +177,38 @@ public sealed class MainViewModel : ObservableObject
 
     public string MorningStart
     {
-        get => FormatTime(Settings.MorningStart);
-        set
-        {
-            var normalized = NormalizeTime(value);
-            if (normalized != null && Settings.MorningStart != normalized)
-            {
-                Settings.MorningStart = normalized;
-                _settingsService.Save();
-                RetickIfAuto();
-            }
-
-            OnPropertyChanged();
-        }
+        get => Settings.MorningStart;
+        set => SetTime(value, Settings.MorningStart, v => Settings.MorningStart = v, nameof(MorningStart));
     }
 
     public string MorningEnd
     {
-        get => FormatTime(Settings.MorningEnd);
-        set
-        {
-            var normalized = NormalizeTime(value);
-            if (normalized != null && Settings.MorningEnd != normalized)
-            {
-                Settings.MorningEnd = normalized;
-                _settingsService.Save();
-                RetickIfAuto();
-            }
-
-            OnPropertyChanged();
-        }
+        get => Settings.MorningEnd;
+        set => SetTime(value, Settings.MorningEnd, v => Settings.MorningEnd = v, nameof(MorningEnd));
     }
 
     public string EveningStart
     {
-        get => FormatTime(Settings.EveningStart);
-        set
-        {
-            var normalized = NormalizeTime(value);
-            if (normalized != null && Settings.EveningStart != normalized)
-            {
-                Settings.EveningStart = normalized;
-                _settingsService.Save();
-                RetickIfAuto();
-            }
-
-            OnPropertyChanged();
-        }
+        get => Settings.EveningStart;
+        set => SetTime(value, Settings.EveningStart, v => Settings.EveningStart = v, nameof(EveningStart));
     }
 
     public string EveningEnd
     {
-        get => FormatTime(Settings.EveningEnd);
-        set
-        {
-            var normalized = NormalizeTime(value);
-            if (normalized != null && Settings.EveningEnd != normalized)
-            {
-                Settings.EveningEnd = normalized;
-                _settingsService.Save();
-                RetickIfAuto();
-            }
-
-            OnPropertyChanged();
-        }
+        get => Settings.EveningEnd;
+        set => SetTime(value, Settings.EveningEnd, v => Settings.EveningEnd = v, nameof(EveningEnd));
     }
 
-    private string FormatTime(string stored)
+    // Times are stored and edited as canonical 24-hour "HH:mm"; the TimePicker handles display.
+    private void SetTime(string value, string current, Action<string> assign, string propertyName)
     {
-        if (!TimeSpan.TryParse(stored, CultureInfo.InvariantCulture, out var ts))
-            return stored;
+        if (string.IsNullOrWhiteSpace(value) || current == value)
+            return;
 
-        DateTime dt = DateTime.Today.Add(ts);
-        return dt.ToString(Settings.Use24HourFormat ? "HH:mm" : "h:mm tt", CultureInfo.InvariantCulture);
-    }
-
-    // Accepts either 24-hour (20:29) or 12-hour (8:29 PM) input and stores as 24-hour "HH:mm".
-    private static string? NormalizeTime(string input)
-    {
-        input = (input ?? string.Empty).Trim();
-        string[] formats = { "H:mm", "HH:mm", "h:mm tt", "hh:mm tt", "h:mmtt", "hh:mmtt" };
-        if (DateTime.TryParseExact(input, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime dt))
-            return dt.ToString("HH:mm", CultureInfo.InvariantCulture);
-        if (DateTime.TryParse(input, CultureInfo.InvariantCulture, DateTimeStyles.NoCurrentDateDefault, out dt))
-            return dt.ToString("HH:mm", CultureInfo.InvariantCulture);
-        return null;
+        assign(value);
+        _settingsService.Save();
+        RetickIfAuto();
+        OnPropertyChanged(propertyName);
     }
 
     public IReadOnlyList<string> LightThemes => ThemeCatalog.LightNames;

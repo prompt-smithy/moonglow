@@ -9,15 +9,30 @@ public sealed class MonitorService : IDisposable
 {
     private readonly List<MonitorInfo> _monitors = new();
     private readonly List<PHYSICAL_MONITOR> _physical = new();
+    private readonly object _sync = new();
 
     public IReadOnlyList<MonitorInfo> Monitors => _monitors;
 
     public void Refresh()
     {
-        ReleaseHandles();
-        _monitors.Clear();
+        lock (_sync)
+        {
+            ReleaseHandles();
+            _monitors.Clear();
+            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, OnMonitor, IntPtr.Zero);
+        }
+    }
 
-        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, OnMonitor, IntPtr.Zero);
+    /// <summary>Runs an action against each DDC-capable monitor while holding the handle lock,
+    /// so a concurrent <see cref="Refresh"/> cannot destroy handles mid-use.</summary>
+    public void ForEachDdcMonitor(Action<MonitorInfo> apply)
+    {
+        lock (_sync)
+        {
+            foreach (var monitor in _monitors)
+                if (monitor.SupportsDdcBrightness)
+                    apply(monitor);
+        }
     }
 
     private bool OnMonitor(IntPtr hMonitor, IntPtr hdc, ref RECT rect, IntPtr data)
@@ -67,5 +82,11 @@ public sealed class MonitorService : IDisposable
         }
     }
 
-    public void Dispose() => ReleaseHandles();
+    public void Dispose()
+    {
+        lock (_sync)
+        {
+            ReleaseHandles();
+        }
+    }
 }

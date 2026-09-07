@@ -1,8 +1,8 @@
 using System;
 using System.Windows;
-using System.Windows.Interop;
+using System.Windows.Controls;
 using DisplayController.Infrastructure;
-using static DisplayController.Native.NativeMethods;
+using DisplayController.ViewModels;
 
 namespace DisplayController.Views;
 
@@ -11,29 +11,29 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        HeaderLogo.Source = LogoFactory.CreateIcon();
-    }
-
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
-        RemoveTitleBarIcon();
-    }
-
-    // Strips the caption icon so the title bar shows only the window title.
-    private void RemoveTitleBarIcon()
-    {
-        IntPtr hwnd = new WindowInteropHelper(this).Handle;
-        if (hwnd == IntPtr.Zero)
-            return;
-
-        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-        SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_DLGMODALFRAME);
-        SendMessage(hwnd, WM_SETICON, new IntPtr(1), IntPtr.Zero); // ICON_BIG
-        SendMessage(hwnd, WM_SETICON, IntPtr.Zero, IntPtr.Zero);   // ICON_SMALL
-        SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
-            (uint)(SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED));
+        Icon = IconFactory.CreateImageSource();
     }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+    // Forward only genuine user changes; ignore binding/layout echoes so saved values aren't clobbered.
+    private void DayColorSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (sender is not Slider slider || !slider.IsLoaded)
+            return;
+
+        int value = (int)Math.Round(e.NewValue);
+        if (DataContext is MainViewModel vm && value != vm.DayColorTemp)
+            vm.DayColorTemp = value;
+    }
+
+    private void NightColorSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (sender is not Slider slider || !slider.IsLoaded)
+            return;
+
+        int value = (int)Math.Round(e.NewValue);
+        if (DataContext is MainViewModel vm && value != vm.NightColorTemp)
+            vm.NightColorTemp = value;
+    }
 }

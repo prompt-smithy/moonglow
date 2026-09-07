@@ -46,4 +46,16 @@ internal static class IconFactory
             NativeMethods.DestroyIcon(hIcon);
         }
     }
+
+    /// <summary>Rasterizes the tray icon as a WPF image for use as the window/taskbar icon.</summary>
+    public static System.Windows.Media.ImageSource CreateImageSource()
+    {
+        using Icon icon = CreateTrayIcon();
+        var source = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
+            icon.Handle,
+            System.Windows.Int32Rect.Empty,
+            System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+        source.Freeze();
+        return source;
+    }
 }

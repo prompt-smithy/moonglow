@@ -14,8 +14,10 @@
                 <TextBlock Text="{Binding Brightness, StringFormat={}{0}%}" Foreground="{DynamicResource ThemeSecondaryText}"
                            DockPanel.Dock="Right" HorizontalAlignment="Right" />
             </DockPanel>
-            <Slider Minimum="0" Maximum="100" Margin="0,4,0,0"
-                    Value="{Binding Brightness, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            <Slider x:Name="BrightnessSlider" Minimum="10" Maximum="100" Margin="0,4,0,0"
+                    Value="{Binding Brightness, Mode=OneWay}"
+                    IsMoveToPointEnabled="True"
+                    ValueChanged="BrightnessSlider_ValueChanged" />
 
             <DockPanel Margin="0,16,0,0">
                 <TextBlock Text="Color temperature" Foreground="{DynamicResource ThemeSecondaryText}" DockPanel.Dock="Left" />
@@ -24,8 +26,10 @@
             </DockPanel>
             <Slider Margin="0,4,0,0"
                     Minimum="1200" Maximum="6600"
+                    IsMoveToPointEnabled="True"
                     IsEnabled="{Binding ManualColorEnabled}"
-                    Value="{Binding ColorTemperature, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    Value="{Binding ColorTemperature, Mode=OneWay}"
+                    ValueChanged="ColorTempSlider_ValueChanged" />
 
             <CheckBox Content="Automatic (time based)" Foreground="{DynamicResource ThemePrimaryText}" Margin="0,10,0,0"
                       IsChecked="{Binding AutoColorTemperature, Mode=TwoWay}" />
