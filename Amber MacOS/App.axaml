@@ -1,0 +1,64 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Amber.MacOS.App"
+             xmlns:local="using:Amber.MacOS"
+             xmlns:vm="using:Amber.MacOS.ViewModels"
+             x:DataType="vm:MainViewModel"
+             RequestedThemeVariant="Default">
+
+    <TrayIcon.Icons>
+        <TrayIcons>
+            <TrayIcon Icon="/Assets/Amber.ico"
+                      ToolTipText="Amber"
+                      Command="{Binding ShowWindowCommand}">
+                <TrayIcon.Menu>
+                    <NativeMenu>
+                        <NativeMenuItem Header="Open Amber"
+                                        Command="{Binding ShowWindowCommand}" />
+                        <NativeMenuItemSeparator />
+                        <NativeMenuItem Header="Quit"
+                                        Command="{Binding QuitCommand}" />
+                    </NativeMenu>
+                </TrayIcon.Menu>
+            </TrayIcon>
+        </TrayIcons>
+    </TrayIcon.Icons>
+
+    <Application.Resources>
+        <SolidColorBrush x:Key="ThemeWindowBackground" Color="#FFF8E1" />
+        <SolidColorBrush x:Key="ThemeCardBackground" Color="#FFFBF2" />
+        <SolidColorBrush x:Key="ThemeControlBackground" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="ThemePrimaryText" Color="#2B2110" />
+        <SolidColorBrush x:Key="ThemeSecondaryText" Color="#6D5A2F" />
+        <SolidColorBrush x:Key="ThemeBorder" Color="#FFD978" />
+        <SolidColorBrush x:Key="ThemeAccent" Color="#FFB300" />
+        <SolidColorBrush x:Key="ThemeOnAccentText" Color="#241A00" />
+        <SolidColorBrush x:Key="ThemeButtonHover" Color="#FFECB3" />
+        <SolidColorBrush x:Key="ThemeStrongText" Color="#1F1708" />
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <Style Selector="Window">
+            <Setter Property="FontFamily" Value="SF Pro Display, Segoe UI, sans-serif" />
+            <Setter Property="Background" Value="{DynamicResource ThemeWindowBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource ThemePrimaryText}" />
+        </Style>
+        <Style Selector="Border.section">
+            <Setter Property="Background" Value="{DynamicResource ThemeCardBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="20" />
+        </Style>
+        <Style Selector="TextBlock.sectionTitle">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.caption">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.68" />
+            <Setter Property="Foreground" Value="{DynamicResource ThemeSecondaryText}" />
+        </Style>
+    </Application.Styles>
+</Application>

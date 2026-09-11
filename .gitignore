@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+artifacts/
+release/*.dmg
+release/*.zip
+.vs/
+.vscode/
+*.user
+*.suo

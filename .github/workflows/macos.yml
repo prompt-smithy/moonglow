@@ -1,0 +1,41 @@
+name: macOS
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Amber.MacOS.slnx
+
+      - name: Test
+        run: dotnet test Amber.MacOS.slnx --configuration Release --no-restore
+
+      - name: Package Apple Silicon app
+        run: bash "Amber MacOS/Packaging/build-macos.sh"
+
+      - name: Upload macOS release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: Amber-macOS-arm64
+          path: |
+            release/Amber-macOS-arm64.dmg
+            release/Amber-macOS-arm64.zip
+          if-no-files-found: error

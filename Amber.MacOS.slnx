@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/Amber MacOS.Tests/">
+    <Project Path="Amber MacOS.Tests/Amber.MacOS.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Amber MacOS/">
+    <Project Path="Amber MacOS/Amber.MacOS.csproj" />
+  </Folder>
+</Solution>
