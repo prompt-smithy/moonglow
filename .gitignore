@@ -7,3 +7,4 @@ release/*.zip
 .vscode/
 *.user
 *.suo
+release/windows-x64/Amber.exe

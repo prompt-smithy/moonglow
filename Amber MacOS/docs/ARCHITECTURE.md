@@ -75,7 +75,7 @@ App-level resources contain Light Amber fallback values to avoid an unrelated co
 
 The packaging script publishes a self-contained single-file `osx-arm64` apphost, constructs `Amber.app`, creates `Amber.icns` from the committed 1024px PNG, applies an ad-hoc signature, creates a drag-to-Applications DMG, and creates a ZIP.
 
-GitHub Actions performs restore, Release tests, packaging, and artifact upload on `macos-15`.
+The complete app bundle must be built and validated locally on macOS.
 
 ## Test boundaries
 

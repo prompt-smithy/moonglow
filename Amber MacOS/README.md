@@ -35,6 +35,6 @@ The outputs are:
 - `release/Amber-macOS-arm64.dmg` - drag-to-Applications installer image.
 - `release/Amber-macOS-arm64.zip` - compressed application bundle.
 
-GitHub Actions uploads both files in the `Amber-macOS-arm64` workflow artifact. The bundle is self-contained and does not require the .NET runtime.
+Both packages are self-contained and do not require the .NET runtime.
 
 The current builds use an ad-hoc signature for Apple Silicon compatibility but are not Developer ID signed or notarized. On the test Mac, open the DMG, drag **Amber** to **Applications**, then Control-click the application and choose **Open** to approve the first launch. Developer ID signing and notarization will remove this extra Gatekeeper step.

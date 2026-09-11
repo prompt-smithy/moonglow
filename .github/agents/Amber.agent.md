@@ -1,6 +1,6 @@
 ---
 name: "Amber macOS Engineer"
-description: "Use when implementing, debugging, testing, reviewing, or packaging the Amber Avalonia UI menu-bar application for macOS, including CoreGraphics display control, scheduling, themes, settings migration, icons, DMG builds, and GitHub Actions."
+description: "Use when implementing, debugging, testing, reviewing, or packaging the Amber Avalonia UI menu-bar application for macOS, including CoreGraphics display control, scheduling, themes, settings migration, icons, and DMG builds."
 tools: [read, search, edit, execute, todo, web]
 argument-hint: "Describe the Amber feature, defect, test, or macOS packaging task."
 user-invocable: true

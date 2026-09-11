@@ -78,17 +78,9 @@ release/Amber-macOS-arm64.zip
 
 It publishes `osx-arm64`, constructs `Amber.app`, embeds `Amber.icns`, applies and verifies an ad-hoc signature, creates a bundle-preserving ZIP, and creates a compressed DMG with an Applications shortcut.
 
-## GitHub Actions
+## Obtain a test installer
 
-The `macOS` workflow runs on pushes, pull requests, and manual dispatch. It uses `macos-15` and uploads both release files as the `Amber-macOS-arm64` artifact.
-
-To obtain a test installer:
-
-1. Push the branch to GitHub.
-2. Open **Actions** and select **macOS**.
-3. Open the successful workflow run.
-4. Download the `Amber-macOS-arm64` artifact.
-5. Send the DMG to an Apple Silicon Mac tester.
+Run the macOS packaging script on an Apple Silicon Mac, then use `release/Amber-macOS-arm64.dmg` for installation testing or sharing with another tester.
 
 ## Install a test build
 
