@@ -23,13 +23,22 @@ Amber keeps display controls close at hand without adding another window to your
 
 ## Requirements
 
-- Windows 10 or Windows 11
+- Windows 10 or Windows 11 (64-bit)
 - A DDC/CI-capable external monitor for external brightness control
-- The .NET 10 Desktop Runtime when using a framework-dependent build
+- The [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) when using a framework-dependent build
 
 ## Install
 
-Download an installer or portable build from [GitHub Releases](../../releases). Self-contained builds do not require a separate .NET installation.
+Choose the download that matches your system:
+
+| Download | Type | System requirements |
+| --- | --- | --- |
+| [Amber Installer](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Installer.exe) | Installer, self-contained | Windows 10 or 11 (64-bit); no separate .NET installation required |
+| [Amber Installer for systems with .NET 10](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Installer.For.systems.with.net.10.exe) | Installer, framework-dependent | Windows 10 or 11 (64-bit) with the .NET 10 Desktop Runtime |
+| [Amber Portable](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Portable.exe) | Portable, self-contained | Windows 10 or 11 (64-bit); no separate .NET installation required |
+| [Amber Portable for systems with .NET 10](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Portable.For.systems.with.net.10.exe) | Portable, framework-dependent | Windows 10 or 11 (64-bit) with the .NET 10 Desktop Runtime |
+
+Use an installer for a standard Windows installation, or a portable build to run Amber without installing it.
 
 Amber runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, themes, time format, and startup options.
 
