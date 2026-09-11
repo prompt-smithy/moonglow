@@ -4,6 +4,14 @@ Amber is an Avalonia UI menu-bar app for display brightness and color temperatur
 
 Brightness control is capability-gated and currently disabled while the public macOS/IOKit implementation is validated on physical hardware. The app does not call private DisplayServices APIs.
 
+## Documentation
+
+- [Functionality](docs/FUNCTIONALITY.md)
+- [Requirements and compatibility](docs/REQUIREMENTS.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Build, test, and release](docs/BUILD.md)
+- [Amber project agent](../.github/agents/Amber.agent.md)
+
 ## Build and test
 
 ```bash
