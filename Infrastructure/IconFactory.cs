@@ -1,8 +1,8 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using DisplayController.Native;
+using Amber.Native;
 
-namespace DisplayController.Infrastructure;
+namespace Amber.Infrastructure;
 
 /// <summary>Draws the system-tray icon at runtime so no binary asset is required.</summary>
 internal static class IconFactory
@@ -18,7 +18,7 @@ internal static class IconFactory
 
             float cx = size / 2f;
             float cy = size / 2f;
-            var color = Color.FromArgb(255, 255, 196, 64);
+            var color = Color.FromArgb(255, 255, 193, 7);
 
             using var pen = new Pen(color, 2.4f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             for (int i = 0; i < 8; i++)

@@ -1,14 +1,14 @@
 using System.Management;
 using System.Threading.Tasks;
-using static DisplayController.Native.NativeMethods;
+using static Amber.Native.NativeMethods;
 
-namespace DisplayController.Services;
+namespace Amber.Services;
 
 /// <summary>Controls brightness: WMI for the internal panel, DDC/CI for external monitors.</summary>
 public sealed class BrightnessService
 {
     /// <summary>Lowest brightness the app will apply; keeps the screen usable so it never blacks out.</summary>
-    public const int MinBrightnessPercent = 10;
+    public const int MinBrightnessPercent = 1;
 
     private readonly MonitorService _monitors;
 

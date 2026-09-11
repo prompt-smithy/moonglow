@@ -1,6 +1,6 @@
 # Architecture
 
-Technical reference for **Display Controller** (`DisplayController`). For a user-facing overview see the [README](../README.md).
+Technical reference for **Amber** (`Amber`). For a user-facing overview see the [README](../README.md).
 
 ## Contents
 - [Tech stack](#tech-stack)
@@ -32,7 +32,7 @@ Technical reference for **Display Controller** (`DisplayController`). For a user
 
 `App.OnStartup` ([App.xaml.cs](../App.xaml.cs)) is the composition root:
 
-1. **Single-instance guard** – a named `Mutex` (`Local\DisplayController.SingleInstance`); if it already exists, the second process shuts down immediately.
+1. **Single-instance guard** – a named `Mutex` (`Local\Amber.SingleInstance`); if it already exists, the second process shuts down immediately.
 2. `ShutdownMode = OnExplicitShutdown` (the app has no main window; it lives in the tray).
 3. Services are constructed in dependency order: `SettingsService` → `ThemeService` → `MonitorService` → `BrightnessService` → `ColorTemperatureService` → `ScheduleService` → `MainViewModel`.
 4. A `TaskbarIcon` is created with the view model as `DataContext`, a `TrayPopup`, and a context menu.
@@ -58,7 +58,7 @@ Implemented in [`BrightnessService`](../Services/BrightnessService.cs).
 
 - **Internal panel** – WMI: query `WmiMonitorBrightnessMethods` and invoke `WmiSetBrightness(timeout, level)`; availability is detected at construction via `WmiMonitorBrightness`.
 - **External monitors** – DDC/CI: `SetMonitorBrightness` on each display that reported brightness support during enumeration, scaled between the monitor's reported min/max.
-- **Minimum floor** – values are clamped to `MinBrightnessPercent` (10%) so the panel never goes fully black.
+- **Minimum floor** – values are clamped to `MinBrightnessPercent` (1%) so the panel never goes fully black.
 - **Async + coalesced application** – `SetBrightness` records a target and starts a **single background worker** (`Task.Run`) that applies the *latest* requested value in a loop until it stops changing. This keeps slow WMI/DDC calls off the UI thread and collapses bursts from dragging the slider into "latest wins."
 - **Thread safety** – the worker reaches DDC handles through `MonitorService.ForEachDdcMonitor(...)`, which holds the same lock used by `Refresh`/`Dispose`, so handles can't be destroyed mid-use.
 
@@ -110,9 +110,9 @@ Implemented in [`MonitorService`](../Services/MonitorService.cs).
 
 ## Settings & startup
 
-- [`SettingsService`](../Services/SettingsService.cs) serializes [`AppSettings`](../Models/AppSettings.cs) to `%APPDATA%\DisplayController\settings.json` (indented JSON). Load and save are best-effort and swallow I/O errors.
+- [`SettingsService`](../Services/SettingsService.cs) serializes [`AppSettings`](../Models/AppSettings.cs) to `%APPDATA%\Amber\settings.json` (indented JSON). Load and save are best-effort and swallow I/O errors.
 - Times are stored as 24-hour `HH:mm`; `AppSettings` exposes parsed `TimeSpan` helpers for the scheduler.
-- [`StartupManager`](../Infrastructure/StartupManager.cs) adds/removes the current executable path under `HKCU\...\CurrentVersion\Run` (value `DisplayController`).
+- [`StartupManager`](../Infrastructure/StartupManager.cs) adds/removes the current executable path under `HKCU\...\CurrentVersion\Run` (value `Amber`).
 
 ---
 

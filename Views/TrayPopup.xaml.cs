@@ -1,9 +1,9 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
-using DisplayController.ViewModels;
+using Amber.ViewModels;
 
-namespace DisplayController.Views;
+namespace Amber.Views;
 
 public partial class TrayPopup : UserControl
 {

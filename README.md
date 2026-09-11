@@ -1,8 +1,8 @@
-# Display Controller
+# Amber
 
 A lightweight Windows system-tray app (WPF, .NET 10) for controlling **display brightness** and **screen color temperature**, with an automatic time-of-day warm/cool schedule.
 
-- **Assembly:** `DisplayController` &nbsp;•&nbsp; **Product:** Display Controller
+- **Assembly:** `Amber` &nbsp;•&nbsp; **Product:** Amber
 - **Platform:** Windows only (`net10.0-windows`, WPF)
 - **Runs as:** a tray icon with a quick-control popup and a full settings window
 
@@ -18,7 +18,7 @@ A lightweight Windows system-tray app (WPF, .NET 10) for controlling **display b
   - Preferred: **Magnification full-screen color effect** (reaches very warm tones).
   - Fallback: **GPU gamma ramp**.
 - **Automatic schedule** – gradually shifts color temperature between a day (cool) and night (warm) value across configurable **morning** and **evening** transition windows.
-- **Themed UI** – five light and five dark palettes that **follow the Windows light/dark mode** automatically.
+- **Themed UI** – six light and six dark palettes that **follow the Windows light/dark mode** automatically.
 - **Time pickers** – hour / minute / AM–PM selectors (12- or 24-hour), scroll a field to change it.
 - **Run at sign-in** toggle (per-user startup registration).
 - **Single instance** – a second launch simply focuses the existing one.
@@ -45,8 +45,8 @@ dotnet build -c Release          # optimized build (recommended for daily use)
 The built executable is at:
 
 ```
-bin\Debug\net10.0-windows\DisplayController.exe
-bin\Release\net10.0-windows\DisplayController.exe
+bin\Debug\net10.0-windows\Amber.exe
+bin\Release\net10.0-windows\Amber.exe
 ```
 
 > **Tip:** run the **Release** build for daily use — it uses roughly half the memory of the Debug build. If you enable *Run at sign-in* while running the Debug `.exe`, that Debug path is what gets registered; re-toggle it from the Release build to point startup at the leaner binary.
@@ -55,11 +55,11 @@ bin\Release\net10.0-windows\DisplayController.exe
 
 ## Package for distribution
 
-A single command builds **all four** distributable `DisplayController.exe` files — a portable executable and an installer, each in a self-contained (no .NET required) and a framework-dependent (needs the .NET runtime) flavor.
+A single command builds **all four** distributable `Amber.exe` files — a portable executable and an installer, each in a self-contained (no .NET required) and a framework-dependent (needs the .NET runtime) flavor.
 
 ```powershell
 # from the repository root
-dotnet build DisplayController.csproj -t:PackageAll
+dotnet build Amber.csproj -t:PackageAll
 ```
 
 > The explicit project name is required while the folder contains generated `*_wpftmp.csproj` temp files. You can also run the script directly: `.\build.ps1`. Override the target runtime with `-p:PackageRuntime=win-arm64` (or pass `-Runtime win-arm64` to `build.ps1`).
@@ -70,10 +70,10 @@ All four outputs share the same file name, each in its own folder under `bin\`:
 
 | Artifact | Folder | .NET runtime |
 | --- | --- | --- |
-| Portable executable | `bin\Portable-SelfContained\DisplayController.exe` | bundled (none needed) |
-| Portable executable | `bin\Portable-FrameworkDependent\DisplayController.exe` | required |
-| Installer | `bin\Installer-SelfContained\DisplayController.exe` | bundled (none needed) |
-| Installer | `bin\Installer-FrameworkDependent\DisplayController.exe` | required |
+| Portable executable | `bin\Portable-SelfContained\Amber.exe` | bundled (none needed) |
+| Portable executable | `bin\Portable-FrameworkDependent\Amber.exe` | required |
+| Installer | `bin\Installer-SelfContained\Amber.exe` | bundled (none needed) |
+| Installer | `bin\Installer-FrameworkDependent\Amber.exe` | required |
 
 ---
 
@@ -85,7 +85,7 @@ All four outputs share the same file name, each in its own folder under `bin\`:
   - Light-mode and dark-mode theme.
   - Detected displays (with a *Refresh displays* button).
   - Automatic color temperature: day/night targets, morning/evening transition times, and 12/24-hour clock format.
-  - *Run Display Controller when I sign in*.
+  - *Run Amber when I sign in*.
 - Click anywhere on a slider track to jump straight to that value.
 
 ### Settings storage
@@ -93,11 +93,11 @@ All four outputs share the same file name, each in its own folder under `bin\`:
 User settings are saved as JSON at:
 
 ```
-%APPDATA%\DisplayController\settings.json
+%APPDATA%\Amber\settings.json
 ```
 
 Times are stored canonically as 24-hour `HH:mm`. Startup registration uses the per-user
-`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` key (value name `DisplayController`).
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` key (value name `Amber`).
 
 ---
 
@@ -112,7 +112,6 @@ Infrastructure/             Cross-cutting helpers
   RelayCommand.cs             ICommand implementation
   StartupManager.cs           Run-at-sign-in registry entry
   IconFactory.cs              Tray icon bitmap
-  LogoFactory.cs              In-app logo drawing
 
 Models/                     Plain data
   AppSettings.cs              Persisted user configuration

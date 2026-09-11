@@ -1,4 +1,4 @@
-<UserControl x:Class="DisplayController.Views.TrayPopup"
+<UserControl x:Class="Amber.Views.TrayPopup"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Border Width="300" CornerRadius="10" Background="{DynamicResource ThemeCardBackground}"
@@ -7,14 +7,14 @@
             <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.35" Color="Black" />
         </Border.Effect>
         <StackPanel>
-            <TextBlock Text="Display Controller" Foreground="{DynamicResource ThemePrimaryText}" FontSize="15" FontWeight="SemiBold" />
+            <TextBlock Text="Amber" Foreground="{DynamicResource ThemePrimaryText}" FontSize="15" FontWeight="SemiBold" />
 
             <DockPanel Margin="0,16,0,0">
                 <TextBlock Text="Brightness" Foreground="{DynamicResource ThemeSecondaryText}" DockPanel.Dock="Left" />
                 <TextBlock Text="{Binding Brightness, StringFormat={}{0}%}" Foreground="{DynamicResource ThemeSecondaryText}"
                            DockPanel.Dock="Right" HorizontalAlignment="Right" />
             </DockPanel>
-            <Slider x:Name="BrightnessSlider" Minimum="10" Maximum="100" Margin="0,4,0,0"
+            <Slider x:Name="BrightnessSlider" Minimum="1" Maximum="100" Margin="0,4,0,0"
                     Value="{Binding Brightness, Mode=OneWay}"
                     IsMoveToPointEnabled="True"
                     ValueChanged="BrightnessSlider_ValueChanged" />
@@ -25,7 +25,7 @@
                            DockPanel.Dock="Right" HorizontalAlignment="Right" />
             </DockPanel>
             <Slider Margin="0,4,0,0"
-                    Minimum="1200" Maximum="6600"
+                    Minimum="900" Maximum="6600"
                     IsMoveToPointEnabled="True"
                     IsEnabled="{Binding ManualColorEnabled}"
                     Value="{Binding ColorTemperature, Mode=OneWay}"

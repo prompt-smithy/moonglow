@@ -1,7 +1,7 @@
 using System.Windows.Threading;
-using DisplayController.Models;
+using Amber.Models;
 
-namespace DisplayController.Services;
+namespace Amber.Services;
 
 /// <summary>Drives the gradual color-temperature transition based on the time of day.</summary>
 public sealed class ScheduleService

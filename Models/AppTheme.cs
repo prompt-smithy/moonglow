@@ -1,4 +1,4 @@
-namespace DisplayController.Models;
+namespace Amber.Models;
 
 /// <summary>A named color palette applied to the app UI via dynamic resources.</summary>
 public sealed class AppTheme

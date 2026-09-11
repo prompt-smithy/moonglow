@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace DisplayController.Native;
+namespace Amber.Native;
 
 /// <summary>P/Invoke declarations for monitor enumeration, DDC/CI and gamma control.</summary>
 internal static class NativeMethods

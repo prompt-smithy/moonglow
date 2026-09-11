@@ -1,9 +1,9 @@
 using System.Collections.ObjectModel;
-using DisplayController.Infrastructure;
-using DisplayController.Models;
-using DisplayController.Services;
+using Amber.Infrastructure;
+using Amber.Models;
+using Amber.Services;
 
-namespace DisplayController.ViewModels;
+namespace Amber.ViewModels;
 
 public sealed class MainViewModel : ObservableObject
 {

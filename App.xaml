@@ -1,18 +1,18 @@
-<Application x:Class="DisplayController.App"
+<Application x:Class="Amber.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
-        <!-- Defaults (White theme); replaced at runtime by ThemeService. -->
-        <SolidColorBrush x:Key="ThemeWindowBackground" Color="#FFF7F8FA" />
-        <SolidColorBrush x:Key="ThemeCardBackground" Color="#FFFFFFFF" />
+        <!-- Light Amber defaults; replaced at runtime by ThemeService. -->
+        <SolidColorBrush x:Key="ThemeWindowBackground" Color="#FFFFF8E1" />
+        <SolidColorBrush x:Key="ThemeCardBackground" Color="#FFFFFBF2" />
         <SolidColorBrush x:Key="ThemeControlBackground" Color="#FFFFFFFF" />
-        <SolidColorBrush x:Key="ThemePrimaryText" Color="#FF1A1A1A" />
-        <SolidColorBrush x:Key="ThemeSecondaryText" Color="#FF666666" />
-        <SolidColorBrush x:Key="ThemeBorder" Color="#FFE2E4E8" />
-        <SolidColorBrush x:Key="ThemeAccent" Color="#FF2D7FF9" />
-        <SolidColorBrush x:Key="ThemeOnAccentText" Color="#FFFFFFFF" />
-        <SolidColorBrush x:Key="ThemeButtonHover" Color="#FFFDF0B5" />
-        <SolidColorBrush x:Key="ThemeStrongText" Color="#FF1A1A1A" />
+        <SolidColorBrush x:Key="ThemePrimaryText" Color="#FF2B2110" />
+        <SolidColorBrush x:Key="ThemeSecondaryText" Color="#FF6D5A2F" />
+        <SolidColorBrush x:Key="ThemeBorder" Color="#FFFFD978" />
+        <SolidColorBrush x:Key="ThemeAccent" Color="#FFFFB300" />
+        <SolidColorBrush x:Key="ThemeOnAccentText" Color="#FF241A00" />
+        <SolidColorBrush x:Key="ThemeButtonHover" Color="#FFFFECB3" />
+        <SolidColorBrush x:Key="ThemeStrongText" Color="#FF1F1708" />
 
         <!-- Buttons: tinted/darker background on hover; font unchanged. -->
         <Style TargetType="Button">

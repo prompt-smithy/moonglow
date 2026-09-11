@@ -1,6 +1,6 @@
-using static DisplayController.Native.NativeMethods;
+using static Amber.Native.NativeMethods;
 
-namespace DisplayController.Services;
+namespace Amber.Services;
 
 /// <summary>
 /// Applies a color temperature to every display. Prefers the Magnification full-screen
@@ -115,7 +115,7 @@ public sealed class ColorTemperatureService : IDisposable
     /// </summary>
     public static (double R, double G, double B) KelvinToRgbScale(int kelvin)
     {
-        double temp = Math.Clamp(kelvin, 1000, 40000) / 100.0;
+        double temp = Math.Clamp(kelvin, 900, 40000) / 100.0;
         double r, g, b;
 
         if (temp <= 66)

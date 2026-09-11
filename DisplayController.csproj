@@ -7,11 +7,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <RootNamespace>DisplayController</RootNamespace>
-    <AssemblyName>DisplayController</AssemblyName>
+    <RootNamespace>Amber</RootNamespace>
+    <AssemblyName>Amber</AssemblyName>
+    <ApplicationIcon>Assets\Amber.ico</ApplicationIcon>
     <Version>1.0.0</Version>
-    <Product>Display Controller</Product>
-    <AssemblyTitle>Display Controller</AssemblyTitle>
+    <Product>Amber</Product>
+    <AssemblyTitle>Amber</AssemblyTitle>
   </PropertyGroup>
 
   <ItemGroup>

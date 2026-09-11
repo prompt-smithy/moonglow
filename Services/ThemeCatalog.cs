@@ -1,6 +1,6 @@
-using DisplayController.Models;
+using Amber.Models;
 
-namespace DisplayController.Services;
+namespace Amber.Services;
 
 /// <summary>The set of selectable themes, split into light and dark groups.</summary>
 public static class ThemeCatalog
@@ -9,10 +9,10 @@ public static class ThemeCatalog
     {
         new()
         {
-            Name = "White", IsDark = false,
-            WindowBackground = "#FFF7F8FA", CardBackground = "#FFFFFFFF", ControlBackground = "#FFFFFFFF",
-            PrimaryText = "#FF1A1A1A", SecondaryText = "#FF666666", Border = "#FFE2E4E8",
-            Accent = "#FF2D7FF9", OnAccentText = "#FFFFFFFF", ButtonHover = "#FFFDF0B5", StrongText = "#FF1A1A1A",
+            Name = "Light Amber", IsDark = false,
+            WindowBackground = "#FFFFF8E1", CardBackground = "#FFFFFBF2", ControlBackground = "#FFFFFFFF",
+            PrimaryText = "#FF2B2110", SecondaryText = "#FF6D5A2F", Border = "#FFFFD978",
+            Accent = "#FFFFB300", OnAccentText = "#FF241A00", ButtonHover = "#FFFFECB3", StrongText = "#FF1F1708",
         },
         new()
         {
@@ -37,31 +37,45 @@ public static class ThemeCatalog
         },
         new()
         {
-            Name = "Orange", IsDark = true,
+            Name = "Light Grey", IsDark = false,
+            WindowBackground = "#FFEBECEE", CardBackground = "#FFF5F6F7", ControlBackground = "#FFFFFFFF",
+            PrimaryText = "#FF24272B", SecondaryText = "#FF6B6F74", Border = "#FFD4D7DB",
+            Accent = "#FF596471", OnAccentText = "#FFFFFFFF", ButtonHover = "#FFE3E5E8", StrongText = "#FF24272B",
+        },
+        new()
+        {
+            Name = "White", IsDark = false,
+            WindowBackground = "#FFF7F8FA", CardBackground = "#FFFFFFFF", ControlBackground = "#FFFFFFFF",
+            PrimaryText = "#FF1A1A1A", SecondaryText = "#FF666666", Border = "#FFE2E4E8",
+            Accent = "#FF2D7FF9", OnAccentText = "#FFFFFFFF", ButtonHover = "#FFFDF0B5", StrongText = "#FF1A1A1A",
+        },
+        new()
+        {
+            Name = "Dark Amber", IsDark = true,
+            WindowBackground = "#FF18150D", CardBackground = "#FF211D12", ControlBackground = "#FF2A2517",
+            PrimaryText = "#FFF5E7C1", SecondaryText = "#FFC1AA72", Border = "#FF4A3E20",
+            Accent = "#FFFFC107", OnAccentText = "#FF211800", ButtonHover = "#FF393019", StrongText = "#FFFFF3D1",
+        },
+        new()
+        {
+            Name = "Dark Orange", IsDark = true,
             WindowBackground = "#FF1A1206", CardBackground = "#FF241A0B", ControlBackground = "#FF2F2312",
             PrimaryText = "#FFE7D2B0", SecondaryText = "#FFB1926B", Border = "#FF493822",
             Accent = "#FFE8802A", OnAccentText = "#FF1A1206", ButtonHover = "#FF3C2C15", StrongText = "#FFF2E1C6",
         },
         new()
         {
-            Name = "Green", IsDark = true,
+            Name = "Dark Green", IsDark = true,
             WindowBackground = "#FF0D1A11", CardBackground = "#FF142317", ControlBackground = "#FF1C2E20",
             PrimaryText = "#FFC7E1CB", SecondaryText = "#FF87AC8C", Border = "#FF284A31",
             Accent = "#FF3AA655", OnAccentText = "#FF0D1A11", ButtonHover = "#FF1D3925", StrongText = "#FFDBEEDF",
         },
         new()
         {
-            Name = "Violet", IsDark = true,
+            Name = "Dark Violet", IsDark = true,
             WindowBackground = "#FF14101E", CardBackground = "#FF1D172D", ControlBackground = "#FF271E3B",
             PrimaryText = "#FFD6CAEB", SecondaryText = "#FF9C8DBC", Border = "#FF3A2D57",
             Accent = "#FF7A4FD0", OnAccentText = "#FF14101E", ButtonHover = "#FF2D2247", StrongText = "#FFE6DDF6",
-        },
-        new()
-        {
-            Name = "Light Grey", IsDark = false,
-            WindowBackground = "#FFEBECEE", CardBackground = "#FFF5F6F7", ControlBackground = "#FFFFFFFF",
-            PrimaryText = "#FF24272B", SecondaryText = "#FF6B6F74", Border = "#FFD4D7DB",
-            Accent = "#FF596471", OnAccentText = "#FFFFFFFF", ButtonHover = "#FFE3E5E8", StrongText = "#FF24272B",
         },
         new()
         {
@@ -72,7 +86,7 @@ public static class ThemeCatalog
         },
         new()
         {
-            Name = "Dark", IsDark = true,
+            Name = "Black", IsDark = true,
             WindowBackground = "#FF161719", CardBackground = "#FF1E2024", ControlBackground = "#FF26282E",
             PrimaryText = "#FFB4B9C0", SecondaryText = "#FF9AA0A8", Border = "#FF33363D",
             Accent = "#FF3D7EFF", OnAccentText = "#FFFFFFFF", ButtonHover = "#FF3A3E46", StrongText = "#FFC6CCD2",
@@ -85,6 +99,25 @@ public static class ThemeCatalog
     public static IReadOnlyList<string> DarkNames { get; } =
         All.Where(t => t.IsDark).Select(t => t.Name).ToList();
 
+    public static string NormalizeLightName(string? name) =>
+        LightNames.Contains(name) ? name! : "Light Amber";
+
+    public static string NormalizeDarkName(string? name)
+    {
+        string? normalized = name switch
+        {
+            "Amber Dark" => "Dark Amber",
+            "Orange" => "Dark Orange",
+            "Green" => "Dark Green",
+            "Violet" => "Dark Violet",
+            "Dark" => "Black",
+            _ => name,
+        };
+        return DarkNames.Contains(normalized) ? normalized! : "Dark Amber";
+    }
+
     public static AppTheme ByName(string? name) =>
-        All.FirstOrDefault(t => t.Name == name) ?? All[0];
+        All.FirstOrDefault(t => t.Name == name)
+        ?? All.FirstOrDefault(t => t.Name == NormalizeDarkName(name))
+        ?? All[0];
 }

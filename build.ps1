@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
-    Builds every distributable flavor of Display Controller with a single command.
+    Builds every distributable flavor of Amber with a single command.
 
 .DESCRIPTION
-    Produces four artifacts, all named DisplayController.exe, each in its own folder
+    Produces four artifacts, all named Amber.exe, each in its own folder
     under bin\:
 
-        bin\Portable-SelfContained\DisplayController.exe        (1) portable, no .NET required
-        bin\Portable-FrameworkDependent\DisplayController.exe   (2) portable, needs .NET runtime
-        bin\Installer-SelfContained\DisplayController.exe       (3) installer, no .NET required
-        bin\Installer-FrameworkDependent\DisplayController.exe  (4) installer, needs .NET runtime
+        bin\Portable-SelfContained\Amber.exe        (1) portable, no .NET required
+        bin\Portable-FrameworkDependent\Amber.exe   (2) portable, needs .NET runtime
+        bin\Installer-SelfContained\Amber.exe       (3) installer, no .NET required
+        bin\Installer-FrameworkDependent\Amber.exe  (4) installer, needs .NET runtime
 
     Portable builds are single-file executables produced by `dotnet publish`.
     Installers are single setup.exe files produced by Inno Setup (ISCC.exe). If Inno
@@ -31,11 +31,11 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $root       = $PSScriptRoot
-$project    = Join-Path $root 'DisplayController.csproj'
-$issScript  = Join-Path $root 'installer\DisplayController.iss'
+$project    = Join-Path $root 'Amber.csproj'
+$issScript  = Join-Path $root 'installer\Amber.iss'
 $binDir     = Join-Path $root 'bin'
 $stagingDir = Join-Path $binDir '_staging'
-$appExe     = 'DisplayController.exe'
+$appExe     = 'Amber.exe'
 
 # Output folders (same file name, different folders).
 $portableScDir  = Join-Path $binDir 'Portable-SelfContained'
@@ -95,7 +95,7 @@ function Resolve-Iscc {
 }
 
 $version = Get-AppVersion
-Write-Host "Display Controller packaging - version $version, runtime $Runtime" -ForegroundColor Green
+Write-Host "Amber packaging - version $version, runtime $Runtime" -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
 # Clean previous artifacts.

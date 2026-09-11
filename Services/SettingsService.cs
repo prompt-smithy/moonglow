@@ -1,14 +1,14 @@
 using System.IO;
 using System.Text.Json;
-using DisplayController.Models;
+using Amber.Models;
 
-namespace DisplayController.Services;
+namespace Amber.Services;
 
-/// <summary>Loads and saves <see cref="AppSettings"/> as JSON under %AppData%\DisplayController.</summary>
+/// <summary>Loads and saves <see cref="AppSettings"/> as JSON under %AppData%\Amber.</summary>
 public sealed class SettingsService
 {
     private static readonly string Dir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DisplayController");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Amber");
 
     private static readonly string FilePath = Path.Combine(Dir, "settings.json");
 
@@ -22,6 +22,9 @@ public sealed class SettingsService
         {
             if (File.Exists(FilePath))
                 Settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath)) ?? new AppSettings();
+
+            Settings.LightModeTheme = ThemeCatalog.NormalizeLightName(Settings.LightModeTheme);
+            Settings.DarkModeTheme = ThemeCatalog.NormalizeDarkName(Settings.DarkModeTheme);
         }
         catch
         {

@@ -1,11 +1,11 @@
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
-using DisplayController.Models;
+using Amber.Models;
 using Microsoft.Win32;
-using static DisplayController.Native.NativeMethods;
+using static Amber.Native.NativeMethods;
 
-namespace DisplayController.Services;
+namespace Amber.Services;
 
 /// <summary>Applies themes to the app resources and follows the Windows light/dark mode.</summary>
 public sealed class ThemeService
@@ -13,7 +13,7 @@ public sealed class ThemeService
     private const string PersonalizeKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize";
     private readonly SettingsService _settings;
 
-    public AppTheme Current { get; private set; } = ThemeCatalog.ByName("White");
+    public AppTheme Current { get; private set; } = ThemeCatalog.ByName("Light Amber");
 
     public event Action<AppTheme>? ThemeChanged;
 

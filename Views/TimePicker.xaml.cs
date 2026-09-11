@@ -4,7 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
-namespace DisplayController.Views;
+namespace Amber.Views;
 
 /// <summary>Hour / minute / AM-PM selectors for a "HH:mm" time; scroll a box to change its value.</summary>
 public partial class TimePicker : UserControl

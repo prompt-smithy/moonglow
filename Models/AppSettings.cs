@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace DisplayController.Models;
+namespace Amber.Models;
 
 /// <summary>Persisted user configuration.</summary>
 public sealed class AppSettings
@@ -28,8 +28,8 @@ public sealed class AppSettings
     public int ManualColorTempK { get; set; } = 6500;
     public bool RunAtStartup { get; set; }
     public bool Use24HourFormat { get; set; } = true;
-    public string LightModeTheme { get; set; } = "White";
-    public string DarkModeTheme { get; set; } = "Dark";
+    public string LightModeTheme { get; set; } = "Light Amber";
+    public string DarkModeTheme { get; set; } = "Dark Amber";
 
     [JsonIgnore]
     public TimeSpan MorningStartTime => ParseTime(MorningStart, 6, 0);

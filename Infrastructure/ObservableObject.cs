@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace DisplayController.Infrastructure;
+namespace Amber.Infrastructure;
 
 public abstract class ObservableObject : INotifyPropertyChanged
 {

@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace DisplayController.Infrastructure;
+namespace Amber.Infrastructure;
 
 public sealed class RelayCommand : ICommand
 {

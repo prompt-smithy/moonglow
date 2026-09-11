@@ -1,12 +1,12 @@
 using Microsoft.Win32;
 
-namespace DisplayController.Infrastructure;
+namespace Amber.Infrastructure;
 
 /// <summary>Adds or removes the app from the per-user "run at sign-in" registry key.</summary>
 internal static class StartupManager
 {
     private const string RunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "DisplayController";
+    private const string ValueName = "Amber";
 
     public static void Set(bool enabled)
     {

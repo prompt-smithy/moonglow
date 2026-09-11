@@ -1,15 +1,15 @@
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
-using DisplayController.Infrastructure;
-using DisplayController.Models;
-using DisplayController.Services;
-using DisplayController.ViewModels;
-using DisplayController.Views;
+using Amber.Infrastructure;
+using Amber.Models;
+using Amber.Services;
+using Amber.ViewModels;
+using Amber.Views;
 using Hardcodet.Wpf.TaskbarNotification;
 using Microsoft.Win32;
 
-namespace DisplayController;
+namespace Amber;
 
 public partial class App : Application
 {
@@ -29,7 +29,7 @@ public partial class App : Application
         base.OnStartup(e);
 
         // Only allow one instance per user session (RunAtStartup + a manual launch would otherwise duplicate).
-        _instanceMutex = new Mutex(true, @"Local\DisplayController.SingleInstance", out bool createdNew);
+        _instanceMutex = new Mutex(true, @"Local\Amber.SingleInstance", out bool createdNew);
         if (!createdNew)
         {
             Shutdown();
@@ -57,7 +57,7 @@ public partial class App : Application
         _tray = new TaskbarIcon
         {
             Icon = IconFactory.CreateTrayIcon(),
-            ToolTipText = "Display Controller",
+            ToolTipText = "Amber",
             DataContext = _viewModel,
             TrayPopup = new TrayPopup { DataContext = _viewModel },
             ContextMenu = BuildContextMenu(),

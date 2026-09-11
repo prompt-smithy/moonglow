@@ -1,8 +1,8 @@
 using System.Runtime.InteropServices;
-using DisplayController.Models;
-using static DisplayController.Native.NativeMethods;
+using Amber.Models;
+using static Amber.Native.NativeMethods;
 
-namespace DisplayController.Services;
+namespace Amber.Services;
 
 /// <summary>Enumerates physical displays and holds their DDC/CI handles.</summary>
 public sealed class MonitorService : IDisposable

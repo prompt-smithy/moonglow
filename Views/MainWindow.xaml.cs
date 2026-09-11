@@ -1,10 +1,10 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
-using DisplayController.Infrastructure;
-using DisplayController.ViewModels;
+using Amber.Infrastructure;
+using Amber.ViewModels;
 
-namespace DisplayController.Views;
+namespace Amber.Views;
 
 public partial class MainWindow : Window
 {
