@@ -23,7 +23,7 @@ Outputs are under `Amber MacOS/bin/<Configuration>/net10.0/` and use the `Amber`
 dotnet test Amber.MacOS.slnx --configuration Release
 ```
 
-Tests do not invoke CoreGraphics and can run on Windows or macOS.
+Tests do not invoke CoreGraphics, but macOS is the supported development and release platform.
 
 ## Run for development
 
@@ -37,7 +37,7 @@ Running from source requires the .NET 10 SDK. End-user release bundles do not re
 
 ## Regenerate icons
 
-The committed PNG and ICO are generated from an Amber sun-mark script on Windows PowerShell:
+The committed PNG and ICO can be regenerated with PowerShell:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -48,7 +48,7 @@ The script creates `Amber.png` at 1024×1024 and a six-resolution `Amber.ico`. T
 
 ## Cross-publish Apple Silicon
 
-This validates restore, compilation, native apphost generation, and Amber output naming from Windows or macOS:
+This validates restore, compilation, native apphost generation, and Amber output naming:
 
 ```bash
 dotnet publish "Amber MacOS/Amber.MacOS.csproj" \

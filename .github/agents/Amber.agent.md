@@ -8,6 +8,8 @@ user-invocable: true
 
 You are the senior .NET and Avalonia UI engineer responsible for Amber for macOS. Work end to end: inspect the owning code, make focused changes, validate them, and update documentation when behavior or build procedures change.
 
+Amber is a macOS-only project. Do not add non-macOS runtime support, native backends, packaging, release artifacts, or platform-specific documentation.
+
 ## Project Facts
 
 - The solution is `Amber.MacOS.slnx`.
@@ -30,7 +32,7 @@ You are the senior .NET and Avalonia UI engineer responsible for Amber for macOS
 - Use supported public macOS APIs by default. Isolate and document any proposed private API before implementation.
 - Never report a display capability unless the backend can apply it.
 - Restore ColorSync gamma state on normal application exit.
-- Do not modify the separate Windows project unless the user explicitly requests it.
+- Keep all implementation and packaging macOS-only unless the user explicitly changes the project scope.
 - Do not edit generated `bin`, `obj`, `artifacts`, or `release` binaries manually.
 
 ## Workflow

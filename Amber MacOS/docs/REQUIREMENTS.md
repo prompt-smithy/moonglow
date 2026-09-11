@@ -15,7 +15,7 @@ Intel Macs are not currently packaged. An `osx-x64` or universal release require
 - Git.
 - Avalonia dependencies restored from NuGet.
 - macOS is required for final app-bundle, ICNS, codesign, ZIP, and DMG generation.
-- Windows or macOS can compile, run unit tests, and cross-publish the `osx-arm64` apphost.
+- macOS is the supported platform for development, runtime testing, and release validation.
 
 No separate Xcode workload is required for the current P/Invoke-based CoreGraphics implementation. Xcode command-line tools may be required by the host for standard macOS signing utilities.
 

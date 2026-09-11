@@ -5,4 +5,4 @@ The macOS packaging script generates these ad-hoc-signed Apple Silicon test pack
 - `Amber-macOS-arm64.dmg`
 - `Amber-macOS-arm64.zip`
 
-A genuine DMG is created by macOS `hdiutil`, so it cannot be generated locally on Windows.
+A genuine DMG is created by macOS `hdiutil` and must be generated on macOS.
