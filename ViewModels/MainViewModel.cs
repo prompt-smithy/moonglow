@@ -63,7 +63,14 @@ public sealed class MainViewModel : ObservableObject
     public void ApplyInitialState()
     {
         _brightness.SetBrightness(_brightnessValue);
-        if (!_auto)
+        ReapplyColorTemperature();
+    }
+
+    public void ReapplyColorTemperature()
+    {
+        if (_auto)
+            _schedule.Tick();
+        else
             _color.Apply(_colorTemp);
     }
 

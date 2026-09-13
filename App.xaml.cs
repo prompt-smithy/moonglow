@@ -68,6 +68,13 @@ public partial class App : Application
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        SystemEvents.SessionSwitch += OnSessionSwitch;
+    }
+
+    private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
+    {
+        if (e.Reason == SessionSwitchReason.SessionUnlock)
+            Dispatcher.Invoke(() => _viewModel.ReapplyColorTemperature());
     }
 
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
@@ -128,6 +135,7 @@ public partial class App : Application
     {
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
         _schedule?.Stop();
         _color?.Reset();
         _color?.Dispose();

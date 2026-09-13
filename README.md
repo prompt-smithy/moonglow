@@ -42,6 +42,10 @@ Use an installer for a standard Windows installation, or a portable build to run
 
 Amber runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, themes, time format, and startup options.
 
+## Limitations
+
+Amber cannot apply color-temperature settings to the Windows lock screen. If this is inconvenient, configure Windows Night Light separately to provide a color-temperature effect on the lock screen. You can still use Amber for brightness control and quick color-temperature adjustments on the regular desktop alongside Windows Night Light.
+
 ## Build from source
 
 Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), then run:
