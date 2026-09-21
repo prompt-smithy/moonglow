@@ -41,6 +41,7 @@ public sealed class MainViewModel : ObservableObject
             : Settings.ManualColorTempK;
 
         ShowWindowCommand = new RelayCommand(() => ShowWindowRequested?.Invoke(this, EventArgs.Empty));
+        ShowQuickControlsCommand = new RelayCommand(() => ShowQuickControlsRequested?.Invoke(this, EventArgs.Empty));
         QuitCommand = new RelayCommand(() => QuitRequested?.Invoke(this, EventArgs.Empty));
         RefreshCommand = new RelayCommand(RefreshDisplays);
         _schedule.TemperatureApplied += OnTemperatureApplied;
@@ -48,10 +49,12 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public event EventHandler? ShowWindowRequested;
+    public event EventHandler? ShowQuickControlsRequested;
     public event EventHandler? QuitRequested;
 
     public ObservableCollection<DisplayInfo> Displays { get; } = new();
     public IRelayCommand ShowWindowCommand { get; }
+    public IRelayCommand ShowQuickControlsCommand { get; }
     public IRelayCommand QuitCommand { get; }
     public IRelayCommand RefreshCommand { get; }
     public IReadOnlyList<string> LightThemes => ThemeCatalog.LightNames;
@@ -60,10 +63,10 @@ public sealed class MainViewModel : ObservableObject
     private AppSettings Settings => _settingsService.Settings;
 
     public bool HasNoDisplays => Displays.Count == 0;
-    public bool HasBrightnessSupport => Displays.Any(display => display.SupportsBrightness);
+    public bool HasBrightnessSupport => _brightnessService.IsSupported && Displays.Any(display => display.SupportsBrightness);
     public bool HasColorSupport => _colorService.IsSupported && Displays.Any(display => display.SupportsColorTemperature);
     public string BrightnessStatus => HasBrightnessSupport
-        ? "Available on supported displays."
+        ? "Hardware brightness is available through DDC/CI."
         : "Brightness control is unavailable for the detected display connection.";
     public string ColorStatus => HasColorSupport
         ? "CoreGraphics gamma control is available."

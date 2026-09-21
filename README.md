@@ -7,6 +7,7 @@ Amber is a macOS menu-bar application for controlling screen color temperature o
 ## Features
 
 - Active-display discovery through CoreGraphics.
+- DDC/CI hardware brightness from 1% to 100% on a supported primary external display.
 - Manual color temperature from 900 K to 6600 K.
 - Automatic morning and evening transitions in 100 K steps.
 - Six light and six dark palettes that follow system appearance.
@@ -15,7 +16,7 @@ Amber is a macOS menu-bar application for controlling screen color temperature o
 - ColorSync gamma restoration on normal exit.
 - Self-contained Apple Silicon app, DMG, and ZIP packaging.
 
-Brightness controls are capability-aware but currently disabled. A native macOS brightness backend will remain unavailable until a supported implementation is validated on physical displays, docks, and adapters.
+Brightness uses the private CoreDisplay `IOAVService` API to send DDC/CI commands on Apple Silicon. The backend is capability-probed and was validated with the connected Dell P2419H; compatibility can vary by monitor, cable, adapter, and macOS release.
 
 ## Requirements
 
@@ -84,7 +85,8 @@ Amber stores settings at:
 
 ## Current limitations
 
-- Native brightness control is not implemented.
+- DDC/CI currently targets the primary external display; independent multi-display brightness is not implemented.
+- Brightness depends on a private macOS API that Apple may change without notice.
 - Intel Macs are not currently packaged.
 - Gamma-table behavior can vary with HDR, sleep/wake, virtual displays, AirPlay, and other color-management software.
 - Public distribution still requires Developer ID signing and notarization.

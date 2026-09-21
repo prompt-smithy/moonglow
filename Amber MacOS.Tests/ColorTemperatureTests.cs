@@ -39,4 +39,5 @@ public sealed class ColorTemperatureTests
         Assert.True(minimum.Green < nightDefault.Green);
         Assert.True(minimum.Blue <= nightDefault.Blue);
     }
+
 }

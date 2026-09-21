@@ -101,4 +101,5 @@ The extra first-launch step is expected until Developer ID signing and notarizat
 - Mount the DMG and verify drag-to-Applications installation.
 - Open Amber and verify tray icon, window icon, light/dark themes, settings persistence, and color reset on quit.
 - Test color temperature on each target display and HDR configuration.
-- Do not claim brightness support until a physical-hardware backend passes validation.
+- Verify DDC/CI brightness changes the monitor's hardware luminance and persists independently of color temperature.
+- Test each monitor, cable, dock, adapter, and macOS release before claiming DDC/CI compatibility.

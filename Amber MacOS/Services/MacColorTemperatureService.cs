@@ -3,6 +3,7 @@ namespace Amber.MacOS.Services;
 public sealed class MacColorTemperatureService : IColorTemperatureService
 {
     private readonly IDisplayService _displays;
+    private readonly object _sync = new();
 
     public MacColorTemperatureService(IDisplayService displays)
     {
@@ -16,7 +17,15 @@ public sealed class MacColorTemperatureService : IColorTemperatureService
         if (!IsSupported)
             return false;
 
-        var (redScale, greenScale, blueScale) = KelvinToRgbScale(kelvin);
+        lock (_sync)
+        {
+            var (redScale, greenScale, blueScale) = KelvinToRgbScale(kelvin);
+            return ApplyCurrent(redScale, greenScale, blueScale);
+        }
+    }
+
+    private bool ApplyCurrent(double redScale, double greenScale, double blueScale)
+    {
         bool applied = false;
 
         foreach (var display in _displays.Displays.Where(display => display.SupportsColorTemperature))

@@ -1,12 +1,15 @@
 # Functionality
 
-Amber is a macOS menu-bar application for display color temperature and, when a supported backend is available, brightness control.
+Amber is a macOS menu-bar application for external-display hardware brightness and color temperature.
 
 ## Application lifecycle
 
 - Amber starts with a menu-bar icon and an explicit-shutdown lifetime.
+- Clicking the menu-bar icon toggles a compact quick-controls popup.
+- The popup provides brightness and color-temperature sliders, an automatic-color toggle, and Settings and Quit actions.
+- The popup color-temperature slider is disabled while automatic color mode is enabled.
+- **Settings** hides the popup and opens the main settings window.
 - Closing the settings window hides it; Amber continues running in the menu bar.
-- **Open Amber** shows and activates the settings window.
 - **Quit** stops scheduling, restores ColorSync gamma settings, disposes native services, and exits.
 - The current implementation does not yet register a login item or enforce a single process.
 
@@ -15,7 +18,7 @@ Amber is a macOS menu-bar application for display color temperature and, when a 
 Amber calls CoreGraphics to enumerate active display IDs and identify the main display. Each display reports independent capability flags:
 
 - **Color temperature:** available when CoreGraphics reports a non-zero gamma-table capacity.
-- **Brightness:** currently unavailable because the macOS brightness backend has not been validated.
+- **Brightness:** available on the primary external display when the DDC/CI startup probe succeeds.
 
 Refresh re-enumerates active displays. Display names are currently generic because CoreGraphics IDs do not provide a friendly product name through the implemented API surface.
 
@@ -23,11 +26,17 @@ Refresh re-enumerates active displays. Display names are currently generic becau
 
 The UI and persisted value support `1..100%`. Values loaded from settings and values assigned through the view model are clamped to that range.
 
-The brightness slider is disabled unless an enumerated display reports brightness support. The current `UnsupportedBrightnessService` deliberately reports no support and performs no native call. This prevents the UI from claiming that a hardware adjustment succeeded.
+The brightness slider is enabled when Amber can exchange DDC/CI messages through the primary external display's CoreDisplay service. Slider changes are clamped to `1..100%`, coalesced briefly, and sent as MCCS luminance (`VCP 0x10`) writes.
+
+The same brightness state and capability gate back both the quick-controls popup and the main settings window.
+
+This changes the monitor's hardware luminance independently of CoreGraphics color-temperature gamma tables. The current backend targets one primary external display.
 
 ## Color temperature
 
 Manual and scheduled targets support `900..6600` K in 100 K slider increments. Lower values are warmer; approximately 6500 K is neutral.
+
+The quick-controls popup can toggle automatic mode directly. Its manual slider follows the same disabled state as the main settings slider while scheduling is active.
 
 Amber converts Kelvin to normalized red, green, and blue scale factors, builds a gamma table for each capable display, and applies it with `CGSetDisplayTransferByTable`. On exit it calls `CGDisplayRestoreColorSyncSettings`.
 

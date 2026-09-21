@@ -10,15 +10,9 @@
         <TrayIcons>
             <TrayIcon Icon="/Assets/Amber.ico"
                       ToolTipText="Amber"
-                      Command="{Binding ShowWindowCommand}">
+                      Command="{Binding ShowQuickControlsCommand}">
                 <TrayIcon.Menu>
-                    <NativeMenu>
-                        <NativeMenuItem Header="Open Amber"
-                                        Command="{Binding ShowWindowCommand}" />
-                        <NativeMenuItemSeparator />
-                        <NativeMenuItem Header="Quit"
-                                        Command="{Binding QuitCommand}" />
-                    </NativeMenu>
+                    <NativeMenu Opening="OnTrayMenuOpening" />
                 </TrayIcon.Menu>
             </TrayIcon>
         </TrayIcons>

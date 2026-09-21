@@ -4,6 +4,13 @@ namespace Amber.MacOS.Services;
 
 public sealed class MacDisplayService : IDisplayService
 {
+    private readonly bool _supportsDdcBrightness;
+
+    public MacDisplayService(bool supportsDdcBrightness = false)
+    {
+        _supportsDdcBrightness = supportsDdcBrightness;
+    }
+
     public IReadOnlyList<DisplayInfo> Displays { get; private set; } = Array.Empty<DisplayInfo>();
 
     public IReadOnlyList<DisplayInfo> Refresh()
@@ -21,13 +28,17 @@ public sealed class MacDisplayService : IDisplayService
         uint mainDisplay = MacNative.CGMainDisplayID();
         Displays = displayIds
             .Take((int)actualCount)
-            .Select((id, index) => new DisplayInfo(
-                id,
-                id == mainDisplay ? "Built-in or primary display" : $"External display {index + 1}",
-                id.ToString(),
-                id == mainDisplay,
-                SupportsBrightness: false,
-                SupportsColorTemperature: MacNative.CGDisplayGammaTableCapacity(id) > 0))
+            .Select((id, index) =>
+            {
+                bool supportsGammaAdjustments = MacNative.CGDisplayGammaTableCapacity(id) > 0;
+                return new DisplayInfo(
+                    id,
+                    id == mainDisplay ? "Built-in or primary display" : $"External display {index + 1}",
+                    id.ToString(),
+                    id == mainDisplay,
+                    SupportsBrightness: _supportsDdcBrightness && id == mainDisplay && MacNative.CGDisplayIsBuiltin(id) == 0,
+                    SupportsColorTemperature: supportsGammaAdjustments);
+            })
             .ToArray();
 
         return Displays;

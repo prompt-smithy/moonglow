@@ -27,13 +27,15 @@ Color temperature requires a display with a writable CoreGraphics gamma table. I
 
 ### Brightness
 
-Native brightness control is not currently implemented. macOS does not expose one stable public API that covers both built-in and external displays:
+Amber provides DDC/CI hardware brightness from `1..100%` for the primary external display on Apple Silicon. Startup sends a read-only MCCS luminance probe; the UI reports brightness support only when the CoreDisplay service accepts the probe. The connected Dell P2419H has been validated for DDC reads and writes.
 
-- Built-in panel approaches commonly rely on private frameworks.
-- External displays generally require DDC/CI through IOKit.
+The implementation uses the private CoreDisplay `IOAVServiceCreate`, `IOAVServiceReadI2C`, and `IOAVServiceWriteI2C` functions because macOS does not expose a stable public API for external-display DDC/CI. These functions may change or disappear in a future macOS release.
+
+- Built-in display brightness is not supported by this backend.
+- Independent control of multiple external displays is not implemented.
 - DDC/CI behavior depends on the monitor, cable, dock, adapter, and macOS release.
 
-A future implementation must be tested on physical hardware and report support per display.
+Every target hardware configuration must be physically tested before support is claimed.
 
 ## Distribution status
 

@@ -19,7 +19,7 @@ Amber is a macOS-only project. Do not add non-macOS runtime support, native back
 - `MainViewModel` backs the settings window and tray commands.
 - Platform behavior is isolated behind `IDisplayService`, `IBrightnessService`, and `IColorTemperatureService`.
 - CoreGraphics provides display discovery and gamma-table color temperature.
-- Native macOS brightness is not implemented. Keep controls capability-aware until a backend is validated on physical hardware.
+- External-display brightness uses an isolated private CoreDisplay DDC/CI backend on Apple Silicon. Keep controls capability-aware and require physical validation for each display connection.
 - Settings belong in `~/Library/Application Support/Amber/settings.json` and legacy settings must continue to migrate safely.
 - Release packaging produces a self-contained Apple Silicon `Amber.app`, DMG, and ZIP.
 

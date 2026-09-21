@@ -19,10 +19,10 @@ Amber uses a small hand-composed MVVM architecture without a dependency-injectio
 3. Apply the palette matching the current system appearance.
 4. Select macOS or unsupported platform services.
 5. Construct the scheduler and shared main view model.
-6. Connect tray commands and create the settings window.
+6. Connect tray commands and create the quick-controls and settings windows.
 7. Apply persisted state and start the scheduler.
 
-The window intercepts close, hides itself, and remains reusable. Explicit exit stops the timer and restores display color state.
+Both windows intercept close, hide themselves, and remain reusable. The quick-controls window also hides when it loses focus. Explicit exit closes both windows, stops the timer, and restores display color state.
 
 ## Layers
 
@@ -36,18 +36,21 @@ The window intercepts close, hides itself, and remains reusable. Explicit exit s
 
 `MainViewModel` owns UI state, commands, persistence triggers, range clamping, display refresh, and schedule notifications. It depends on interfaces for platform operations.
 
+The tray quick-controls window and main settings window share the same `MainViewModel`, so slider and automatic-mode state stay synchronized without a second settings path.
+
 ### Services
 
 - `SettingsService`: JSON load/save, legacy import, value normalization, and theme-name migration.
 - `ThemeService`: applies selected palette brushes and responds to system appearance changes.
 - `ScheduleService`: platform-neutral schedule calculation and a 10-second timer.
 - `MacDisplayService`: active-display enumeration and gamma capability probing.
-- `MacColorTemperatureService`: Kelvin conversion, gamma-table construction, apply, and reset.
-- `UnsupportedBrightnessService`: explicit placeholder until a validated macOS backend exists.
+- `MacDdcBrightnessService`: Apple Silicon DDC/CI capability probe, debounced MCCS luminance writes, and Core Foundation lifetime management.
+- `MacColorTemperatureService`: Kelvin scaling, gamma-table construction, apply, and reset.
+- `UnsupportedBrightnessService`: explicit fallback outside the supported macOS runtime.
 
 ### Native boundary
 
-`MacNative` contains all CoreGraphics imports:
+`MacNative` contains the CoreGraphics imports and the isolated private CoreDisplay DDC boundary:
 
 | Function | Purpose |
 | --- | --- |
@@ -56,6 +59,12 @@ The window intercepts close, hides itself, and remains reusable. Explicit exit s
 | `CGDisplayGammaTableCapacity` | Detect gamma-table capability and size |
 | `CGSetDisplayTransferByTable` | Apply RGB transfer tables |
 | `CGDisplayRestoreColorSyncSettings` | Restore system color state |
+| `IOAVServiceCreate` | Open the default Apple Silicon display service |
+| `IOAVServiceReadI2C` | Probe DDC/CI luminance support |
+| `IOAVServiceWriteI2C` | Send DDC/CI luminance queries and writes |
+| `CFRelease` | Release the CoreDisplay service |
+
+The `IOAVService` functions are private macOS APIs. Amber limits them to `MacDdcBrightnessService`; availability and physical DDC communication are checked before the UI reports support.
 
 Non-macOS execution receives unsupported service implementations and does not load CoreGraphics.
 
