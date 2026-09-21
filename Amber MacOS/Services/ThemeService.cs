@@ -34,8 +34,23 @@ public sealed class ThemeService
         SetBrush("ThemeOnAccentText", theme.OnAccentText);
         SetBrush("ThemeButtonHover", theme.ButtonHover);
         SetBrush("ThemeStrongText", theme.StrongText);
+        SetBrush("ToggleSwitchKnobFillOn", theme.OnAccentText);
+        SetBrush("ToggleSwitchKnobFillOnPointerOver", theme.OnAccentText);
+        SetBrush("ToggleSwitchKnobFillOnPressed", theme.OnAccentText);
+
+        string controlAccent = ThemeCatalog.ControlAccent(theme);
+        SetColor("SystemAccentColor", controlAccent);
+        SetColor("SystemAccentColorDark1", controlAccent);
+        SetColor("SystemAccentColorDark2", controlAccent);
+        SetColor("SystemAccentColorDark3", controlAccent);
+        SetColor("SystemAccentColorLight1", controlAccent);
+        SetColor("SystemAccentColorLight2", controlAccent);
+        SetColor("SystemAccentColorLight3", controlAccent);
     }
 
     private void SetBrush(string key, string color)
         => _application.Resources[key] = new SolidColorBrush(Color.Parse(color));
+
+    private void SetColor(string key, string color)
+        => _application.Resources[key] = Color.Parse(color);
 }

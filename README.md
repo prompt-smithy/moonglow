@@ -1,6 +1,6 @@
 # Amber
 
-Amber is a macOS menu-bar application for controlling screen color temperature on a schedule. It is built with .NET 10 and Avalonia UI and packaged as a self-contained Apple Silicon application.
+Amber is a macOS menu-bar application for controlling screen color temperature on a schedule. It is built with .NET 10 and Avalonia UI and packaged as a self-contained Apple Silicon application. Its themes use palette-derived text and control colors, including cool off-white surfaces instead of pure white.
 
 <img src="Amber%20MacOS/Assets/Amber.png" alt="Amber sun icon" width="160">
 

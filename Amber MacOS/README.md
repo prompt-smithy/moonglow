@@ -2,6 +2,8 @@
 
 Amber is an Avalonia UI menu-bar app for external-display brightness and color temperature. The current implementation includes persisted settings, automatic color-temperature scheduling, active-display discovery, DDC/CI hardware brightness, and CoreGraphics gamma-table color control.
 
+The interface uses palette-derived text and control colors throughout. The White palette uses cool off-white surfaces rather than pure white.
+
 Brightness control uses DDC/CI through the private CoreDisplay `IOAVService` API on Apple Silicon. Support is capability-probed at startup and currently targets the primary external display.
 
 ## Documentation

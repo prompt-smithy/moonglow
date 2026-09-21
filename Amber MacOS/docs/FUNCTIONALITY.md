@@ -74,6 +74,10 @@ Dark theme order: Dark Amber, Dark Orange, Dark Green, Dark Violet, Dark Grey, B
 
 Fresh settings default to Light Amber and Dark Amber. Legacy dark names are normalized during settings load.
 
+Sliders and toggle switches use the selected Amber palette accent for active, hover, pressed, and checked states. White, Dark Grey, and Black use neutral black or grey control accents rather than the macOS blue accent.
+
+Text, control surfaces, and toggle-switch knobs use palette-derived colors rather than pure white. The White theme name is retained for settings compatibility, but its surfaces are cool off-white shades.
+
 ## Settings
 
 Settings are JSON at:

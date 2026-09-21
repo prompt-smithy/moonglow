@@ -19,10 +19,10 @@
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Spacing="3">
                     <TextBlock Text="Amber" FontSize="25" FontWeight="Bold" Foreground="{DynamicResource ThemeOnAccentText}" />
-                    <TextBlock Text="Brightness and color temperature" FontSize="13" Foreground="White" Opacity="0.82" />
+                    <TextBlock Text="Brightness and color temperature" FontSize="13" Foreground="{DynamicResource ThemeOnAccentText}" Opacity="0.82" />
                 </StackPanel>
                 <Border Grid.Column="1" VerticalAlignment="Center" Padding="10,5" CornerRadius="4" Background="#22000000">
-                    <TextBlock Text="macOS" FontWeight="SemiBold" Foreground="White" />
+                    <TextBlock Text="macOS" FontWeight="SemiBold" Foreground="{DynamicResource ThemeOnAccentText}" />
                 </Border>
             </Grid>
         </Border>

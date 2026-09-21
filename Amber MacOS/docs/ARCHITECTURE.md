@@ -78,6 +78,8 @@ Settings writes are synchronous, small, best-effort JSON writes initiated by use
 
 `ThemeCatalog` contains six ordered light and six ordered dark palettes. `ThemeService` writes brushes into application resources. Views use dynamic resources, so palette changes update existing controls without window recreation.
 
+`ThemeService` also overrides FluentTheme's seven system accent color resources. Slider and toggle states therefore use the current palette accent, with explicit neutral control accents for White, Dark Grey, and Black.
+
 App-level resources contain Light Amber fallback values to avoid an unrelated color flash before settings load.
 
 ## Packaging
