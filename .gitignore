@@ -1,10 +1,46 @@
-**/bin/
-**/obj/
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+index-build/
+.index-build/
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+
+# Package.resolved is deliberately NOT listed here. Amber ships as a signed, notarised binary, so
+# a release build should resolve the exact versions that were tested rather than whatever is
+# newest. The package has no dependencies yet, so there is nothing to pin today.
+
+# Xcode
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Build and release output from Packaging/build-app.sh
 artifacts/
 release/*.dmg
 release/*.zip
+
+# .NET (legacy-csharp, kept as a reference)
+**/bin/
+**/obj/
 .vs/
-.vscode/
 *.user
 *.suo
-release/windows-x64/Amber.exe
+legacy-csharp/artifacts/
+legacy-csharp/release/*.dmg
+legacy-csharp/release/*.zip
+legacy-csharp/release/windows-x64/Amber.exe
+
+# Editor and OS
+.vscode/
+.DS_Store
+._*
