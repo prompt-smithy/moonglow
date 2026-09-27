@@ -1,0 +1,147 @@
+import Foundation
+import Testing
+@testable import AmberKit
+
+/// Ported from `SettingsServiceTests`, minus the legacy-import cases (this port starts fresh).
+@Suite("Settings persistence")
+struct SettingsStoreTests {
+
+    private static func makeStore() -> SettingsStore {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("amber-tests-\(UUID().uuidString)", isDirectory: true)
+        return SettingsStore(fileURL: directory.appendingPathComponent("settings.json"))
+    }
+
+    private static func write(_ json: String, to store: SettingsStore) throws {
+        try FileManager.default.createDirectory(
+            at: store.fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(json.utf8).write(to: store.fileURL)
+    }
+
+    @Test("Defaults match the documented values")
+    func defaultsMatchDocumentation() {
+        let settings = AppSettings.default
+
+        #expect(settings.manualBrightness == 80)
+        #expect(settings.manualColorTempK == 6500)
+        #expect(settings.dayColorTempK == 6500)
+        #expect(settings.nightColorTempK == 1200)
+        #expect(settings.autoColorTemperature)
+        #expect(settings.lightModeTheme == "Light Orange")
+        #expect(settings.darkModeTheme == "Dark Orange")
+        #expect(settings.morningStart == TimeOfDay(hour: 6, minute: 0))
+        #expect(settings.morningEnd == TimeOfDay(hour: 7, minute: 0))
+        #expect(settings.eveningStart == TimeOfDay(hour: 17, minute: 30))
+        #expect(settings.eveningEnd == TimeOfDay(hour: 18, minute: 30))
+    }
+
+    @Test("A missing file falls back to defaults")
+    func missingFileFallsBackToDefaults() {
+        let store = Self.makeStore()
+
+        #expect(store.load() == .default)
+    }
+
+    @Test("A corrupt file falls back to defaults")
+    func corruptFileFallsBackToDefaults() throws {
+        let store = Self.makeStore()
+        try Self.write("{ not json", to: store)
+
+        #expect(store.load() == .default)
+    }
+
+    @Test("Out-of-range values are clamped on load")
+    func outOfRangeValuesAreClampedOnLoad() throws {
+        let store = Self.makeStore()
+        try Self.write(
+            """
+            {
+              "manualBrightness": 500,
+              "manualColorTempK": 100,
+              "dayColorTempK": 99999,
+              "nightColorTempK": 0
+            }
+            """,
+            to: store
+        )
+
+        let loaded = store.load()
+
+        #expect(loaded.manualBrightness == 100)
+        #expect(loaded.manualColorTempK == 900)
+        #expect(loaded.dayColorTempK == 6600)
+        #expect(loaded.nightColorTempK == 900)
+    }
+
+    @Test("An unknown theme name falls back to the default palette")
+    func unknownThemeFallsBackToDefault() throws {
+        let store = Self.makeStore()
+        try Self.write(
+            """
+            {
+              "lightModeTheme": "Chartreuse",
+              "darkModeTheme": "Amber Dark"
+            }
+            """,
+            to: store
+        )
+
+        let loaded = store.load()
+
+        #expect(loaded.lightModeTheme == "Light Orange")
+        #expect(loaded.darkModeTheme == "Dark Orange")
+    }
+
+    @Test("Known theme names survive a round trip")
+    func knownThemeNamesSurviveRoundTrip() {
+        let store = Self.makeStore()
+
+        var settings = AppSettings.default
+        settings.lightModeTheme = "Light Violet"
+        settings.darkModeTheme = "Black"
+        store.save(settings)
+
+        let loaded = store.load()
+
+        #expect(loaded.lightModeTheme == "Light Violet")
+        #expect(loaded.darkModeTheme == "Black")
+    }
+
+    @Test("Saving normalizes before writing")
+    func savingNormalizesBeforeWriting() throws {
+        let store = Self.makeStore()
+
+        var settings = AppSettings.default
+        settings.manualBrightness = 900
+        store.save(settings)
+
+        let raw = try String(contentsOf: store.fileURL, encoding: .utf8)
+
+        #expect(raw.contains("\"manualBrightness\" : 100"))
+    }
+
+    @Test("A full round trip preserves every field")
+    func fullRoundTripPreservesEveryField() {
+        let store = Self.makeStore()
+
+        var settings = AppSettings.default
+        settings.autoColorTemperature = false
+        settings.manualBrightness = 42
+        settings.manualColorTempK = 3300
+        settings.dayColorTempK = 5100
+        settings.nightColorTempK = 1800
+        settings.morningStart = TimeOfDay(hour: 5, minute: 45)
+        settings.morningEnd = TimeOfDay(hour: 6, minute: 15)
+        settings.eveningStart = TimeOfDay(hour: 19, minute: 5)
+        settings.eveningEnd = TimeOfDay(hour: 20, minute: 45)
+        settings.lightModeTheme = "Light Green"
+        settings.darkModeTheme = "Dark Violet"
+
+        store.save(settings)
+        let loaded = store.load()
+
+        #expect(loaded == settings.normalized())
+    }
+}
