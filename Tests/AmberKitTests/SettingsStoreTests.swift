@@ -31,6 +31,7 @@ struct SettingsStoreTests {
         #expect(settings.autoColorTemperature)
         #expect(settings.lightModeTheme == "Light Orange")
         #expect(settings.darkModeTheme == "Dark Orange")
+        #expect(settings.launchAtLogin == false)
         #expect(settings.morningStart == TimeOfDay(hour: 6, minute: 0))
         #expect(settings.morningEnd == TimeOfDay(hour: 7, minute: 0))
         #expect(settings.eveningStart == TimeOfDay(hour: 17, minute: 30))
@@ -138,10 +139,34 @@ struct SettingsStoreTests {
         settings.eveningEnd = TimeOfDay(hour: 20, minute: 45)
         settings.lightModeTheme = "Light Green"
         settings.darkModeTheme = "Dark Violet"
+        settings.launchAtLogin = true
 
         store.save(settings)
         let loaded = store.load()
 
         #expect(loaded == settings.normalized())
+    }
+
+    @Test("A settings file written before launch-at-login existed still loads")
+    func settingsFileWithoutLaunchAtLoginStillLoads() throws {
+        let store = Self.makeStore()
+        // The shape the previous build wrote: every field except `launchAtLogin`, and without the
+        // schedule keys, so this also covers the missing-value fallback.
+        try Self.write(
+            """
+            {"manualBrightness":55,"autoColorTemperature":false,"manualColorTempK":4300,
+             "dayColorTempK":6500,"nightColorTempK":1200,"lightModeTheme":"Light Green",
+             "darkModeTheme":"Dark Violet"}
+            """,
+            to: store
+        )
+
+        let loaded = store.load()
+
+        #expect(loaded.manualBrightness == 55)
+        #expect(loaded.autoColorTemperature == false)
+        #expect(loaded.lightModeTheme == "Light Green")
+        #expect(loaded.launchAtLogin == false)
+        #expect(loaded.morningStart == AppSettings.defaultMorningStart)
     }
 }

@@ -10,7 +10,7 @@ Verified under Xcode 27.0:
 | Command | Result |
 | --- | --- |
 | `swift build` | Passes |
-| `swift test` | Passes — 77 tests in 8 suites |
+| `swift test` | Passes — 86 tests in 8 suites |
 | `bash Packaging/build-app.sh` | Passes — produces `Amber.app`, DMG, and ZIP |
 | App launch | Stays running with the stub backends; no crash reports |
 
@@ -41,6 +41,48 @@ Verified under Xcode 27.0:
 **Deliberately not ported:** legacy settings import (`DisplayController/settings.json`) and
 legacy dark theme-name migration. This port starts fresh, so `SettingsStore` has no migration
 path and the old JSON is not read.
+
+## Beyond the port (macOS only)
+
+Behaviour the .NET original had no equivalent for. These have no reference file to check
+against, so the reasoning is recorded here instead.
+
+### Launch at login
+
+The app registers itself as a login item so it can start with the Mac, with a toggle in the
+settings window. `LoginItemService` (`Services/ServiceProtocols.swift`) is the seam;
+`Sources/Amber/Shell/LoginItemService.swift` implements it with `SMAppService.mainApp`.
+
+The setting records *intent* only — the real registration lives in the system's login items,
+which the user can change outside Amber — so it is treated as two pieces of state that can
+disagree:
+
+- `launchAtLogin` is the stored preference and is what the toggle binds to.
+- `launchAtLoginStatus` is read live from the service, and the caption shows it rather than
+  deriving from the setting.
+
+Consequences worth keeping. A registration the system refuses is **not** recorded, so the toggle
+falls back to the truth instead of claiming a registration that was never made; the stored
+preference is kept only when it was already on disk, and the caption then says it could not be
+registered. A registration the user added by hand in System Settings is **adopted** at launch
+rather than switched off or reported as off — this is not hypothetical, it was the state on the
+development machine. Approval-pending is tested before "enabled" in the status, because a request
+the user has not approved is not running and claiming otherwise is a lie they cannot act on.
+
+The service reports failure rather than hiding it: `SMAppService.mainApp` registers the running
+bundle, so under `swift run` — or any binary launched out of `.build` — there is no bundle to
+register and every call fails. Test through `artifacts/Amber.app`, not the bare binary.
+
+### Palette-drawn popup controls
+
+The popup's Settings and Quit buttons use `Views/ThemedButtonStyle.swift`, and its colour
+temperature slider is `Views/TemperatureSlider.swift` on the warm-to-cool ramp in
+`Views/TemperatureGradient.swift` (shared with the settings window's two-handle bar, so the two
+cannot drift). Both exist because the equivalent system controls cannot be recoloured: SwiftUI's
+built-in button styles take their surface from the system, and `Slider` draws a flat `.tint`
+colour with no gradient track. `Slider` additionally draws a row of tick marks along the track of
+any stepped slider, which AppKit sliders never do — the 100 K step is therefore applied in the
+binding via `TemperatureRange.snap`, not through `step:`.
 
 ## Not started
 
@@ -84,6 +126,10 @@ Divergences from the .NET original:
   are worth knowing. First, assigning `contentViewController` makes AppKit size the window to the
   hosting view's first — much too short — fitting size, which was why the sheet opened with a
   scroll bar; the sheet therefore lays out and reports its height before the window is shown.
+  The window must also be published to `AppDelegate.settingsWindow` *before* `contentViewController`
+  is attached. Attaching it is what triggers the sheet's first height report, and that report is the
+  only accurate measurement — the height does not change again afterwards, so one dropped on a nil
+  window leaves the sheet stuck at its 320 pt minimum with a scroll bar.
   Second, the sheet measures slightly differently once the window changes size, so the height is
   applied **once**: following every report makes the window oscillate forever. The consequence is
   that expanding a collapsed section scrolls instead of growing the window. The `ScrollView`
@@ -124,7 +170,8 @@ and persistence stays `HH:mm`. `TwelveHourTimeTests` round-trips all 1440 minute
   `hidesOnDeactivate` on the panel. Both were tried and both were wrong: a real click on the status
   item hands key straight back, so the observer closed the panel in the same frame — a flicker that
   writes nothing to any log and looks exactly like "the popup never opened".
-- No login-item registration and no single-instance enforcement, matching the original.
+- No single-instance enforcement, matching the original. Login-item registration is now present;
+  see **Beyond the port**.
 
 ### 3. Packaging
 

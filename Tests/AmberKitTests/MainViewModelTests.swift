@@ -250,6 +250,99 @@ struct MainViewModelTests {
         #expect(harness.brightness.applied == [70])
         #expect(harness.color.applied == [4400])
     }
+
+    @Test("Turning launch at login on registers it and persists the choice")
+    func launchAtLoginRegistersAndPersists() {
+        let harness = makeHarness()
+
+        harness.viewModel.launchAtLogin = true
+
+        #expect(harness.loginItem.requests == [true])
+        #expect(harness.loginItem.isEnabled)
+        #expect(harness.store.load().launchAtLogin)
+    }
+
+    @Test("A refused change is not recorded as intent")
+    func refusedChangeIsNotRecorded() {
+        let harness = makeHarness(loginItemRegisters: false)
+
+        harness.viewModel.launchAtLogin = true
+
+        // The toggle has to fall back to the truth rather than showing a registration that was
+        // never made, so the setting must stay off.
+        #expect(harness.viewModel.launchAtLogin == false)
+        #expect(harness.store.load().launchAtLogin == false)
+        #expect(harness.loginItem.requests == [true])
+    }
+
+    @Test("A stored preference the system now refuses is reported")
+    func storedPreferenceRefusedAtLaunchIsReported() {
+        // Registered on an earlier run, but this system will not accept it now. The intent stays on
+        // disk, so the status has to admit that it is not in effect.
+        var settings = AppSettings.default
+        settings.launchAtLogin = true
+        let harness = makeHarness(settings: settings, loginItemRegisters: false)
+
+        harness.viewModel.applyLoginItemState()
+
+        #expect(harness.viewModel.launchAtLogin)
+        #expect(harness.viewModel.launchAtLoginStatus.contains("Could not register"))
+    }
+
+    @Test("A pending approval is reported rather than treated as active")
+    func pendingApprovalIsReported() {
+        let harness = makeHarness(loginItemRequiresApproval: true)
+
+        harness.viewModel.launchAtLogin = true
+
+        #expect(harness.viewModel.launchAtLogin)
+        #expect(harness.viewModel.loginItemRequiresApproval)
+        #expect(harness.viewModel.launchAtLoginStatus.contains("Waiting for approval"))
+    }
+
+    @Test("An unchanged value neither touches the service nor rewrites settings")
+    func unchangedLaunchAtLoginIsIgnored() {
+        let harness = makeHarness()
+
+        harness.viewModel.launchAtLogin = false
+
+        #expect(harness.loginItem.requests.isEmpty)
+    }
+
+    @Test("The stored preference is re-asserted at launch")
+    func storedPreferenceIsReassertedAtLaunch() {
+        var settings = AppSettings.default
+        settings.launchAtLogin = true
+        let harness = makeHarness(settings: settings)
+
+        harness.viewModel.applyLoginItemState()
+
+        #expect(harness.loginItem.requests == [true])
+    }
+
+    @Test("Nothing is registered at launch when the preference is off")
+    func nothingRegisteredWhenPreferenceOff() {
+        let harness = makeHarness()
+
+        harness.viewModel.applyLoginItemState()
+
+        #expect(harness.loginItem.requests.isEmpty)
+        #expect(harness.viewModel.launchAtLoginStatus.contains("only when you launch"))
+    }
+
+    @Test("A login item Amber did not create is adopted, not switched off")
+    func existingRegistrationIsAdopted() {
+        // The user added Amber at login in System Settings before this setting existed. Launching
+        // must not report "off" while the system says otherwise, and must not unregister it.
+        let harness = makeHarness(loginItemAlreadyEnabled: true)
+
+        harness.viewModel.applyLoginItemState()
+
+        #expect(harness.viewModel.launchAtLogin)
+        #expect(harness.store.load().launchAtLogin)
+        #expect(harness.loginItem.requests.isEmpty)
+        #expect(harness.viewModel.launchAtLoginStatus.contains("opens automatically"))
+    }
 }
 
 // MARK: - Test doubles
@@ -261,6 +354,7 @@ private struct Harness {
     let brightness: FakeBrightnessService
     let color: FakeColorService
     let theme: FakeTheme
+    let loginItem: FakeLoginItemService
     let viewModel: MainViewModel
 }
 
@@ -319,12 +413,46 @@ private final class FakeTheme: ThemeApplying {
     }
 }
 
+/// Stands in for `SMAppService`, which reports real system state and cannot be driven from a test.
+/// `acceptsChanges` is the equivalent of the system refusing a registration.
+private final class FakeLoginItemService: LoginItemService {
+    private(set) var isEnabled = false
+    private(set) var requiresApproval = false
+    private(set) var requests: [Bool] = []
+
+    private let acceptsChanges: Bool
+
+    init(acceptsChanges: Bool = true, requiresApproval: Bool = false, isEnabled: Bool = false) {
+        self.acceptsChanges = acceptsChanges
+        self.requiresApproval = requiresApproval
+        self.isEnabled = isEnabled
+    }
+
+    @discardableResult
+    func setEnabled(_ enabled: Bool) -> Bool {
+        requests.append(enabled)
+        guard acceptsChanges else { return false }
+
+        // "Enabled" and "awaiting approval" are mutually exclusive in `SMAppService`: a
+        // registration the user has not approved yet is not running. Modelling them as
+        // independent flags would let the tests assert a state macOS cannot produce.
+        isEnabled = enabled && !requiresApproval
+        if !enabled { requiresApproval = false }
+        return true
+    }
+
+    func openLoginItemsSettings() {}
+}
+
 @MainActor
 private func makeHarness(
     settings: AppSettings = .default,
     brightnessSupported: Bool = true,
     colorSupported: Bool = true,
-    displays: [DisplayInfo]? = nil
+    displays: [DisplayInfo]? = nil,
+    loginItemRegisters: Bool = true,
+    loginItemRequiresApproval: Bool = false,
+    loginItemAlreadyEnabled: Bool = false
 ) -> Harness {
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent("amber-vm-\(UUID().uuidString)", isDirectory: true)
@@ -347,6 +475,11 @@ private func makeHarness(
     let colorService = FakeColorService(isSupported: colorSupported)
     let themeService = FakeTheme()
     let schedule = ScheduleService(colorService: colorService)
+    let loginItemService = FakeLoginItemService(
+        acceptsChanges: loginItemRegisters,
+        requiresApproval: loginItemRequiresApproval,
+        isEnabled: loginItemAlreadyEnabled
+    )
 
     let viewModel = MainViewModel(
         store: store,
@@ -354,7 +487,8 @@ private func makeHarness(
         brightnessService: brightnessService,
         colorService: colorService,
         schedule: schedule,
-        theme: themeService
+        theme: themeService,
+        loginItemService: loginItemService
     )
 
     return Harness(
@@ -363,6 +497,7 @@ private func makeHarness(
         brightness: brightnessService,
         color: colorService,
         theme: themeService,
+        loginItem: loginItemService,
         viewModel: viewModel
     )
 }

@@ -37,3 +37,24 @@ public protocol ColorTemperatureService: AnyObject {
 public protocol ThemeApplying: AnyObject {
     func applyForCurrentMode(settings: AppSettings)
 }
+
+/// Registers Amber as a login item so it starts with the Mac.
+///
+/// The system owns this state, not Amber: the user can remove the login item in System Settings,
+/// and macOS can accept a registration but hold it pending approval. The protocol therefore
+/// reports status instead of storing a flag, and ``setEnabled(_:)`` says whether the system
+/// accepted the change so a caller never records intent that did not take effect.
+public protocol LoginItemService: AnyObject {
+    /// Whether the app is currently registered to open at login, as the system sees it.
+    var isEnabled: Bool { get }
+
+    /// Whether macOS has the registration parked until the user approves it.
+    var requiresApproval: Bool { get }
+
+    /// Registers or unregisters the app. Returns false when the system refused the change.
+    @discardableResult
+    func setEnabled(_ enabled: Bool) -> Bool
+
+    /// Opens the Login Items pane so a pending registration can be approved.
+    func openLoginItemsSettings()
+}

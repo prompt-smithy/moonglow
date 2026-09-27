@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var schedule: ScheduleService?
     private var colorService: ColorTemperatureService?
     private var brightnessService: AppleSiliconBrightnessService?
+    private var loginItemService: LoginItemService?
     private var viewModel: MainViewModel?
 
     /// The settings window is sized to the sheet once; see ``fitSettingsWindow(toContentHeight:)``.
@@ -50,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let colorService = CoreGraphicsColorTemperatureService(displayService: displayService)
         let schedule = ScheduleService(colorService: colorService)
+        let loginItemService = SMAppServiceLoginItemService()
 
         // The popup and the settings window share this one view model, so slider and
         // automatic-mode state stay in sync without a second settings path.
@@ -59,7 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             brightnessService: brightnessService,
             colorService: colorService,
             schedule: schedule,
-            theme: themeService
+            theme: themeService,
+            loginItemService: loginItemService
         )
         viewModel.onShowSettings = { [weak self] in
             self?.closeQuickControls()
@@ -73,12 +76,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.brightnessService = brightnessService
         self.colorService = colorService
         self.schedule = schedule
+        self.loginItemService = loginItemService
         self.viewModel = viewModel
 
         themeService.applyForCurrentMode(settings: viewModel.settings)
         configureStatusItem(viewModel: viewModel, themeService: themeService)
 
         viewModel.applyInitialState()
+        viewModel.applyLoginItemState()
         schedule.start()
     }
 
@@ -212,16 +217,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 )
             )
+            // Publish the window *before* attaching the controller. Attaching it is what makes the
+            // sheet lay out and report its height, and `fitSettingsWindow` needs a window to act
+            // on. That first report is the only accurate measurement — the height does not change
+            // again afterwards — so dropping it left the window stuck at its 320 pt minimum with a
+            // scroll bar, which is exactly what the fit exists to prevent.
+            settingsWindow = window
+
             window.contentViewController = hosting
 
             // Assigning the controller lets AppKit size the window to the hosting view's first
-            // fitting size, which is far shorter than the sheet — the cause of the scroll bar
-            // that used to appear on launch. Lay the sheet out here so it reports its real height
-            // before the window is ever on screen.
+            // fitting size, which is far shorter than the sheet. Lay the sheet out here so it
+            // reports its real height before the window is ever on screen.
             hosting.view.layoutSubtreeIfNeeded()
 
             window.center()
-            settingsWindow = window
         }
 
         settingsWindow?.showWithInactivityTimeout()

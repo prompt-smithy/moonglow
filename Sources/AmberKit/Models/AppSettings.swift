@@ -46,6 +46,12 @@ public struct AppSettings: Equatable, Sendable {
     public var lightModeTheme: String = defaultLightThemeName
     public var darkModeTheme: String = defaultDarkThemeName
 
+    /// Whether the user wants Amber to start with the Mac.
+    ///
+    /// This records intent only. The actual registration lives in the system's login items, which
+    /// the user can change outside Amber, so it is re-asserted at launch rather than trusted.
+    public var launchAtLogin: Bool = false
+
     public init() {}
 
     public static let `default` = AppSettings()
@@ -101,6 +107,7 @@ extension AppSettings: Codable {
         case manualColorTempK
         case lightModeTheme
         case darkModeTheme
+        case launchAtLogin
     }
 
     /// Decodes leniently: any missing or malformed value falls back to its default
@@ -121,6 +128,7 @@ extension AppSettings: Codable {
         manualColorTempK = Self.decode(container, .manualColorTempK, manualColorTempK)
         lightModeTheme = Self.decode(container, .lightModeTheme, lightModeTheme)
         darkModeTheme = Self.decode(container, .darkModeTheme, darkModeTheme)
+        launchAtLogin = Self.decode(container, .launchAtLogin, launchAtLogin)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -137,6 +145,7 @@ extension AppSettings: Codable {
         try container.encode(manualColorTempK, forKey: .manualColorTempK)
         try container.encode(lightModeTheme, forKey: .lightModeTheme)
         try container.encode(darkModeTheme, forKey: .darkModeTheme)
+        try container.encode(launchAtLogin, forKey: .launchAtLogin)
     }
 
     private static func decode<T: Decodable>(

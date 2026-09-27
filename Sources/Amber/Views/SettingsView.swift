@@ -49,6 +49,7 @@ struct SettingsView: View {
                     brightnessSection
                     colorTemperatureSection
                     appearanceSection
+                    startupSection
                 }
                 .padding(14)
                 .background(heightReader { contentHeight = $0 })
@@ -223,6 +224,29 @@ struct SettingsView: View {
             TimeOfDayPicker(time: time, theme: theme)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Startup
+
+    private var startupSection: some View {
+        card {
+            VStack(alignment: .leading, spacing: 8) {
+                sectionTitle("Startup")
+
+                Toggle("Launch at login", isOn: $viewModel.launchAtLogin)
+                    .font(.system(size: 13))
+                    .foregroundStyle(theme.primaryTextColor)
+                    .toggleStyle(.switch)
+                    .tint(theme.controlAccentColor)
+
+                caption(viewModel.launchAtLoginStatus)
+
+                if viewModel.loginItemRequiresApproval {
+                    Button("Open Login Items…") { viewModel.openLoginItemsSettings() }
+                        .controlSize(.small)
+                }
+            }
+        }
     }
 
     // MARK: - Appearance

@@ -28,7 +28,7 @@ and the menu-bar popup are in place, and the native display backends are impleme
 
 ```bash
 swift build                 # build both targets
-swift test                  # run the AmberKit test suite (77 tests, 8 suites)
+swift test                  # run the AmberKit test suite (86 tests, 8 suites)
 bash Packaging/build-app.sh # build artifacts/Amber.app, plus a DMG and ZIP in release/
 ```
 
@@ -45,7 +45,7 @@ container, matching the original design.
   and automatic-mode state stay in sync without a second settings path.
 - Platform behaviour is behind `DisplayService`, `BrightnessService`, and
   `ColorTemperatureService`. `AmberKit` never imports SwiftUI; the app target supplies
-  `ThemeApplying`.
+  `ThemeApplying` and `LoginItemService`.
 - View state uses the `Observation` framework (`@Observable`), which is why the deployment
   target is macOS 14.
 - Colour temperature uses CoreGraphics gamma transfer tables. Hardware brightness uses
@@ -54,6 +54,13 @@ container, matching the original design.
 The private API is isolated in `Sources/AmberKit/Services/NativeBridge.swift`. Amber is
 distributed directly (Developer ID + notarization), not through the Mac App Store, because
 of that dependency.
+
+Startup is a login item registered through `SMAppService.mainApp`, which registers *the running
+bundle*: the toggle in the settings window does nothing when Amber is launched straight from
+`.build` rather than from `Amber.app`. The stored setting is only the user's intent — the real
+registration lives in the system and can be changed outside Amber — so a change the system
+refuses is not recorded, and a login item added by hand in System Settings is adopted rather than
+switched off.
 
 ## Invariants
 

@@ -25,6 +25,7 @@ public final class MainViewModel {
     private let colorService: ColorTemperatureService
     private let schedule: ScheduleService
     private let theme: ThemeApplying
+    private let loginItemService: LoginItemService
 
     // MARK: - State
 
@@ -53,7 +54,8 @@ public final class MainViewModel {
         brightnessService: BrightnessService,
         colorService: ColorTemperatureService,
         schedule: ScheduleService,
-        theme: ThemeApplying
+        theme: ThemeApplying,
+        loginItemService: LoginItemService
     ) {
         self.store = store
         self.displayService = displayService
@@ -61,6 +63,7 @@ public final class MainViewModel {
         self.colorService = colorService
         self.schedule = schedule
         self.theme = theme
+        self.loginItemService = loginItemService
 
         let loaded = store.load()
         self.settings = loaded
@@ -230,6 +233,74 @@ public final class MainViewModel {
             mutateSettings { $0.darkModeTheme = newValue }
             theme.applyForCurrentMode(settings: settings)
         }
+    }
+
+    // MARK: - Startup
+
+    /// Whether Amber should start with the Mac.
+    ///
+    /// This is the user's stated intent; the system holds the actual registration. A change the
+    /// system refuses is deliberately *not* recorded, so the toggle snaps back to the real state
+    /// instead of claiming a registration that does not exist.
+    public var launchAtLogin: Bool {
+        get { settings.launchAtLogin }
+        set {
+            guard newValue != settings.launchAtLogin else { return }
+            guard loginItemService.setEnabled(newValue) else { return }
+
+            mutateSettings { $0.launchAtLogin = newValue }
+            loginItemRequiresApproval = loginItemService.requiresApproval
+        }
+    }
+
+    /// True when macOS has accepted the registration but is holding it until the user approves it
+    /// in System Settings. The toggle reads as on, yet Amber will not start until then.
+    public private(set) var loginItemRequiresApproval = false
+
+    /// Describes the login-item state for the settings window.
+    ///
+    /// Read live from the service rather than derived from the setting, because the two can
+    /// legitimately disagree — the user can remove the login item in System Settings without
+    /// Amber ever finding out.
+    public var launchAtLoginStatus: String {
+        // Approval is tested first: a request the user has not approved yet is not running, and
+        // saying "opens automatically" would be a lie the user cannot act on.
+        if loginItemService.requiresApproval {
+            return "Waiting for approval in System Settings › General › Login Items."
+        }
+        if loginItemService.isEnabled {
+            return "Amber opens automatically when you log in."
+        }
+        if settings.launchAtLogin {
+            return "Could not register Amber as a login item on this system."
+        }
+        return "Amber opens only when you launch it."
+    }
+
+    /// Re-asserts the stored preference on the system. Called once at launch.
+    ///
+    /// The registration is not Amber's to assume: it lives outside the settings file, so a
+    /// preference written on one run may no longer hold on the next.
+    public func applyLoginItemState() {
+        if settings.launchAtLogin {
+            if !loginItemService.setEnabled(true) {
+                // Keep the stored intent so the status can say the registration did not take; the
+                // toggle would otherwise silently forget what the user asked for.
+                loginItemRequiresApproval = loginItemService.requiresApproval
+                return
+            }
+        } else if loginItemService.isEnabled {
+            // Registered, but Amber never recorded it — almost certainly added by hand in System
+            // Settings before this setting existed. Adopt it rather than reporting a state that
+            // contradicts the toggle, and never switch it off behind the user's back.
+            mutateSettings { $0.launchAtLogin = true }
+        }
+
+        loginItemRequiresApproval = loginItemService.requiresApproval
+    }
+
+    public func openLoginItemsSettings() {
+        loginItemService.openLoginItemsSettings()
     }
 
     // MARK: - Lifecycle
