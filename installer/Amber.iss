@@ -1,10 +1,9 @@
 ; Inno Setup script for Amber.
-; Compiled by build.ps1 for both the self-contained and framework-dependent flavors.
+; Compiled by build.ps1, which wraps the portable .NET Framework 4.8 build.
 ; The following /D defines are supplied on the ISCC command line:
 ;   SourceDir           - folder containing the published application to package
 ;   OutputDir           - folder the generated installer is written to
 ;   AppVersion          - product version string
-;   FrameworkDependent  - defined (value 1) only for the framework-dependent build
 
 #ifndef AppVersion
   #define AppVersion "1.0.0"
@@ -54,15 +53,30 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
-#ifdef FrameworkDependent
 [Code]
+// .NET Framework 4.8 reported as release 528040 and later. Amber targets net48, so warn
+// (but do not block) when it is missing - Windows 10 1903 and later already include it.
+// https://learn.microsoft.com/dotnet/framework/migration-guide/how-to-determine-which-versions-are-installed
+function IsDotNet48Installed(): Boolean;
+var
+  Release: Cardinal;
+begin
+  if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) then
+    Result := Release >= 528040
+  else
+    Result := False;
+end;
+
 function InitializeSetup(): Boolean;
 begin
   Result := True;
-  MsgBox('This installer does not bundle the .NET runtime.' + #13#10 +
-         'Amber requires the .NET 10 Desktop Runtime (x64).' + #13#10 +
-         'If the app fails to start after installation, install the runtime from:' + #13#10 +
-         'https://dotnet.microsoft.com/download/dotnet/10.0',
-         mbInformation, MB_OK);
+  if not IsDotNet48Installed() then
+  begin
+    if MsgBox('Amber requires the .NET Framework 4.8 runtime, which was not detected on this system.' + #13#10 +
+              'Windows 10 1903 and later include it. On older versions of Windows, install it from:' + #13#10 +
+              'https://dotnet.microsoft.com/download/dotnet-framework/net48' + #13#10 + #13#10 +
+              'Continue with the installation anyway?',
+              mbConfirmation, MB_YESNO) = IDNO then
+      Result := False;
+  end;
 end;
-#endif

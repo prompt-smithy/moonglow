@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using Amber.Infrastructure;
 using Amber.Models;
 
 namespace Amber.Services;
@@ -75,7 +76,7 @@ public sealed class ScheduleService
         if (span <= 0)
             return SnapToStep(toK);
 
-        double progress = Math.Clamp((t - start).TotalMinutes / span, 0.0, 1.0);
+        double progress = MathUtil.Clamp((t - start).TotalMinutes / span, 0.0, 1.0);
         return SnapToStep(fromK + (toK - fromK) * progress);
     }
 

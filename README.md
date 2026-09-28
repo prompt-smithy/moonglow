@@ -23,9 +23,11 @@ Amber keeps display controls close at hand without adding another window to your
 
 ## Requirements
 
-- Windows 10 or Windows 11 (64-bit)
+- Windows 7 SP1 or later (32-bit or 64-bit); Windows 10 or Windows 11 recommended
+- The [.NET Framework 4.8 runtime](https://dotnet.microsoft.com/download/dotnet-framework/net48)
 - A DDC/CI-capable external monitor for external brightness control
-- The [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) when using a framework-dependent build
+
+Windows 10 1903 and later and Windows 11 already include .NET Framework 4.8, so most systems need nothing extra. On older systems the app still works, but dark title-bar tinting and the widest color-temperature range require Windows 10 or Windows 11.
 
 ## Install
 
@@ -33,10 +35,8 @@ Choose the download that matches your system:
 
 | Download | Type | System requirements |
 | --- | --- | --- |
-| [Amber Installer](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Installer.exe) | Installer, self-contained | Windows 10 or 11 (64-bit); no separate .NET installation required |
-| [Amber Installer for systems with .NET 10](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Installer.For.systems.with.net.10.exe) | Installer, framework-dependent | Windows 10 or 11 (64-bit) with the .NET 10 Desktop Runtime |
-| [Amber Portable](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Portable.exe) | Portable, self-contained | Windows 10 or 11 (64-bit); no separate .NET installation required |
-| [Amber Portable for systems with .NET 10](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Portable.For.systems.with.net.10.exe) | Portable, framework-dependent | Windows 10 or 11 (64-bit) with the .NET 10 Desktop Runtime |
+| [Amber Installer](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Installer.exe) | Installer | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
+| [Amber Portable](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Portable.exe) | Portable | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
 
 Use an installer for a standard Windows installation, or a portable build to run Amber without installing it.
 
@@ -48,19 +48,21 @@ Amber cannot apply color-temperature settings to the Windows lock screen. If thi
 
 ## Build from source
 
-Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), then run:
+Install the [.NET SDK](https://dotnet.microsoft.com/download/dotnet) (or Visual Studio 2022), then run:
 
 ```powershell
 dotnet build Amber.csproj
 ```
 
-To create portable and installer distributions:
+The project targets .NET Framework 4.8. Its reference assemblies come from NuGet, so no separate Developer Pack is needed.
+
+To create the portable build and the installer:
 
 ```powershell
 dotnet build Amber.csproj -t:PackageAll
 ```
 
-Packaging installers requires [Inno Setup 6](https://jrsoftware.org/isdl.php). See [Architecture](docs/ARCHITECTURE.md) for implementation details.
+Packaging the installer requires [Inno Setup 6](https://jrsoftware.org/isdl.php). See [Architecture](docs/ARCHITECTURE.md) for implementation details.
 
 ## Settings
 

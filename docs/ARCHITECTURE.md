@@ -19,10 +19,19 @@ Technical reference for **Amber** (`Amber`). For a user-facing overview see the 
 
 ## Tech stack
 
-- **.NET 10**, **WPF** (`net10.0-windows`, `OutputType=WinExe`).
+- **.NET Framework 4.8**, **WPF** (`net48`, `OutputType=WinExe`). Targeting the in-box framework
+  keeps Amber runnable on older Windows versions: 4.8 is included with Windows 10 1903+ and
+  Windows 11, and can be installed on Windows 7 SP1 through 8.1.
 - **[Hardcodet.NotifyIcon.Wpf]** – system-tray icon, popup, and context menu.
-- **System.Management** – WMI access for internal-panel brightness.
+- **System.Management** – WMI access for internal-panel brightness (a framework assembly on
+  `net48` rather than a NuGet package).
+- **System.Text.Json** – settings persistence, and the only NuGet runtime dependency besides the
+  tray icon.
 - No MVVM framework or DI container; composition is done by hand in `App`.
+
+.NET Framework 4.8 implements .NET Standard 2.0, so two small shims in `Infrastructure` stand in
+for things it lacks: `MathUtil.Clamp` (instead of `Math.Clamp`, which needs .NET Standard 2.1) and
+`IsExternalInit` (which lets the models keep C# 9 `init`-only setters).
 
 [Hardcodet.NotifyIcon.Wpf]: https://github.com/hardcodet/wpf-notifyicon
 

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Win32;
 
 namespace Amber.Infrastructure;
@@ -18,7 +19,9 @@ internal static class StartupManager
 
             if (enabled)
             {
-                string? exe = Environment.ProcessPath;
+                // Environment.ProcessPath is .NET 6+; on .NET Framework the running exe path
+                // comes from the process module.
+                string? exe = Process.GetCurrentProcess().MainModule?.FileName;
                 if (!string.IsNullOrEmpty(exe))
                     key.SetValue(ValueName, $"\"{exe}\"");
             }

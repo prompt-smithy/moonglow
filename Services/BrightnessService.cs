@@ -1,5 +1,6 @@
 using System.Management;
 using System.Threading.Tasks;
+using Amber.Infrastructure;
 using static Amber.Native.NativeMethods;
 
 namespace Amber.Services;
@@ -66,7 +67,7 @@ public sealed class BrightnessService
     /// that coalesces rapid changes so dragging never blocks the UI thread.</summary>
     public void SetBrightness(int percent)
     {
-        percent = Math.Clamp(percent, MinBrightnessPercent, 100);
+        percent = MathUtil.Clamp(percent, MinBrightnessPercent, 100);
         lock (_applyGate)
         {
             _targetPercent = percent;

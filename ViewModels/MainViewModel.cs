@@ -44,7 +44,7 @@ public sealed class MainViewModel : ObservableObject
         _monitors = monitors;
         _theme = theme;
 
-        _brightnessValue = Math.Clamp(Settings.ManualBrightness, BrightnessService.MinBrightnessPercent, 100);
+        _brightnessValue = MathUtil.Clamp(Settings.ManualBrightness, BrightnessService.MinBrightnessPercent, 100);
         _auto = Settings.AutoColorTemperature;
         _colorTemp = _auto ? _schedule.CurrentTargetTemperature() : Settings.ManualColorTempK;
 
@@ -79,7 +79,7 @@ public sealed class MainViewModel : ObservableObject
         get => _brightnessValue;
         set
         {
-            if (!SetProperty(ref _brightnessValue, Math.Clamp(value, BrightnessService.MinBrightnessPercent, 100)))
+            if (!SetProperty(ref _brightnessValue, MathUtil.Clamp(value, BrightnessService.MinBrightnessPercent, 100)))
                 return;
 
             _brightness.SetBrightness(_brightnessValue);

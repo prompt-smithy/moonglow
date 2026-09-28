@@ -1,3 +1,4 @@
+using Amber.Infrastructure;
 using static Amber.Native.NativeMethods;
 
 namespace Amber.Services;
@@ -101,9 +102,9 @@ public sealed class ColorTemperatureService : IDisposable
         for (int i = 0; i < 256; i++)
         {
             int level = i * 257; // scale 0..255 -> 0..65535
-            ramp.Red[i] = (ushort)Math.Clamp(level * redScale, 0.0, 65535.0);
-            ramp.Green[i] = (ushort)Math.Clamp(level * greenScale, 0.0, 65535.0);
-            ramp.Blue[i] = (ushort)Math.Clamp(level * blueScale, 0.0, 65535.0);
+            ramp.Red[i] = (ushort)MathUtil.Clamp(level * redScale, 0.0, 65535.0);
+            ramp.Green[i] = (ushort)MathUtil.Clamp(level * greenScale, 0.0, 65535.0);
+            ramp.Blue[i] = (ushort)MathUtil.Clamp(level * blueScale, 0.0, 65535.0);
         }
 
         return ramp;
@@ -115,25 +116,25 @@ public sealed class ColorTemperatureService : IDisposable
     /// </summary>
     public static (double R, double G, double B) KelvinToRgbScale(int kelvin)
     {
-        double temp = Math.Clamp(kelvin, 900, 40000) / 100.0;
+        double temp = MathUtil.Clamp(kelvin, 900, 40000) / 100.0;
         double r, g, b;
 
         if (temp <= 66)
             r = 255;
         else
-            r = Math.Clamp(329.698727446 * Math.Pow(temp - 60, -0.1332047592), 0, 255);
+            r = MathUtil.Clamp(329.698727446 * Math.Pow(temp - 60, -0.1332047592), 0, 255);
 
         if (temp <= 66)
-            g = Math.Clamp(99.4708025861 * Math.Log(temp) - 161.1195681661, 0, 255);
+            g = MathUtil.Clamp(99.4708025861 * Math.Log(temp) - 161.1195681661, 0, 255);
         else
-            g = Math.Clamp(288.1221695283 * Math.Pow(temp - 60, -0.0755148492), 0, 255);
+            g = MathUtil.Clamp(288.1221695283 * Math.Pow(temp - 60, -0.0755148492), 0, 255);
 
         if (temp >= 66)
             b = 255;
         else if (temp <= 19)
             b = 0;
         else
-            b = Math.Clamp(138.5177312231 * Math.Log(temp - 10) - 305.0447927307, 0, 255);
+            b = MathUtil.Clamp(138.5177312231 * Math.Log(temp - 10) - 305.0447927307, 0, 255);
 
         return (r / 255.0, g / 255.0, b / 255.0);
     }

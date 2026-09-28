@@ -12,7 +12,7 @@ You are the focused maintainer for Amber. Complete requested repository work wit
 
 ## Product Requirements
 
-Amber is a Windows 10/11 system-tray application built with .NET 10 and WPF (`net10.0-windows`). Preserve these capabilities unless the task explicitly changes them:
+Amber is a Windows system-tray application built with .NET Framework 4.8 and WPF (`net48`). It targets the in-box framework so it runs on older Windows versions (Windows 7 SP1 and later; 4.8 ships with Windows 10 1903+ and Windows 11). Preserve these capabilities unless the task explicitly changes them:
 
 - Control internal-panel brightness through WMI and supported external-monitor brightness through DDC/CI.
 - Clamp brightness to the existing safety floor so a display cannot be set fully black.
@@ -39,6 +39,7 @@ Start at the nearest owner and avoid broad repository scans:
 - `Views/`: WPF presentation and narrowly scoped interaction code-behind.
 - `Native/NativeMethods.cs`: all P/Invoke declarations and native structures.
 - `Infrastructure/StartupManager.cs`: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registration.
+- `Infrastructure/MathUtil.cs` and `Infrastructure/IsExternalInit.cs`: the only shims compensating for APIs absent from .NET Framework 4.8.
 - `build.ps1`, `Amber.csproj`, and `installer/Amber.iss`: build and distribution.
 
 Use `docs/ARCHITECTURE.md` as the first reference only when a task crosses components or the owner is unclear. Use `README.md` for user-visible behavior and distribution requirements. Ignore `bin/` and `obj/` in all discovery because they are generated.
@@ -55,6 +56,8 @@ Use `docs/ARCHITECTURE.md` as the first reference only when a task crosses compo
 - Save setting changes through the existing settings flow and retain backward-compatible defaults.
 - For value sliders, keep `Mode=OneWay` plus a `ValueChanged` handler guarded by `IsLoaded` and a rounded comparison with current state. Do not replace this with `TwoWay` binding or mouse-capture flags; lazy layout can overwrite saved values or drop track clicks.
 - Preserve `IsMoveToPointEnabled="True"` for click-to-position sliders.
+- Stay within the .NET Framework 4.8 API surface. Use `MathUtil.Clamp` instead of `Math.Clamp`, and do not introduce .NET Core/.NET 5+ only APIs such as `Environment.ProcessPath` or `System.Text.Json` source generation. Verify a new API is available on net48 before using it.
+- Keep the models' `init`-only setters working; removing `Infrastructure/IsExternalInit.cs` would break them on net48.
 - Do not edit generated output or unrelated code.
 
 ## Low-Credit Workflow
@@ -71,8 +74,8 @@ Use `docs/ARCHITECTURE.md` as the first reference only when a task crosses compo
 ## Validation
 
 - There is currently no automated test project. For code or XAML changes, run `dotnet build Amber.csproj` from the repository root.
-- Use `dotnet build Amber.csproj -c Release` when behavior depends on publishing, startup paths, trimming, or release configuration.
-- Run `dotnet build Amber.csproj -t:PackageAll` only for packaging changes or an explicit packaging request; it publishes four artifacts and may require Inno Setup 6.
+- Use `dotnet build Amber.csproj -c Release` when behavior depends on publishing, startup paths, or release configuration.
+- Run `dotnet build Amber.csproj -t:PackageAll` only for packaging changes or an explicit packaging request; it produces `bin\Portable` plus an installer and may require Inno Setup 6. There is no self-contained or single-file flavor: .NET Framework is a Windows component.
 - Always specify `Amber.csproj`; generated WPF temporary projects can make implicit project selection ambiguous.
 - Do not launch `dotnet run` for ordinary validation because Amber is a persistent tray application. Launch it only when interactive verification is required, then report what still needs manual hardware/UI checking.
 - Hardware behavior involving WMI, DDC/CI, gamma ramps, Magnification, monitor hot-plugging, or startup registration requires Windows runtime verification beyond a successful build.

@@ -2,7 +2,8 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -13,24 +14,41 @@
     <Version>1.0.0</Version>
     <Product>Amber</Product>
     <AssemblyTitle>Amber</AssemblyTitle>
+    <!-- AnyCPU runs 64-bit on 64-bit Windows (as the old win-x64 build did) and still runs on
+         32-bit Windows. Prefer32Bit would force a 32-bit process on 64-bit Windows. -->
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <!-- .NET Framework apps are framework-dependent by definition: the runtime is a Windows
+       component rather than something we ship. app.config redirects are generated so the NuGet
+       dependencies resolve to the versions we compile against. -->
+  <PropertyGroup>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
-    <PackageReference Include="System.Management" Version="9.0.0" />
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
   </ItemGroup>
 
-  <!-- Single command that builds all four distributables (portable + installer,
-       each in self-contained and framework-dependent flavors). Run with:
-         dotnet build -t:PackageAll
-       Optionally override the runtime:
-         dotnet build -t:PackageAll -p:PackageRuntime=win-arm64 -->
+  <ItemGroup>
+    <!-- Build-time only: supplies the .NET Framework 4.8 reference assemblies so the project
+         builds with nothing but the .NET SDK (no Visual Studio or Developer Pack needed). -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ships with .NET Framework itself; not a NuGet package on net48. -->
+    <Reference Include="System.Management" />
+  </ItemGroup>
+
+  <!-- Single command that builds the distributables (portable folder + installer). Run with:
+         dotnet build -t:PackageAll -->
   <Target Name="PackageAll">
-    <PropertyGroup>
-      <PackageRuntime Condition="'$(PackageRuntime)' == ''">win-x64</PackageRuntime>
-    </PropertyGroup>
     <Exec WorkingDirectory="$(MSBuildProjectDirectory)"
-          Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\build.ps1&quot; -Runtime $(PackageRuntime)" />
+          Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\build.ps1&quot;" />
   </Target>
 
 </Project>

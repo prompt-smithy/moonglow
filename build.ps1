@@ -1,51 +1,50 @@
 <#
 .SYNOPSIS
-    Builds every distributable flavor of Amber with a single command.
+    Builds the distributable artifacts of Amber with a single command.
 
 .DESCRIPTION
-    Produces four artifacts, all named Amber.exe, each in its own folder
-    under bin\:
+    Amber targets .NET Framework 4.8. The runtime is a Windows component rather than
+    something we ship - it is preinstalled on Windows 10 1903+ and Windows 11, and can be
+    installed on Windows 7 SP1 and later - so every build is framework-dependent and there
+    is no self-contained or single-file flavor to produce.
 
-        bin\Portable-SelfContained\Amber.exe        (1) portable, no .NET required
-        bin\Portable-FrameworkDependent\Amber.exe   (2) portable, needs .NET runtime
-        bin\Installer-SelfContained\Amber.exe       (3) installer, no .NET required
-        bin\Installer-FrameworkDependent\Amber.exe  (4) installer, needs .NET runtime
+    Produces two artifacts, both named Amber.exe, each in its own folder under bin\:
 
-    Portable builds are single-file executables produced by `dotnet publish`.
-    Installers are single setup.exe files produced by Inno Setup (ISCC.exe). If Inno
-    Setup is not found the script attempts to install it via winget; if that fails the
-    portable builds still succeed and the installer steps are skipped with a warning.
+        bin\Portable\Amber.exe      (1) the whole app; copy the folder and run it
+        bin\Installer\Amber.exe     (2) single setup executable produced by Inno Setup
 
-.PARAMETER Runtime
-    The .NET runtime identifier to target. Defaults to win-x64.
+    The portable build is a plain `dotnet publish` folder. The installer is compiled by
+    Inno Setup (ISCC.exe); if Inno Setup is not found the script attempts to install it via
+    winget, and if that fails the portable build still succeeds and the installer step is
+    skipped with a warning.
 
 .EXAMPLE
     .\build.ps1
 #>
 [CmdletBinding()]
-param(
-    [string]$Runtime = 'win-x64'
-)
+param()
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$root       = $PSScriptRoot
-$project    = Join-Path $root 'Amber.csproj'
-$issScript  = Join-Path $root 'installer\Amber.iss'
-$binDir     = Join-Path $root 'bin'
-$stagingDir = Join-Path $binDir '_staging'
-$appExe     = 'Amber.exe'
+$root      = $PSScriptRoot
+$project   = Join-Path $root 'Amber.csproj'
+$issScript = Join-Path $root 'installer\Amber.iss'
+$binDir    = Join-Path $root 'bin'
+$appExe    = 'Amber.exe'
 
 # Output folders (same file name, different folders).
-$portableScDir  = Join-Path $binDir 'Portable-SelfContained'
-$portableFdDir  = Join-Path $binDir 'Portable-FrameworkDependent'
-$installerScDir = Join-Path $binDir 'Installer-SelfContained'
-$installerFdDir = Join-Path $binDir 'Installer-FrameworkDependent'
+$portableDir  = Join-Path $binDir 'Portable'
+$installerDir = Join-Path $binDir 'Installer'
 
-# Non-single-file publish folders used only as installer sources.
-$stageScDir = Join-Path $stagingDir 'app-SelfContained'
-$stageFdDir = Join-Path $stagingDir 'app-FrameworkDependent'
+# Left over from the .NET 10 era; removed so bin\ is not confusing after upgrading.
+$legacyDirs = @(
+    (Join-Path $binDir 'Portable-SelfContained'),
+    (Join-Path $binDir 'Portable-FrameworkDependent'),
+    (Join-Path $binDir 'Installer-SelfContained'),
+    (Join-Path $binDir 'Installer-FrameworkDependent'),
+    (Join-Path $binDir '_staging')
+)
 
 function Write-Step([string]$message) {
     Write-Host ''
@@ -95,115 +94,54 @@ function Resolve-Iscc {
 }
 
 $version = Get-AppVersion
-Write-Host "Amber packaging - version $version, runtime $Runtime" -ForegroundColor Green
+Write-Host "Amber packaging - version $version (.NET Framework 4.8)" -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
 # Clean previous artifacts.
 # ---------------------------------------------------------------------------
 Write-Step 'Cleaning previous artifacts'
-foreach ($dir in @($portableScDir, $portableFdDir, $installerScDir, $installerFdDir, $stagingDir)) {
+foreach ($dir in @($portableDir, $installerDir) + $legacyDirs) {
     if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
 }
 
 # ---------------------------------------------------------------------------
-# 1. Portable, self-contained (no .NET framework needed) - single file.
+# 1. Portable: the app plus its dependencies, ready to copy and run.
 # ---------------------------------------------------------------------------
-Write-Step '(1/4) Portable - self-contained single file'
+Write-Step '(1/2) Portable build'
 Invoke-Checked 'dotnet' @(
     'publish', $project,
     '-c', 'Release',
-    '-r', $Runtime,
-    '--self-contained', 'true',
-    '-p:PublishSingleFile=true',
-    '-p:IncludeNativeLibrariesForSelfExtract=true',
-    '-p:EnableCompressionInSingleFile=true',
+    '--nologo',
     '-p:DebugType=none',
     '-p:DebugSymbols=false',
-    '-o', $portableScDir
+    '-o', $portableDir
 )
 
 # ---------------------------------------------------------------------------
-# 2. Portable, framework-dependent (needs .NET runtime) - single file.
-# ---------------------------------------------------------------------------
-Write-Step '(2/4) Portable - framework-dependent single file'
-Invoke-Checked 'dotnet' @(
-    'publish', $project,
-    '-c', 'Release',
-    '-r', $Runtime,
-    '--self-contained', 'false',
-    '-p:PublishSingleFile=true',
-    '-p:DebugType=none',
-    '-p:DebugSymbols=false',
-    '-o', $portableFdDir
-)
-
-# ---------------------------------------------------------------------------
-# Stage plain (multi-file) publishes to feed the installers.
-# ---------------------------------------------------------------------------
-Write-Step 'Staging application files for installers'
-Invoke-Checked 'dotnet' @(
-    'publish', $project,
-    '-c', 'Release',
-    '-r', $Runtime,
-    '--self-contained', 'true',
-    '-p:PublishSingleFile=false',
-    '-p:DebugType=none',
-    '-p:DebugSymbols=false',
-    '-o', $stageScDir
-)
-Invoke-Checked 'dotnet' @(
-    'publish', $project,
-    '-c', 'Release',
-    '-r', $Runtime,
-    '--self-contained', 'false',
-    '-p:PublishSingleFile=false',
-    '-p:DebugType=none',
-    '-p:DebugSymbols=false',
-    '-o', $stageFdDir
-)
-
-# ---------------------------------------------------------------------------
-# 3 & 4. Installers via Inno Setup.
+# 2. Installer via Inno Setup, wrapping the portable build.
 # ---------------------------------------------------------------------------
 $iscc = Resolve-Iscc
 if (-not $iscc) {
     Write-Warning 'Inno Setup (ISCC.exe) was not found and could not be installed automatically.'
-    Write-Warning 'Portable builds completed. To build the installers, install Inno Setup 6'
+    Write-Warning 'The portable build completed. To build the installer, install Inno Setup 6'
     Write-Warning '  (https://jrsoftware.org/isdl.php) and re-run this script.'
 } else {
     Write-Host "    Using Inno Setup compiler: $iscc" -ForegroundColor DarkGray
 
-    Write-Step '(3/4) Installer - self-contained'
-    New-Item -ItemType Directory -Force -Path $installerScDir | Out-Null
+    Write-Step '(2/2) Installer'
+    New-Item -ItemType Directory -Force -Path $installerDir | Out-Null
     Invoke-Checked $iscc @(
-        "/DSourceDir=$stageScDir",
-        "/DOutputDir=$installerScDir",
+        "/DSourceDir=$portableDir",
+        "/DOutputDir=$installerDir",
         "/DAppVersion=$version",
-        $issScript
-    )
-
-    Write-Step '(4/4) Installer - framework-dependent'
-    New-Item -ItemType Directory -Force -Path $installerFdDir | Out-Null
-    Invoke-Checked $iscc @(
-        "/DSourceDir=$stageFdDir",
-        "/DOutputDir=$installerFdDir",
-        "/DAppVersion=$version",
-        '/DFrameworkDependent=1',
         $issScript
     )
 }
 
-# ---------------------------------------------------------------------------
-# Clean up staging and report.
-# ---------------------------------------------------------------------------
-if (Test-Path $stagingDir) { Remove-Item $stagingDir -Recurse -Force }
-
 Write-Step 'Build summary'
 $outputs = [ordered]@{
-    'Portable (self-contained)'      = Join-Path $portableScDir  $appExe
-    'Portable (framework-dependent)' = Join-Path $portableFdDir  $appExe
-    'Installer (self-contained)'     = Join-Path $installerScDir $appExe
-    'Installer (framework-dependent)'= Join-Path $installerFdDir $appExe
+    'Portable'  = Join-Path $portableDir  $appExe
+    'Installer' = Join-Path $installerDir $appExe
 }
 $report = foreach ($name in $outputs.Keys) {
     $path = $outputs[$name]
@@ -217,8 +155,13 @@ $report = foreach ($name in $outputs.Keys) {
 }
 $report | Format-Table -AutoSize
 
-if ($report | Where-Object { $_.Built -eq 'no' }) {
-    Write-Warning 'One or more artifacts were not produced (see warnings above).'
+if (-not (Test-Path (Join-Path $portableDir $appExe))) {
+    Write-Warning 'The portable build was not produced.'
     exit 1
 }
-Write-Host 'All four artifacts built successfully.' -ForegroundColor Green
+
+if (Test-Path (Join-Path $installerDir $appExe)) {
+    Write-Host 'Both artifacts built successfully.' -ForegroundColor Green
+} else {
+    Write-Host 'Portable build created; the installer was skipped.' -ForegroundColor Yellow
+}
