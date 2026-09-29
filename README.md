@@ -34,8 +34,8 @@ Choose the download that matches your system:
 
 | Download | Type | System requirements |
 | --- | --- | --- |
-| [Night Mode Controller Installer](https://github.com/prompt-smithy/Amber-Windows/releases/download/v2.1/NightModeController.exe) | Installer | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
-| [Night Mode Controller Portable](https://github.com/prompt-smithy/Amber-Windows/releases/download/v2.1/NightModeController_Portable.exe) | Portable | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
+| [Night Mode Controller Installer](https://github.com/prompt-smithy/Night_Mode_Controller-Windows/releases/download/v3.1/NightModeController.exe) | Installer | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
+| [Night Mode Controller Portable](https://github.com/prompt-smithy/Night_Mode_Controller-Windows/releases/download/v3.1_p/NightModeController.exe) | Portable | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
 
 Use an installer for a standard Windows installation, or a portable build to run Night Mode Controller without installing it.
 
