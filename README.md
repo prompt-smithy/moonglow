@@ -17,7 +17,6 @@ Amber keeps display controls close at hand without adding another window to your
 - Smoothly transitions between configurable day and night temperatures.
 - Shares settings between a compact tray popup and the full settings window.
 - Follows Windows light/dark mode and includes selectable themes.
-- Supports 12-hour and 24-hour schedule entry.
 - Refreshes connected displays and can run automatically at sign-in.
 - Runs as a single instance and restores the previous display gamma LUT on exit.
 
@@ -35,8 +34,8 @@ Choose the download that matches your system:
 
 | Download | Type | System requirements |
 | --- | --- | --- |
-| [Amber Installer](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Installer.exe) | Installer | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
-| [Amber Portable](https://github.com/prompt-smithy/Amber/releases/download/v1/Amber_Portable.exe) | Portable | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
+| [Amber Installer](https://github.com/prompt-smithy/Amber-Windows/releases/download/v2.1/Amber.exe) | Installer | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
+| [Amber Portable](https://github.com/prompt-smithy/Amber-Windows/releases/download/v2.1/Amber_Portable.exe) | Portable | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
 
 Use an installer for a standard Windows installation, or a portable build to run Amber without installing it.
 
