@@ -1,8 +1,8 @@
-<Window x:Class="Amber.Views.MainWindow"
+﻿<Window x:Class="Amber.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Amber.Views"
-        Title="Amber" Height="680" Width="470"
+        Title="Night Mode Controller" Height="680" Width="470"
         WindowStartupLocation="CenterScreen" Background="{DynamicResource ThemeWindowBackground}"
         ResizeMode="CanMinimize"
         PreviewMouseDown="OnMouseActivity" PreviewMouseMove="OnMouseActivity"
@@ -98,7 +98,7 @@
                                       Margin="0,4,0,0" />
                 </StackPanel>
             </Grid>
-            <TextBlock Text="The screen cools from the night value back up to the day value between these times."
+            <TextBlock Text="The screen cools from the warm value back up to the cool value between these times."
                        Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,6,0,0" TextWrapping="Wrap" />
 
             <TextBlock Text="Evening transition (cool → warm)" Style="{StaticResource SectionHeader}" />
@@ -118,11 +118,11 @@
                                       Margin="0,4,0,0" />
                 </StackPanel>
             </Grid>
-            <TextBlock Text="The screen warms from the day value down to the night value between these times."
+            <TextBlock Text="The screen warms from the cool value down to the warm value between these times."
                        Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,6,0,0" TextWrapping="Wrap" />
 
             <TextBlock Text="Startup" Style="{StaticResource SectionHeader}" />
-            <CheckBox Content="Run Amber when I sign in"
+            <CheckBox Content="Run Night Mode Controller when I sign in"
                       IsChecked="{Binding RunAtStartup, Mode=TwoWay}" />
 
             <Expander Margin="0,18,0,0" IsExpanded="False">
@@ -174,3 +174,4 @@
         </StackPanel>
     </ScrollViewer>
 </Window>
+

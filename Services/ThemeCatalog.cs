@@ -1,4 +1,4 @@
-using Amber.Models;
+﻿using Amber.Models;
 
 namespace Amber.Services;
 
@@ -7,13 +7,6 @@ public static class ThemeCatalog
 {
     public static IReadOnlyList<AppTheme> All { get; } = new List<AppTheme>
     {
-        new()
-        {
-            Name = "Light Amber", IsDark = false,
-            WindowBackground = "#FFFFF8E1", CardBackground = "#FFFFFBF2", ControlBackground = "#FFFFFFFF",
-            PrimaryText = "#FF2B2110", SecondaryText = "#FF6D5A2F", Border = "#FFFFD978",
-            Accent = "#FFFFB300", OnAccentText = "#FF241A00", ButtonHover = "#FFFFECB3", StrongText = "#FF1F1708",
-        },
         new()
         {
             Name = "Light Orange", IsDark = false,
@@ -48,13 +41,6 @@ public static class ThemeCatalog
             WindowBackground = "#FFF7F8FA", CardBackground = "#FFFFFFFF", ControlBackground = "#FFFFFFFF",
             PrimaryText = "#FF1A1A1A", SecondaryText = "#FF666666", Border = "#FFE2E4E8",
             Accent = "#FF2D7FF9", OnAccentText = "#FFFFFFFF", ButtonHover = "#FFFDF0B5", StrongText = "#FF1A1A1A",
-        },
-        new()
-        {
-            Name = "Dark Amber", IsDark = true,
-            WindowBackground = "#FF18150D", CardBackground = "#FF211D12", ControlBackground = "#FF2A2517",
-            PrimaryText = "#FFF5E7C1", SecondaryText = "#FFC1AA72", Border = "#FF4A3E20",
-            Accent = "#FFFFC107", OnAccentText = "#FF211800", ButtonHover = "#FF393019", StrongText = "#FFFFF3D1",
         },
         new()
         {
@@ -99,25 +85,32 @@ public static class ThemeCatalog
     public static IReadOnlyList<string> DarkNames { get; } =
         All.Where(t => t.IsDark).Select(t => t.Name).ToList();
 
-    public static string NormalizeLightName(string? name) =>
-        LightNames.Contains(name) ? name! : "Light Amber";
+    public static string NormalizeLightName(string? name)
+    {
+        string? normalized = name switch
+        {
+            "Amber" => "Light Grey",
+            "Light" => "Light Grey",
+            _ => name,
+        };
+        return LightNames.Contains(normalized) ? normalized! : "Light Grey";
+    }
 
     public static string NormalizeDarkName(string? name)
     {
         string? normalized = name switch
         {
-            "Amber Dark" => "Dark Amber",
+            "Amber Dark" => "Dark Grey",
+            "Amber" => "Dark Grey",
+            "Dark" => "Black",
             "Orange" => "Dark Orange",
             "Green" => "Dark Green",
             "Violet" => "Dark Violet",
-            "Dark" => "Black",
             _ => name,
         };
-        return DarkNames.Contains(normalized) ? normalized! : "Dark Amber";
+        return DarkNames.Contains(normalized) ? normalized! : "Dark Grey";
     }
 
     public static AppTheme ByName(string? name) =>
-        All.FirstOrDefault(t => t.Name == name)
-        ?? All.FirstOrDefault(t => t.Name == NormalizeDarkName(name))
-        ?? All[0];
+        All.FirstOrDefault(t => t.Name == name) ?? All.First();
 }

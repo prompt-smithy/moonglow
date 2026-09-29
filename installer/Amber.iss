@@ -1,4 +1,4 @@
-; Inno Setup script for Amber.
+﻿; Inno Setup script for Amber.
 ; Compiled by build.ps1, which wraps the portable .NET Framework 4.8 build.
 ; The following /D defines are supplied on the ISCC command line:
 ;   SourceDir           - folder containing the published application to package
@@ -9,9 +9,9 @@
   #define AppVersion "1.0.0"
 #endif
 
-#define MyAppName "Amber"
-#define MyAppPublisher "Amber"
-#define MyAppExeName "Amber.exe"
+#define MyAppName "Night Mode Controller"
+#define MyAppPublisher "Night Mode Controller"
+#define MyAppExeName "NightModeController.exe"
 
 [Setup]
 ; Stable AppId so upgrades replace the previous install instead of stacking.
@@ -20,13 +20,13 @@ AppName={#MyAppName}
 AppVersion={#AppVersion}
 AppVerName={#MyAppName} {#AppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\{#MyAppName}
+DefaultDirName={autopf}\Night Mode Controller
 DefaultGroupName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
 OutputDir={#OutputDir}
 ; Every flavor produces an installer named Amber.exe.
-OutputBaseFilename=Amber
+OutputBaseFilename=NightModeController
 SetupIconFile={#SourcePath}\..\Assets\Amber.ico
 Compression=lzma2/max
 SolidCompression=yes
@@ -92,3 +92,4 @@ begin
   if CurUninstallStep = usPostUninstall then
     RegDeleteValue(HKCU, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'Amber');
 end;
+

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -81,7 +81,7 @@ public partial class App : Application
         _tray = new TaskbarIcon
         {
             Icon = IconFactory.CreateTrayIcon(),
-            ToolTipText = "Amber",
+            ToolTipText = "Night Mode Controller",
             DataContext = _viewModel,
             TrayPopup = new TrayPopup { DataContext = _viewModel },
             ContextMenu = BuildContextMenu(),
@@ -260,3 +260,4 @@ public partial class App : Application
         return @"Local\Amber.Shutdown." + BitConverter.ToString(hash).Replace("-", string.Empty);
     }
 }
+

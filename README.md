@@ -1,14 +1,14 @@
-<p align="center">
+﻿<p align="center">
   <img src="Assets/Amber.png" alt="Amber logo" width="160" height="160">
 </p>
 
-<h1 align="center">Amber</h1>
+<h1 align="center">Night Mode Controller</h1>
 
 <p align="center">
   A lightweight Windows tray app for display brightness and color temperature.
 </p>
 
-Amber keeps display controls close at hand without adding another window to your desktop. Adjust internal and supported external monitor brightness, warm the whole desktop, or let a daily schedule transition automatically between day and night temperatures.
+Night Mode Controller keeps display controls close at hand without adding another window to your desktop. Adjust internal and supported external monitor brightness, warm the whole desktop, or let a daily schedule transition automatically between day and night temperatures.
 
 ## Features
 
@@ -34,18 +34,18 @@ Choose the download that matches your system:
 
 | Download | Type | System requirements |
 | --- | --- | --- |
-| [Amber Installer](https://github.com/prompt-smithy/Amber-Windows/releases/download/v2.1/Amber.exe) | Installer | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
-| [Amber Portable](https://github.com/prompt-smithy/Amber-Windows/releases/download/v2.1/Amber_Portable.exe) | Portable | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
+| [Night Mode Controller Installer](https://github.com/prompt-smithy/Amber-Windows/releases/download/v2.1/NightModeController.exe) | Installer | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
+| [Night Mode Controller Portable](https://github.com/prompt-smithy/Amber-Windows/releases/download/v2.1/NightModeController_Portable.exe) | Portable | Windows 7 SP1 or later with the .NET Framework 4.8 runtime |
 
-Use an installer for a standard Windows installation, or a portable build to run Amber without installing it.
+Use an installer for a standard Windows installation, or a portable build to run Night Mode Controller without installing it.
 
-Amber runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, themes, time format, and startup options.
+Night Mode Controller runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, themes, time format, and startup options.
 
 ## Limitations
 
-Amber adjusts desktop colour temperature using a hardware gamma LUT (a 256-entry lookup table for each RGB channel). Gamma-LUT support varies by display driver; on at least one machine `SetDeviceGammaRamp` reported success without a visible change, so the effect is not guaranteed. Amber saves the existing ramp before changing it and restores it on exit.
+Night Mode Controller adjusts desktop colour temperature using a hardware gamma LUT (a 256-entry lookup table for each RGB channel). Gamma-LUT support varies by display driver; on at least one machine `SetDeviceGammaRamp` reported success without a visible change, so the effect is not guaranteed. Night Mode Controller saves the existing ramp before changing it and restores it on exit.
 
-After waking from sleep while locked, Amber reapplies its gamma LUT because Windows may reset display state. The Windows password prompt and elevated consent prompts use a separate *secure desktop*, so tinting those screens remains driver-dependent. If the LUT does not appear there, configure Windows Night Light, which uses a different OS-level path.
+After waking from sleep while locked, Night Mode Controller reapplies its gamma LUT because Windows may reset display state. The Windows password prompt and elevated consent prompts use a separate *secure desktop*, so tinting those screens remains driver-dependent. If the LUT does not appear there, configure Windows Night Light, which uses a different OS-level path.
 
 ## Build from source
 
@@ -61,8 +61,8 @@ dotnet build Amber.csproj -t:PackageAll
 
 The package command produces:
 
-- `bin\Amber_Portable.exe` — one portable launcher file with the application and dependencies embedded. It extracts them to a temporary directory while running, then cleans up when Amber exits.
-- `bin\Installer\Amber.exe` — the Inno Setup installer.
+- `bin\NightModeController_Portable.exe` — one portable launcher file with the application and dependencies embedded. It extracts them to a temporary directory while running, then cleans up when Amber exits.
+- `bin\Installer\NightModeController.exe` — the Inno Setup installer.
 
 Both artifacts require the .NET Framework 4.8 runtime on the target PC; the portable launcher is a single-file package, not a self-contained .NET runtime.
 

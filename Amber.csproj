@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -12,8 +12,8 @@
     <AssemblyName>Amber</AssemblyName>
     <ApplicationIcon>Assets\Amber.ico</ApplicationIcon>
     <Version>1.0.0</Version>
-    <Product>Amber</Product>
-    <AssemblyTitle>Amber</AssemblyTitle>
+    <Product>Night Mode Controller</Product>
+    <AssemblyTitle>Night Mode Controller</AssemblyTitle>
     <!-- AnyCPU runs 64-bit on 64-bit Windows (as the old win-x64 build did) and still runs on
          32-bit Windows. Prefer32Bit would force a 32-bit process on 64-bit Windows. -->
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -56,3 +56,4 @@
   </Target>
 
 </Project>
+

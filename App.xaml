@@ -1,8 +1,8 @@
-<Application x:Class="Amber.App"
+﻿<Application x:Class="Amber.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
-        <!-- Light Amber defaults; replaced at runtime by ThemeService. -->
+        <!-- Light Grey defaults; replaced at runtime by ThemeService. -->
         <SolidColorBrush x:Key="ThemeWindowBackground" Color="#FFFFF8E1" />
         <SolidColorBrush x:Key="ThemeCardBackground" Color="#FFFFFBF2" />
         <SolidColorBrush x:Key="ThemeControlBackground" Color="#FFFFFFFF" />
@@ -323,3 +323,4 @@
         </Style>
     </Application.Resources>
 </Application>
+

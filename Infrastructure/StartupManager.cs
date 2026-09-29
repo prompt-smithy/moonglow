@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Microsoft.Win32;
 
 namespace Amber.Infrastructure;
@@ -7,7 +7,7 @@ namespace Amber.Infrastructure;
 internal static class StartupManager
 {
     private const string RunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "Amber";
+    private const string ValueName = "Night Mode Controller";
 
     public static void Set(bool enabled)
     {
@@ -36,3 +36,4 @@ internal static class StartupManager
         }
     }
 }
+

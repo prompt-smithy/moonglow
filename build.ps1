@@ -1,20 +1,20 @@
-<#
+﻿<#
 .SYNOPSIS
-    Builds the distributable artifacts of Amber with a single command.
+    Builds the distributable artifacts of Night Mode Controller with a single command.
 
 .DESCRIPTION
-    Amber targets .NET Framework 4.8. The runtime is a Windows component rather than
+    Night Mode Controller targets .NET Framework 4.8. The runtime is a Windows component rather than
     something we ship - it is preinstalled on Windows 10 1903+ and Windows 11, and can be
     installed on Windows 7 SP1 and later. The portable launcher is one file, but it still
     requires the .NET Framework runtime on the target PC.
 
     Produces two distributable artifacts under bin\:
 
-        bin\Amber_Portable.exe      (1) single-file self-extracting portable launcher
-        bin\Installer\Amber.exe    (2) single setup executable produced by Inno Setup
+        bin\NightModeController_Portable.exe      (1) single-file self-extracting portable launcher
+        bin\Installer\NightModeController.exe    (2) single setup executable produced by Inno Setup
 
     The portable launcher embeds the published app, extracts it to a temporary directory,
-    runs Amber, and removes the extracted files when Amber exits.
+    runs Night Mode Controller, and removes the extracted files when Night Mode Controller exits.
     The installer is compiled by Inno Setup (ISCC.exe); if Inno Setup is not found the script
     attempts to install it via winget, and if that fails the portable build still succeeds and
     the installer step is skipped with a warning.
@@ -32,11 +32,11 @@ $root      = $PSScriptRoot
 $project   = Join-Path $root 'Amber.csproj'
 $issScript = Join-Path $root 'installer\Amber.iss'
 $binDir    = Join-Path $root 'bin'
-$appExe    = 'Amber.exe'
+$appExe    = 'NightModeController.exe'
 
 # Output folders.
 $portableDir  = Join-Path $binDir 'Portable'
-$portableExe  = Join-Path $binDir 'Amber_Portable.exe'
+$portableExe  = Join-Path $binDir 'NightModeController_Portable.exe'
 $installerDir = Join-Path $binDir 'Installer'
 $stagingDir   = Join-Path $binDir '_staging'
 $launcherProject = Join-Path $root 'tools\PortableLauncher\PortableLauncher.csproj'
@@ -98,7 +98,7 @@ function Resolve-Iscc {
 }
 
 $version = Get-AppVersion
-Write-Host "Amber packaging - version $version (.NET Framework 4.8)" -ForegroundColor Green
+Write-Host "Night Mode Controller packaging - version $version (.NET Framework 4.8)" -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
 # Clean previous artifacts.
@@ -106,6 +106,13 @@ Write-Host "Amber packaging - version $version (.NET Framework 4.8)" -Foreground
 Write-Step 'Cleaning previous artifacts'
 foreach ($dir in @($portableDir, $installerDir) + $legacyDirs) {
     if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+}
+foreach ($legacyFile in @(
+    (Join-Path $binDir 'Amber_Portable.exe'),
+    (Join-Path $binDir 'Amber.exe'),
+    (Join-Path $installerDir 'Amber.exe')
+)) {
+    if (Test-Path $legacyFile) { Remove-Item $legacyFile -Force }
 }
 
 # ---------------------------------------------------------------------------
@@ -183,3 +190,6 @@ if (Test-Path (Join-Path $installerDir $appExe)) {
 } else {
     Write-Host 'Portable build created; the installer was skipped.' -ForegroundColor Yellow
 }
+
+
+

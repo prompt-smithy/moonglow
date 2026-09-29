@@ -1,5 +1,9 @@
 {
     "chat.tools.terminal.autoApprove": {
-        "Start-Process": true
+        "Start-Process": true,
+        "/^powershell -NoProfile -ExecutionPolicy Bypass -File \\.\\\\build\\.ps1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
     }
 }
