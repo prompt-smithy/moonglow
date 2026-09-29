@@ -5,8 +5,8 @@
 .DESCRIPTION
     Amber targets .NET Framework 4.8. The runtime is a Windows component rather than
     something we ship - it is preinstalled on Windows 10 1903+ and Windows 11, and can be
-    installed on Windows 7 SP1 and later - so every build is framework-dependent and there
-    is no self-contained or single-file flavor to produce.
+    installed on Windows 7 SP1 and later. The portable launcher is one file, but it still
+    requires the .NET Framework runtime on the target PC.
 
     Produces two distributable artifacts under bin\:
 
@@ -34,7 +34,7 @@ $issScript = Join-Path $root 'installer\Amber.iss'
 $binDir    = Join-Path $root 'bin'
 $appExe    = 'Amber.exe'
 
-# Output folders (same file name, different folders).
+# Output folders.
 $portableDir  = Join-Path $binDir 'Portable'
 $portableExe  = Join-Path $binDir 'Amber_Portable.exe'
 $installerDir = Join-Path $binDir 'Installer'

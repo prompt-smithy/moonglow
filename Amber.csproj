@@ -48,7 +48,7 @@
     <Reference Include="System.Management" />
   </ItemGroup>
 
-  <!-- Single command that builds the distributables (portable folder + installer). Run with:
+  <!-- Single command that builds the portable launcher and installer. Run with:
          dotnet build -t:PackageAll -->
   <Target Name="PackageAll">
     <Exec WorkingDirectory="$(MSBuildProjectDirectory)"

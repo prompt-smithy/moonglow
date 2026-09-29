@@ -19,7 +19,7 @@ Amber keeps display controls close at hand without adding another window to your
 - Follows Windows light/dark mode and includes selectable themes.
 - Supports 12-hour and 24-hour schedule entry.
 - Refreshes connected displays and can run automatically at sign-in.
-- Runs as a single instance and restores neutral color on exit.
+- Runs as a single instance and restores the previous display gamma LUT on exit.
 
 ## Requirements
 
@@ -50,25 +50,24 @@ After waking from sleep while locked, Amber reapplies its gamma LUT because Wind
 
 ## Build from source
 
-Install the [.NET SDK](https://dotnet.microsoft.com/download/dotnet) (or Visual Studio 2022), then run:
+Build on Windows with the [.NET SDK](https://dotnet.microsoft.com/download/dotnet). Visual Studio is optional; the .NET Framework 4.8 reference assemblies are restored from NuGet automatically.
 
 ```powershell
-dotnet build Amber.csproj
-```
+# Build the application in Release configuration
+dotnet build Amber.csproj -c Release
 
-The project targets .NET Framework 4.8. Its reference assemblies come from NuGet, so no separate Developer Pack is needed.
-
-To create the portable build and the installer:
-
-```powershell
+# Build both distributables
 dotnet build Amber.csproj -t:PackageAll
 ```
 
-This produces `bin\Amber_Portable.exe`, a single-file launcher with the app payload embedded that
-extracts to a temporary directory while running, and `bin\Installer\Amber.exe`, the Inno Setup
-installer. Both require the .NET Framework 4.8 runtime.
+The package command produces:
 
-Packaging the installer requires [Inno Setup 6](https://jrsoftware.org/isdl.php). See [Architecture](docs/ARCHITECTURE.md) for implementation details.
+- `bin\Amber_Portable.exe` — one portable launcher file with the application and dependencies embedded. It extracts them to a temporary directory while running, then cleans up when Amber exits.
+- `bin\Installer\Amber.exe` — the Inno Setup installer.
+
+Both artifacts require the .NET Framework 4.8 runtime on the target PC; the portable launcher is a single-file package, not a self-contained .NET runtime.
+
+Packaging the installer requires [Inno Setup 6](https://jrsoftware.org/isdl.php). The build script checks common install locations and attempts to install it with `winget` if needed. If Inno Setup is unavailable, the portable launcher is still produced and the installer is skipped with a warning. See [Architecture](docs/ARCHITECTURE.md) for implementation details.
 
 ## Settings
 
