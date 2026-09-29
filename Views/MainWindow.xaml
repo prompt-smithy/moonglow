@@ -37,7 +37,7 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="22,8,22,20">
         <StackPanel>
             <TextBlock Text="Set the automatic color temperature range and daily transition times. Use the tray slider for manual adjustments."
-                       Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,2,0,0" />
+                       Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,2,0,0" TextWrapping="Wrap" />
 
             <Grid Margin="0,16,0,0">
                 <Grid.ColumnDefinitions>

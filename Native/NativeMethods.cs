@@ -97,25 +97,6 @@ internal static class NativeMethods
     [DllImport("gdi32.dll")]
     public static extern bool DeleteDC(IntPtr hdc);
 
-    // ---------------------------------------------------------------- Magnification full-screen color effect
-    // A 5x5 color transform applied to the whole desktop; unlike gamma ramps it is not
-    // subject to the Windows gamma-range clamp, so it can reach very warm temperatures.
-    [StructLayout(LayoutKind.Sequential)]
-    public struct MAGCOLOREFFECT
-    {
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 25)]
-        public float[] transform;
-    }
-
-    [DllImport("Magnification.dll")]
-    public static extern bool MagInitialize();
-
-    [DllImport("Magnification.dll")]
-    public static extern bool MagUninitialize();
-
-    [DllImport("Magnification.dll")]
-    public static extern bool MagSetFullscreenColorEffect(ref MAGCOLOREFFECT pEffect);
-
     // ---------------------------------------------------------------- DWM title bar (dwmapi)
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     public const int DWMWA_CAPTION_COLOR = 35;

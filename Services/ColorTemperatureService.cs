@@ -4,46 +4,32 @@ using static Amber.Native.NativeMethods;
 namespace Amber.Services;
 
 /// <summary>
-/// Applies a color temperature to every display. Uses the Magnification full-screen color
-/// effect for the interactive desktop and can temporarily use the GPU gamma ramp while locked.
+/// Applies a color temperature to every display through its per-channel GPU gamma LUT.
 /// </summary>
 /// <remarks>
-/// Gamma-ramp support varies by display driver. The original ramp is captured and restored around
-/// the locked interval to avoid leaving the temporary LUT in place after sign-in.
+/// Gamma-LUT support varies by display driver. The original ramp is captured before the first
+/// change and restored when Amber exits or when the session unlocks.
 /// </remarks>
 public sealed class ColorTemperatureService : IDisposable
 {
     private readonly MonitorService _monitors;
-    private readonly bool _magReady;
     private readonly Dictionary<string, RAMP> _savedGammaRamps = new(StringComparer.OrdinalIgnoreCase);
     private RAMP? _savedDesktopGammaRamp;
 
     public ColorTemperatureService(MonitorService monitors)
     {
         _monitors = monitors;
-        _magReady = MagInitialize();
     }
 
     /// <summary>Applies the given color temperature (Kelvin) to all displays.</summary>
     public void Apply(int kelvin)
     {
         var (r, g, b) = KelvinToRgbScale(kelvin);
-
-        if (_magReady && ApplyViaMagnification(r, g, b))
-            return;
-
         ApplyViaGamma(r, g, b);
     }
 
-    /// <summary>Applies the temperature through the hardware gamma ramp while the session is locked.</summary>
-    public void ApplyForLockedSession(int kelvin)
-    {
-        var (r, g, b) = KelvinToRgbScale(kelvin);
-        ApplyViaGammaForLockedSession(r, g, b);
-    }
-
-    /// <summary>Restores the gamma ramps captured before the locked-session override.</summary>
-    public void RestoreLockedSessionGamma()
+    /// <summary>Restores the gamma ramps captured before Amber changed them.</summary>
+    public void RestoreOriginalGammaRamps()
     {
         foreach (var entry in _savedGammaRamps.ToArray())
         {
@@ -70,27 +56,18 @@ public sealed class ColorTemperatureService : IDisposable
         }
     }
 
-    /// <summary>Restores neutral color (identity transform).</summary>
+    /// <summary>Restores the original display gamma ramps.</summary>
     public void Reset()
     {
-        bool hasSavedGamma = _savedGammaRamps.Count > 0 || _savedDesktopGammaRamp.HasValue;
-        RestoreLockedSessionGamma();
-
-        if (_magReady && ApplyViaMagnification(1.0, 1.0, 1.0))
-            return;
-
-        if (!hasSavedGamma)
-            ApplyViaGamma(1.0, 1.0, 1.0);
+        RestoreOriginalGammaRamps();
     }
 
     public void Dispose()
     {
-        RestoreLockedSessionGamma();
-        if (_magReady)
-            MagUninitialize();
+        RestoreOriginalGammaRamps();
     }
 
-    private void ApplyViaGammaForLockedSession(double redScale, double greenScale, double blueScale)
+    private void ApplyViaGamma(double redScale, double greenScale, double blueScale)
     {
         var ramp = BuildRamp(redScale, greenScale, blueScale);
         bool appliedToMonitor = false;
@@ -110,7 +87,8 @@ public sealed class ColorTemperatureService : IDisposable
 
             if (captured && SetDeviceGammaRamp(hdc, ref ramp))
             {
-                _savedGammaRamps[monitor.DeviceName] = originalRamp;
+                if (!_savedGammaRamps.ContainsKey(monitor.DeviceName))
+                    _savedGammaRamps[monitor.DeviceName] = originalRamp;
                 appliedToMonitor = true;
             }
 
@@ -133,51 +111,6 @@ public sealed class ColorTemperatureService : IDisposable
         }
 
         ReleaseDC(IntPtr.Zero, desktopHdc);
-    }
-
-    private static bool ApplyViaMagnification(double redScale, double greenScale, double blueScale)
-    {
-        var effect = new MAGCOLOREFFECT
-        {
-            transform = new[]
-            {
-                (float)redScale, 0f,               0f,                0f, 0f,
-                0f,              (float)greenScale, 0f,                0f, 0f,
-                0f,              0f,                (float)blueScale,  0f, 0f,
-                0f,              0f,                0f,                1f, 0f,
-                0f,              0f,                0f,                0f, 1f,
-            },
-        };
-        return MagSetFullscreenColorEffect(ref effect);
-    }
-
-    private void ApplyViaGamma(double redScale, double greenScale, double blueScale)
-    {
-        var ramp = BuildRamp(redScale, greenScale, blueScale);
-
-        bool applied = false;
-        foreach (var monitor in _monitors.Monitors)
-        {
-            IntPtr hdc = CreateDC("DISPLAY", monitor.DeviceName, null, IntPtr.Zero);
-            if (hdc == IntPtr.Zero)
-                continue;
-
-            if (SetDeviceGammaRamp(hdc, ref ramp))
-                applied = true;
-
-            DeleteDC(hdc);
-        }
-
-        // Fall back to the whole desktop DC if per-monitor DCs were unavailable.
-        if (!applied)
-        {
-            IntPtr hdc = GetDC(IntPtr.Zero);
-            if (hdc != IntPtr.Zero)
-            {
-                SetDeviceGammaRamp(hdc, ref ramp);
-                ReleaseDC(IntPtr.Zero, hdc);
-            }
-        }
     }
 
     private static RAMP BuildRamp(double redScale, double greenScale, double blueScale)

@@ -24,7 +24,7 @@
                 <TextBlock Text="{Binding ColorTemperature, StringFormat={}{0}K}" Foreground="{DynamicResource ThemeSecondaryText}"
                            DockPanel.Dock="Right" HorizontalAlignment="Right" />
             </DockPanel>
-            <Slider Margin="0,4,0,0"
+                <Slider Margin="0,4,0,0" Background="{DynamicResource TemperatureRangeGradient}"
                     Minimum="900" Maximum="6600"
                     IsMoveToPointEnabled="True"
                     IsEnabled="{Binding ManualColorEnabled}"

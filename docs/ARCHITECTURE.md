@@ -80,11 +80,10 @@ Implemented in [`BrightnessService`](../Services/BrightnessService.cs).
 Implemented in [`ColorTemperatureService`](../Services/ColorTemperatureService.cs).
 
 - Kelvin is converted to per-channel RGB scale factors using the **Tanner Helland** approximation, normalized so ~6500 K is neutral.
-- **Preferred path – Magnification full-screen color effect** (`MagSetFullscreenColorEffect`): a 5×5 color matrix applied to the whole desktop. Unlike gamma ramps it is **not** subject to the Windows gamma-range clamp, so it can reach very warm temperatures. Initialized once with `MagInitialize`.
-- **Fallback path – GPU gamma ramp** (`SetDeviceGammaRamp`): builds a 256-entry per-channel ramp and applies it per monitor (falling back to the whole-desktop DC if per-monitor DCs are unavailable).
-- **Secure desktop** – the Windows password prompt (and elevated consent prompts) are drawn on the Winlogon desktop, where the Magnification effect is not rendered. After resume into a locked session, `App` temporarily applies the hardware gamma ramp, which may reach the secure desktop but is driver-dependent; it captures and restores the prior ramp on unlock. This was verified inert on one local machine: `SetDeviceGammaRamp` returned `true` without a visible change. The lock-screen background remains on the interactive desktop and uses the Magnification effect.
-- `Reset()` restores a neutral (identity) transform on exit.
-- `App` re-applies on `SystemEvents.PowerModeChanged` (`Resume`), because resuming re-initializes the display hardware and can drop the applied effect. A locked resume additionally applies the LUT until `SessionUnlock`, when the prior ramp is restored and the Magnification effect is reapplied.
+- **GPU gamma LUT** (`SetDeviceGammaRamp`): Kelvin becomes per-channel RGB scale factors, then a 256-entry ramp is built for each channel and applied per monitor (falling back to the whole-desktop DC if per-monitor DCs are unavailable). The original ramps are captured and restored on exit and around unlock.
+- **Driver support** – LUT application is driver-dependent. On one local machine, `SetDeviceGammaRamp` returned `true` without a visible change. The same LUT path is used on the desktop and after waking into a locked session; whether it affects the secure sign-in desktop depends on the display driver.
+- `Reset()` restores the captured original ramps rather than writing an identity ramp, avoiding overwriting another color calibration.
+- `App` re-applies on `SystemEvents.PowerModeChanged` (`Resume`), because resuming can reset display state. While locked, it retries for up to five seconds; on unlock it restores the original ramps and reapplies the selected temperature.
 
 ---
 
@@ -152,6 +151,5 @@ All P/Invoke lives in [`NativeMethods`](../Native/NativeMethods.cs), grouped by 
 | Monitor enumeration | `user32` | `EnumDisplayMonitors`, `GetMonitorInfo` |
 | DDC/CI brightness | `dxva2` | `GetNumberOfPhysicalMonitorsFromHMONITOR`, `GetPhysicalMonitorsFromHMONITOR`, `GetMonitorBrightness`, `SetMonitorBrightness`, `DestroyPhysicalMonitors` |
 | Gamma control | `gdi32` | `CreateDC`, `GetDeviceGammaRamp`, `SetDeviceGammaRamp`, `DeleteDC` |
-| Full-screen color effect | `Magnification` | `MagInitialize`, `MagSetFullscreenColorEffect`, `MagUninitialize` |
 | Title-bar theming / styling | `dwmapi`, `user32` | `DwmSetWindowAttribute`, `GetWindowLong`/`SetWindowLong`, `SetWindowPos` |
 | Internal-panel brightness | WMI (`System.Management`) | `WmiMonitorBrightness`, `WmiMonitorBrightnessMethods.WmiSetBrightness` |

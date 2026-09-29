@@ -155,13 +155,14 @@
         <!-- Sliders: grey thumb/track (no bright white) in every theme. -->
         <Style TargetType="Slider">
             <Setter Property="Foreground" Value="{DynamicResource ThemePrimaryText}" />
+            <Setter Property="Background" Value="{DynamicResource ThemeBorder}" />
             <Setter Property="Height" Value="24" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid VerticalAlignment="Center">
                             <Border Height="4" CornerRadius="2" VerticalAlignment="Center"
-                                    Background="{DynamicResource ThemeBorder}" />
+                                    Background="{TemplateBinding Background}" />
                             <Track x:Name="PART_Track">
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Command="Slider.DecreaseLarge">

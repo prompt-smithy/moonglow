@@ -84,7 +84,7 @@ public partial class App : Application
             {
                 _sessionLocked = true;
                 if (DateTime.UtcNow - _lastResumeUtc <= TimeSpan.FromSeconds(60))
-                    ApplyLockedSessionTemperature();
+                    _viewModel.ReapplyColorTemperature();
             });
             return;
         }
@@ -97,7 +97,8 @@ public partial class App : Application
             _sessionLocked = false;
             _lastResumeUtc = DateTime.MinValue;
             Interlocked.Increment(ref _resumeSequence);
-            _color.RestoreLockedSessionGamma();
+            _color.RestoreOriginalGammaRamps();
+            _viewModel.ReapplyColorTemperature();
         });
 
         // Windows can reset display color settings after sign-in, so retry while the desktop settles.
@@ -109,7 +110,6 @@ public partial class App : Application
 
             await Dispatcher.InvokeAsync(() =>
             {
-                _color.RestoreLockedSessionGamma();
                 _viewModel.ReapplyColorTemperature();
             });
         }
@@ -126,8 +126,6 @@ public partial class App : Application
         {
             _lastResumeUtc = DateTime.UtcNow;
             _viewModel.ReapplyColorTemperature();
-            if (_sessionLocked)
-                ApplyLockedSessionTemperature();
         });
 
         // Windows may restore its display state after the resume notification; retry only while locked.
@@ -142,15 +140,9 @@ public partial class App : Application
                 if (resumeSequence == Volatile.Read(ref _resumeSequence) &&
                     _sessionLocked &&
                     DateTime.UtcNow - _lastResumeUtc <= TimeSpan.FromSeconds(10))
-                    ApplyLockedSessionTemperature();
+                    _viewModel.ReapplyColorTemperature();
             });
         }
-    }
-
-    private void ApplyLockedSessionTemperature()
-    {
-        _viewModel.ReapplyColorTemperature();
-        _color.ApplyForLockedSession(_viewModel.ColorTemperature);
     }
 
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)

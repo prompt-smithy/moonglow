@@ -31,7 +31,7 @@ Start at the nearest owner and avoid broad repository scans:
 - `App.xaml.cs`: composition root, tray lifecycle, single instance, system events, shutdown cleanup.
 - `ViewModels/MainViewModel.cs`: shared UI state, commands, settings persistence, and service coordination.
 - `Services/BrightnessService.cs`: asynchronous latest-value-wins WMI/DDC brightness application.
-- `Services/ColorTemperatureService.cs`: Kelvin conversion, Magnification effect, and gamma fallback.
+- `Services/ColorTemperatureService.cs`: Kelvin conversion and per-channel GPU gamma-LUT application/restoration.
 - `Services/MonitorService.cs`: monitor enumeration, DDC capabilities, native-handle ownership, and locking.
 - `Services/ScheduleService.cs`: 10-second schedule ticks, transition interpolation, and 100 K snapping.
 - `Services/SettingsService.cs` and `Models/AppSettings.cs`: JSON persistence, defaults, and schedule parsing.
