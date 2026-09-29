@@ -1,5 +1,6 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
+using Amber.Infrastructure;
 using Amber.Models;
 
 namespace Amber.Services;
@@ -23,12 +24,13 @@ public sealed class SettingsService
             if (File.Exists(FilePath))
                 Settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath)) ?? new AppSettings();
 
+            Settings.RunAtStartup = StartupManager.IsEnabled();
             Settings.LightModeTheme = ThemeCatalog.NormalizeLightName(Settings.LightModeTheme);
             Settings.DarkModeTheme = ThemeCatalog.NormalizeDarkName(Settings.DarkModeTheme);
         }
         catch
         {
-            Settings = new AppSettings();
+            Settings = new AppSettings { RunAtStartup = StartupManager.IsEnabled() };
         }
     }
 

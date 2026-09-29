@@ -9,7 +9,7 @@
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>Amber</RootNamespace>
-    <AssemblyName>Amber</AssemblyName>
+    <AssemblyName>NightModeController</AssemblyName>
     <ApplicationIcon>Assets\Amber.ico</ApplicationIcon>
     <Version>1.0.0</Version>
     <Product>Night Mode Controller</Product>
@@ -56,4 +56,5 @@
   </Target>
 
 </Project>
+
 
