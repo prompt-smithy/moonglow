@@ -75,7 +75,7 @@ Use `docs/ARCHITECTURE.md` as the first reference only when a task crosses compo
 
 - There is currently no automated test project. For code or XAML changes, run `dotnet build Amber.csproj` from the repository root.
 - Use `dotnet build Amber.csproj -c Release` when behavior depends on publishing, startup paths, or release configuration.
-- Run `dotnet build Amber.csproj -t:PackageAll` only for packaging changes or an explicit packaging request; it produces `bin\Portable` plus an installer and may require Inno Setup 6. There is no self-contained or single-file flavor: .NET Framework is a Windows component.
+- Run `dotnet build Amber.csproj -t:PackageAll` for an explicit packaging request; it produces `bin\Amber_Portable.exe` (embedded-payload launcher) and `bin\Installer\Amber.exe` (Inno Setup). Both require .NET Framework 4.8 on the target machine; the portable launcher unpacks its files to a temporary directory while running.
 - Always specify `Amber.csproj`; generated WPF temporary projects can make implicit project selection ambiguous.
 - Do not launch `dotnet run` for ordinary validation because Amber is a persistent tray application. Launch it only when interactive verification is required, then report what still needs manual hardware/UI checking.
 - Hardware behavior involving WMI, DDC/CI, gamma ramps, Magnification, monitor hot-plugging, or startup registration requires Windows runtime verification beyond a successful build.

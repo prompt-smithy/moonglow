@@ -64,6 +64,10 @@ To create the portable build and the installer:
 dotnet build Amber.csproj -t:PackageAll
 ```
 
+This produces `bin\Amber_Portable.exe`, a single-file launcher with the app payload embedded that
+extracts to a temporary directory while running, and `bin\Installer\Amber.exe`, the Inno Setup
+installer. Both require the .NET Framework 4.8 runtime.
+
 Packaging the installer requires [Inno Setup 6](https://jrsoftware.org/isdl.php). See [Architecture](docs/ARCHITECTURE.md) for implementation details.
 
 ## Settings

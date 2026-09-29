@@ -8,15 +8,16 @@
     installed on Windows 7 SP1 and later - so every build is framework-dependent and there
     is no self-contained or single-file flavor to produce.
 
-    Produces two artifacts, both named Amber.exe, each in its own folder under bin\:
+    Produces two distributable artifacts under bin\:
 
-        bin\Portable\Amber.exe      (1) the whole app; copy the folder and run it
-        bin\Installer\Amber.exe     (2) single setup executable produced by Inno Setup
+        bin\Amber_Portable.exe      (1) single-file self-extracting portable launcher
+        bin\Installer\Amber.exe    (2) single setup executable produced by Inno Setup
 
-    The portable build is a plain `dotnet publish` folder. The installer is compiled by
-    Inno Setup (ISCC.exe); if Inno Setup is not found the script attempts to install it via
-    winget, and if that fails the portable build still succeeds and the installer step is
-    skipped with a warning.
+    The portable launcher embeds the published app, extracts it to a temporary directory,
+    runs Amber, and removes the extracted files when Amber exits.
+    The installer is compiled by Inno Setup (ISCC.exe); if Inno Setup is not found the script
+    attempts to install it via winget, and if that fails the portable build still succeeds and
+    the installer step is skipped with a warning.
 
 .EXAMPLE
     .\build.ps1
@@ -35,7 +36,10 @@ $appExe    = 'Amber.exe'
 
 # Output folders (same file name, different folders).
 $portableDir  = Join-Path $binDir 'Portable'
+$portableExe  = Join-Path $binDir 'Amber_Portable.exe'
 $installerDir = Join-Path $binDir 'Installer'
+$stagingDir   = Join-Path $binDir '_staging'
+$launcherProject = Join-Path $root 'tools\PortableLauncher\PortableLauncher.csproj'
 
 # Left over from the .NET 10 era; removed so bin\ is not confusing after upgrading.
 $legacyDirs = @(
@@ -117,6 +121,20 @@ Invoke-Checked 'dotnet' @(
     '-o', $portableDir
 )
 
+New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
+$launcherOutput = Join-Path $stagingDir 'Launcher'
+$payloadPath = (Resolve-Path $portableDir).Path
+Invoke-Checked 'dotnet' @(
+    'build', $launcherProject,
+    '-c', 'Release',
+    '--nologo',
+    "-p:PayloadDir=$payloadPath",
+    "-p:OutputPath=$launcherOutput"
+)
+$builtLauncher = Join-Path $launcherOutput 'Amber_Portable.exe'
+if (-not (Test-Path $builtLauncher)) { throw "Portable launcher was not produced at $builtLauncher" }
+Copy-Item $builtLauncher $portableExe -Force
+
 # ---------------------------------------------------------------------------
 # 2. Installer via Inno Setup, wrapping the portable build.
 # ---------------------------------------------------------------------------
@@ -140,7 +158,7 @@ if (-not $iscc) {
 
 Write-Step 'Build summary'
 $outputs = [ordered]@{
-    'Portable'  = Join-Path $portableDir  $appExe
+    'Portable (single file)' = $portableExe
     'Installer' = Join-Path $installerDir $appExe
 }
 $report = foreach ($name in $outputs.Keys) {
@@ -155,7 +173,7 @@ $report = foreach ($name in $outputs.Keys) {
 }
 $report | Format-Table -AutoSize
 
-if (-not (Test-Path (Join-Path $portableDir $appExe))) {
+if (-not (Test-Path $portableExe)) {
     Write-Warning 'The portable build was not produced.'
     exit 1
 }
