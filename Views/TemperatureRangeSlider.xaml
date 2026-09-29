@@ -1,0 +1,34 @@
+<UserControl x:Class="Amber.Views.TemperatureRangeSlider"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinHeight="28">
+    <Grid x:Name="Root" Height="28" SizeChanged="Root_SizeChanged">
+        <Canvas x:Name="SliderCanvas" Background="Transparent"
+                MouseLeftButtonDown="SliderCanvas_MouseLeftButtonDown">
+            <Border x:Name="BaseTrack" Height="4" CornerRadius="2"
+                    Background="{DynamicResource ThemeBorder}" />
+            <Border x:Name="SelectedTrack" Height="4" CornerRadius="2"
+                    Background="{DynamicResource TemperatureRangeGradient}" />
+            <Thumb x:Name="NightThumb" Width="16" Height="16" Focusable="True"
+                   ToolTip="Night color temperature" DragDelta="NightThumb_DragDelta"
+                   KeyDown="NightThumb_KeyDown">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Ellipse Fill="#E87925"
+                                 Stroke="{DynamicResource ThemePrimaryText}" StrokeThickness="1" />
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+            <Thumb x:Name="DayThumb" Width="16" Height="16" Focusable="True"
+                   ToolTip="Day color temperature" DragDelta="DayThumb_DragDelta"
+                   KeyDown="DayThumb_KeyDown">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Ellipse Fill="#5E91C2"
+                                 Stroke="{DynamicResource ThemePrimaryText}" StrokeThickness="1" />
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+        </Canvas>
+    </Grid>
+</UserControl>

@@ -4,14 +4,19 @@ using static Amber.Native.NativeMethods;
 namespace Amber.Services;
 
 /// <summary>
-/// Applies a color temperature to every display. Prefers the Magnification full-screen
-/// color effect (a color matrix that is NOT subject to the Windows gamma-range clamp, so it
-/// can reach very warm temperatures), and falls back to the GPU gamma ramp if unavailable.
+/// Applies a color temperature to every display. Uses the Magnification full-screen color
+/// effect for the interactive desktop and can temporarily use the GPU gamma ramp while locked.
 /// </summary>
+/// <remarks>
+/// Gamma-ramp support varies by display driver. The original ramp is captured and restored around
+/// the locked interval to avoid leaving the temporary LUT in place after sign-in.
+/// </remarks>
 public sealed class ColorTemperatureService : IDisposable
 {
     private readonly MonitorService _monitors;
     private readonly bool _magReady;
+    private readonly Dictionary<string, RAMP> _savedGammaRamps = new(StringComparer.OrdinalIgnoreCase);
+    private RAMP? _savedDesktopGammaRamp;
 
     public ColorTemperatureService(MonitorService monitors)
     {
@@ -30,19 +35,104 @@ public sealed class ColorTemperatureService : IDisposable
         ApplyViaGamma(r, g, b);
     }
 
+    /// <summary>Applies the temperature through the hardware gamma ramp while the session is locked.</summary>
+    public void ApplyForLockedSession(int kelvin)
+    {
+        var (r, g, b) = KelvinToRgbScale(kelvin);
+        ApplyViaGammaForLockedSession(r, g, b);
+    }
+
+    /// <summary>Restores the gamma ramps captured before the locked-session override.</summary>
+    public void RestoreLockedSessionGamma()
+    {
+        foreach (var entry in _savedGammaRamps.ToArray())
+        {
+            IntPtr hdc = CreateDC("DISPLAY", entry.Key, null, IntPtr.Zero);
+            if (hdc == IntPtr.Zero)
+                continue;
+
+            RAMP originalRamp = entry.Value;
+            if (SetDeviceGammaRamp(hdc, ref originalRamp))
+                _savedGammaRamps.Remove(entry.Key);
+
+            DeleteDC(hdc);
+        }
+
+        if (_savedDesktopGammaRamp is { } desktopRamp)
+        {
+            IntPtr hdc = GetDC(IntPtr.Zero);
+            if (hdc != IntPtr.Zero)
+            {
+                if (SetDeviceGammaRamp(hdc, ref desktopRamp))
+                    _savedDesktopGammaRamp = null;
+                ReleaseDC(IntPtr.Zero, hdc);
+            }
+        }
+    }
+
     /// <summary>Restores neutral color (identity transform).</summary>
     public void Reset()
     {
+        bool hasSavedGamma = _savedGammaRamps.Count > 0 || _savedDesktopGammaRamp.HasValue;
+        RestoreLockedSessionGamma();
+
         if (_magReady && ApplyViaMagnification(1.0, 1.0, 1.0))
             return;
 
-        ApplyViaGamma(1.0, 1.0, 1.0);
+        if (!hasSavedGamma)
+            ApplyViaGamma(1.0, 1.0, 1.0);
     }
 
     public void Dispose()
     {
+        RestoreLockedSessionGamma();
         if (_magReady)
             MagUninitialize();
+    }
+
+    private void ApplyViaGammaForLockedSession(double redScale, double greenScale, double blueScale)
+    {
+        var ramp = BuildRamp(redScale, greenScale, blueScale);
+        bool appliedToMonitor = false;
+
+        foreach (var monitor in _monitors.Monitors)
+        {
+            IntPtr hdc = CreateDC("DISPLAY", monitor.DeviceName, null, IntPtr.Zero);
+            if (hdc == IntPtr.Zero)
+                continue;
+
+            bool captured = _savedGammaRamps.TryGetValue(monitor.DeviceName, out RAMP originalRamp);
+            if (!captured)
+            {
+                originalRamp = CreateEmptyRamp();
+                captured = GetDeviceGammaRamp(hdc, ref originalRamp);
+            }
+
+            if (captured && SetDeviceGammaRamp(hdc, ref ramp))
+            {
+                _savedGammaRamps[monitor.DeviceName] = originalRamp;
+                appliedToMonitor = true;
+            }
+
+            DeleteDC(hdc);
+        }
+
+        if (appliedToMonitor)
+            return;
+
+        IntPtr desktopHdc = GetDC(IntPtr.Zero);
+        if (desktopHdc == IntPtr.Zero)
+            return;
+
+        bool desktopCaptured = _savedDesktopGammaRamp.HasValue;
+        RAMP originalDesktopRamp = _savedDesktopGammaRamp ?? CreateEmptyRamp();
+        if (desktopCaptured || GetDeviceGammaRamp(desktopHdc, ref originalDesktopRamp))
+        {
+            if (SetDeviceGammaRamp(desktopHdc, ref ramp))
+                _savedDesktopGammaRamp = originalDesktopRamp;
+        }
+
+        ReleaseDC(IntPtr.Zero, desktopHdc);
     }
 
     private static bool ApplyViaMagnification(double redScale, double greenScale, double blueScale)
@@ -92,12 +182,7 @@ public sealed class ColorTemperatureService : IDisposable
 
     private static RAMP BuildRamp(double redScale, double greenScale, double blueScale)
     {
-        var ramp = new RAMP
-        {
-            Red = new ushort[256],
-            Green = new ushort[256],
-            Blue = new ushort[256],
-        };
+        var ramp = CreateEmptyRamp();
 
         for (int i = 0; i < 256; i++)
         {
@@ -109,6 +194,13 @@ public sealed class ColorTemperatureService : IDisposable
 
         return ramp;
     }
+
+    private static RAMP CreateEmptyRamp() => new()
+    {
+        Red = new ushort[256],
+        Green = new ushort[256],
+        Blue = new ushort[256],
+    };
 
     /// <summary>
     /// Converts a color temperature to per-channel scale factors (0..1) using the

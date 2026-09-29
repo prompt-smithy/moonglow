@@ -82,7 +82,9 @@ Implemented in [`ColorTemperatureService`](../Services/ColorTemperatureService.c
 - Kelvin is converted to per-channel RGB scale factors using the **Tanner Helland** approximation, normalized so ~6500 K is neutral.
 - **Preferred path – Magnification full-screen color effect** (`MagSetFullscreenColorEffect`): a 5×5 color matrix applied to the whole desktop. Unlike gamma ramps it is **not** subject to the Windows gamma-range clamp, so it can reach very warm temperatures. Initialized once with `MagInitialize`.
 - **Fallback path – GPU gamma ramp** (`SetDeviceGammaRamp`): builds a 256-entry per-channel ramp and applies it per monitor (falling back to the whole-desktop DC if per-monitor DCs are unavailable).
+- **Secure desktop** – the Windows password prompt (and elevated consent prompts) are drawn on the Winlogon desktop, where the Magnification effect is not rendered. After resume into a locked session, `App` temporarily applies the hardware gamma ramp, which may reach the secure desktop but is driver-dependent; it captures and restores the prior ramp on unlock. This was verified inert on one local machine: `SetDeviceGammaRamp` returned `true` without a visible change. The lock-screen background remains on the interactive desktop and uses the Magnification effect.
 - `Reset()` restores a neutral (identity) transform on exit.
+- `App` re-applies on `SystemEvents.PowerModeChanged` (`Resume`), because resuming re-initializes the display hardware and can drop the applied effect. A locked resume additionally applies the LUT until `SessionUnlock`, when the prior ramp is restored and the Magnification effect is reapplied.
 
 ---
 
@@ -149,7 +151,7 @@ All P/Invoke lives in [`NativeMethods`](../Native/NativeMethods.cs), grouped by 
 | --- | --- | --- |
 | Monitor enumeration | `user32` | `EnumDisplayMonitors`, `GetMonitorInfo` |
 | DDC/CI brightness | `dxva2` | `GetNumberOfPhysicalMonitorsFromHMONITOR`, `GetPhysicalMonitorsFromHMONITOR`, `GetMonitorBrightness`, `SetMonitorBrightness`, `DestroyPhysicalMonitors` |
-| Gamma control | `gdi32` | `CreateDC`, `SetDeviceGammaRamp`, `DeleteDC` |
+| Gamma control | `gdi32` | `CreateDC`, `GetDeviceGammaRamp`, `SetDeviceGammaRamp`, `DeleteDC` |
 | Full-screen color effect | `Magnification` | `MagInitialize`, `MagSetFullscreenColorEffect`, `MagUninitialize` |
 | Title-bar theming / styling | `dwmapi`, `user32` | `DwmSetWindowAttribute`, `GetWindowLong`/`SetWindowLong`, `SetWindowPos` |
 | Internal-panel brightness | WMI (`System.Management`) | `WmiMonitorBrightness`, `WmiMonitorBrightnessMethods.WmiSetBrightness` |

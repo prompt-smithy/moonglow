@@ -4,7 +4,10 @@
         xmlns:local="clr-namespace:Amber.Views"
         Title="Amber" Height="680" Width="470"
         WindowStartupLocation="CenterScreen" Background="{DynamicResource ThemeWindowBackground}"
-        ResizeMode="CanMinimize">
+        ResizeMode="CanMinimize"
+        PreviewMouseDown="OnMouseActivity" PreviewMouseMove="OnMouseActivity"
+        PreviewMouseWheel="OnMouseActivity" PreviewKeyDown="OnKeyboardActivity"
+        PreviewTouchDown="OnTouchActivity">
     <Window.Resources>
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource ThemePrimaryText}" />
@@ -33,78 +36,50 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="22,8,22,20">
         <StackPanel>
-            <TextBlock Text="Adjust brightness and color temperature for your displays."
+            <TextBlock Text="Set the automatic color temperature range and daily transition times. Use the tray slider for manual adjustments."
                        Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,2,0,0" />
-
-            <TextBlock Text="Appearance" Style="{StaticResource SectionHeader}" />
-            <TextBlock Text="Themes follow Windows light/dark mode automatically."
-                       Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,0,0,6" TextWrapping="Wrap" />
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                    <TextBlock Text="Light mode theme" />
-                    <ComboBox Margin="0,4,0,0" ItemsSource="{Binding LightThemes}"
-                              SelectedItem="{Binding LightModeTheme, Mode=TwoWay}" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                    <TextBlock Text="Dark mode theme" />
-                    <ComboBox Margin="0,4,0,0" ItemsSource="{Binding DarkThemes}"
-                              SelectedItem="{Binding DarkModeTheme, Mode=TwoWay}" />
-                </StackPanel>
-            </Grid>
-
-            <TextBlock Text="Detected displays" Style="{StaticResource SectionHeader}" />
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <ItemsControl ItemsSource="{Binding Displays}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding}" Margin="0,3" TextWrapping="Wrap"
-                                           Foreground="{DynamicResource ThemeStrongText}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Button Content="Refresh displays" Command="{Binding RefreshCommand}"
-                            HorizontalAlignment="Left" Margin="0,10,0,0" Padding="12,5" />
-                </StackPanel>
-            </Border>
-
-            <TextBlock Text="Automatic color temperature" Style="{StaticResource SectionHeader}" />
-            <CheckBox Content="Gradually shift color temperature by time of day"
-                      IsChecked="{Binding AutoColorTemperature, Mode=TwoWay}" />
 
             <Grid Margin="0,16,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="Day (max) color temperature" />
-                <TextBlock Grid.Column="1" Text="{Binding DayColorTemp, StringFormat={}{0} K}" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="0" Text="Follow color temperature schedule" VerticalAlignment="Center" />
+                <ToggleButton Grid.Column="1" Style="{StaticResource SwitchToggle}"
+                              ToolTip="Change color temperature gradually using the daily schedule"
+                              IsChecked="{Binding AutoColorTemperature, Mode=TwoWay}" />
             </Grid>
-            <Slider Minimum="900" Maximum="6600" TickFrequency="100" IsSnapToTickEnabled="True" IsMoveToPointEnabled="True" Margin="0,4,0,0"
-                    Value="{Binding DayColorTemp, Mode=OneWay}" ValueChanged="DayColorSlider_ValueChanged" />
 
-            <Grid Margin="0,14,0,0">
+            <Grid Margin="0,16,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="Night (min) color temperature" />
-                <TextBlock Grid.Column="1" Text="{Binding NightColorTemp, StringFormat={}{0} K}" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="0" Text="COLOR TEMPERATURE RANGE" FontSize="11"
+                           FontWeight="SemiBold" Foreground="{DynamicResource ThemeSecondaryText}" />
+                <TextBlock Grid.Column="1" FontWeight="SemiBold">
+                    <Run Text="{Binding NightColorTemp, StringFormat={}{0} K}" />
+                    <Run Text=" - " />
+                    <Run Text="{Binding DayColorTemp, StringFormat={}{0} K}" />
+                </TextBlock>
             </Grid>
-            <Slider Minimum="900" Maximum="6600" TickFrequency="100" IsSnapToTickEnabled="True" IsMoveToPointEnabled="True" Margin="0,4,0,0"
-                    Value="{Binding NightColorTemp, Mode=OneWay}" ValueChanged="NightColorSlider_ValueChanged" />
-
-            <TextBlock Text="Clock format" Style="{StaticResource SectionHeader}" />
-            <StackPanel Orientation="Horizontal">
-                <RadioButton Content="24-hour" Margin="0,0,20,0"
-                             IsChecked="{Binding Use24HourFormat, Mode=TwoWay}" />
-                <RadioButton Content="12-hour (AM/PM)"
-                             IsChecked="{Binding Use12HourFormat, Mode=TwoWay}" />
-            </StackPanel>
+            <local:TemperatureRangeSlider NightValue="{Binding NightColorTemp, Mode=TwoWay}"
+                                           DayValue="{Binding DayColorTemp, Mode=TwoWay}" Margin="0,4,0,0" />
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" FontSize="11" Foreground="{DynamicResource ThemeSecondaryText}">
+                    <Run Text="WARM " />
+                    <Run Text="{Binding NightColorTemp, StringFormat={}{0} K}" />
+                </TextBlock>
+                <TextBlock Grid.Column="1" HorizontalAlignment="Right" FontSize="11"
+                           Foreground="{DynamicResource ThemeSecondaryText}">
+                    <Run Text="COOL " />
+                    <Run Text="{Binding DayColorTemp, StringFormat={}{0} K}" />
+                </TextBlock>
+            </Grid>
 
             <TextBlock Text="Morning transition (warm → cool)" Style="{StaticResource SectionHeader}" />
             <Grid>
@@ -115,12 +90,12 @@
                 <StackPanel Grid.Column="0" Margin="0,0,8,0">
                     <TextBlock Text="Start" />
                     <local:TimePicker Time="{Binding MorningStart, Mode=TwoWay}"
-                                      Is24Hour="{Binding Use24HourFormat}" Margin="0,4,0,0" />
+                                      Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Margin="8,0,0,0">
                     <TextBlock Text="End" />
                     <local:TimePicker Time="{Binding MorningEnd, Mode=TwoWay}"
-                                      Is24Hour="{Binding Use24HourFormat}" Margin="0,4,0,0" />
+                                      Margin="0,4,0,0" />
                 </StackPanel>
             </Grid>
             <TextBlock Text="The screen cools from the night value back up to the day value between these times."
@@ -135,12 +110,12 @@
                 <StackPanel Grid.Column="0" Margin="0,0,8,0">
                     <TextBlock Text="Start" />
                     <local:TimePicker Time="{Binding EveningStart, Mode=TwoWay}"
-                                      Is24Hour="{Binding Use24HourFormat}" Margin="0,4,0,0" />
+                                      Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Margin="8,0,0,0">
                     <TextBlock Text="End" />
                     <local:TimePicker Time="{Binding EveningEnd, Mode=TwoWay}"
-                                      Is24Hour="{Binding Use24HourFormat}" Margin="0,4,0,0" />
+                                      Margin="0,4,0,0" />
                 </StackPanel>
             </Grid>
             <TextBlock Text="The screen warms from the day value down to the night value between these times."
@@ -150,8 +125,52 @@
             <CheckBox Content="Run Amber when I sign in"
                       IsChecked="{Binding RunAtStartup, Mode=TwoWay}" />
 
-            <Button Content="Close" HorizontalAlignment="Right" Margin="0,24,0,0" Padding="18,6"
-                    Click="Close_Click" />
+            <Expander Margin="0,18,0,0" IsExpanded="False">
+                <Expander.Header>
+                    <TextBlock Text="Appearance" FontSize="13" FontWeight="SemiBold" />
+                </Expander.Header>
+                <StackPanel Margin="0,8,0,0">
+                    <TextBlock Text="Themes follow Windows light/dark mode automatically."
+                               Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,0,0,6" TextWrapping="Wrap" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="Light mode theme" />
+                            <ComboBox Margin="0,4,0,0" ItemsSource="{Binding LightThemes}"
+                                      SelectedItem="{Binding LightModeTheme, Mode=TwoWay}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                            <TextBlock Text="Dark mode theme" />
+                            <ComboBox Margin="0,4,0,0" ItemsSource="{Binding DarkThemes}"
+                                      SelectedItem="{Binding DarkModeTheme, Mode=TwoWay}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Expander>
+
+            <Expander Margin="0,8,0,0" IsExpanded="False">
+                <Expander.Header>
+                    <TextBlock Text="Detected displays" FontSize="13" FontWeight="SemiBold" />
+                </Expander.Header>
+                <Border Style="{StaticResource Card}" Margin="0,8,0,0">
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding Displays}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" Margin="0,3" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource ThemeStrongText}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="Refresh displays" Command="{Binding RefreshCommand}"
+                                HorizontalAlignment="Left" Margin="0,10,0,0" Padding="12,5" />
+                    </StackPanel>
+                </Border>
+            </Expander>
+
         </StackPanel>
     </ScrollViewer>
 </Window>

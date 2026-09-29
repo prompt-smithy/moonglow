@@ -86,6 +86,9 @@ internal static class NativeMethods
     }
 
     [DllImport("gdi32.dll")]
+    public static extern bool GetDeviceGammaRamp(IntPtr hDC, ref RAMP lpRamp);
+
+    [DllImport("gdi32.dll")]
     public static extern bool SetDeviceGammaRamp(IntPtr hDC, ref RAMP lpRamp);
 
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]

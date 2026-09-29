@@ -31,10 +31,16 @@
                     Value="{Binding ColorTemperature, Mode=OneWay}"
                     ValueChanged="ColorTempSlider_ValueChanged" />
 
-            <CheckBox Content="Automatic (time based)" Foreground="{DynamicResource ThemePrimaryText}" Margin="0,10,0,0"
-                      IsChecked="{Binding AutoColorTemperature, Mode=TwoWay}" />
+            <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                <TextBlock Text="Follow color temperature schedule" Foreground="{DynamicResource ThemePrimaryText}"
+                           VerticalAlignment="Center" DockPanel.Dock="Left" />
+                <ToggleButton Style="{StaticResource SwitchToggle}" Width="40" Height="22"
+                              DockPanel.Dock="Right"
+                              ToolTip="Change color temperature gradually using the daily schedule"
+                              IsChecked="{Binding AutoColorTemperature, Mode=TwoWay}" />
+            </DockPanel>
 
-            <Button Content="Settings" Margin="0,16,0,0" Padding="10,6" HorizontalAlignment="Stretch"
+            <Button Content="Schedule settings" Margin="0,16,0,0" Padding="10,6" HorizontalAlignment="Stretch"
                     Foreground="{DynamicResource ThemePrimaryText}" Background="{DynamicResource ThemeControlBackground}"
                     BorderBrush="{DynamicResource ThemeBorder}" BorderThickness="1"
                     Command="{Binding OpenSettingsCommand}" />

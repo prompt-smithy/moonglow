@@ -44,7 +44,9 @@ Amber runs in the system tray. Open the tray icon for quick controls or use **Se
 
 ## Limitations
 
-Amber cannot apply color-temperature settings to the Windows lock screen. If this is inconvenient, configure Windows Night Light separately to provide a color-temperature effect on the lock screen. You can still use Amber for brightness control and quick color-temperature adjustments on the regular desktop alongside Windows Night Light.
+Amber attempts to tint the Windows sign-in screen after waking from sleep by temporarily applying a hardware gamma ramp while the session is locked. Windows draws the password prompt and elevated consent prompts on a separate *secure desktop*, where Amber's Magnification colour effect is not rendered. Gamma-ramp support varies by display driver; on at least one machine `SetDeviceGammaRamp` reported success without a visible change, so this sign-in-screen tint is not guaranteed. Amber saves the existing ramp before the attempt and restores it after sign-in.
+
+The lock screen is drawn on your own desktop and continues to use Amber's regular colour effect. If the sign-in screen is not tinted on your display, configure Windows Night Light, which uses a different OS-level path.
 
 ## Build from source
 

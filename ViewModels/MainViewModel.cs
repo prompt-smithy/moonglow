@@ -161,27 +161,6 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    public bool Use24HourFormat
-    {
-        get => Settings.Use24HourFormat;
-        set
-        {
-            if (Settings.Use24HourFormat == value)
-                return;
-
-            Settings.Use24HourFormat = value;
-            _settingsService.Save();
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(Use12HourFormat));
-        }
-    }
-
-    public bool Use12HourFormat
-    {
-        get => !Settings.Use24HourFormat;
-        set => Use24HourFormat = !value;
-    }
-
     public string MorningStart
     {
         get => Settings.MorningStart;

@@ -1,39 +1,39 @@
-using System;
 using System.Windows;
-using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Threading;
 using Amber.Infrastructure;
-using Amber.ViewModels;
 
 namespace Amber.Views;
 
 public partial class MainWindow : Window
 {
+    private readonly DispatcherTimer _inactivityTimer;
+
     public MainWindow()
     {
         InitializeComponent();
         Icon = IconFactory.CreateImageSource();
+
+        _inactivityTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        _inactivityTimer.Tick += (_, _) => Close();
+        Loaded += (_, _) => ResetInactivityTimer();
+        Closed += (_, _) => _inactivityTimer.Stop();
     }
 
-    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+    private void OnMouseActivity(object sender, MouseEventArgs e) => ResetInactivityTimer();
 
-    // Forward only genuine user changes; ignore binding/layout echoes so saved values aren't clobbered.
-    private void DayColorSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    private void OnMouseActivity(object sender, MouseButtonEventArgs e) => ResetInactivityTimer();
+
+    private void OnMouseActivity(object sender, MouseWheelEventArgs e) => ResetInactivityTimer();
+
+    private void OnKeyboardActivity(object sender, KeyEventArgs e) => ResetInactivityTimer();
+
+    private void OnTouchActivity(object sender, TouchEventArgs e) => ResetInactivityTimer();
+
+    private void ResetInactivityTimer()
     {
-        if (sender is not Slider slider || !slider.IsLoaded)
-            return;
-
-        int value = (int)Math.Round(e.NewValue);
-        if (DataContext is MainViewModel vm && value != vm.DayColorTemp)
-            vm.DayColorTemp = value;
+        _inactivityTimer.Stop();
+        _inactivityTimer.Start();
     }
 
-    private void NightColorSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (sender is not Slider slider || !slider.IsLoaded)
-            return;
-
-        int value = (int)Math.Round(e.NewValue);
-        if (DataContext is MainViewModel vm && value != vm.NightColorTemp)
-            vm.NightColorTemp = value;
-    }
 }

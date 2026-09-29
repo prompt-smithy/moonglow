@@ -1,4 +1,5 @@
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Amber.Infrastructure;
@@ -23,6 +24,9 @@ public partial class App : Application
     private ThemeService _theme = null!;
     private MainViewModel _viewModel = null!;
     private MainWindow? _settingsWindow;
+    private bool _sessionLocked;
+    private DateTime _lastResumeUtc = DateTime.MinValue;
+    private int _resumeSequence;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -69,12 +73,84 @@ public partial class App : Application
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         SystemEvents.SessionSwitch += OnSessionSwitch;
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
     }
 
-    private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
+    private async void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
     {
-        if (e.Reason == SessionSwitchReason.SessionUnlock)
-            Dispatcher.Invoke(() => _viewModel.ReapplyColorTemperature());
+        if (e.Reason == SessionSwitchReason.SessionLock)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                _sessionLocked = true;
+                if (DateTime.UtcNow - _lastResumeUtc <= TimeSpan.FromSeconds(60))
+                    ApplyLockedSessionTemperature();
+            });
+            return;
+        }
+
+        if (e.Reason != SessionSwitchReason.SessionUnlock)
+            return;
+
+        await Dispatcher.InvokeAsync(() =>
+        {
+            _sessionLocked = false;
+            _lastResumeUtc = DateTime.MinValue;
+            Interlocked.Increment(ref _resumeSequence);
+            _color.RestoreLockedSessionGamma();
+        });
+
+        // Windows can reset display color settings after sign-in, so retry while the desktop settles.
+        for (int attempt = 0; attempt < 5; attempt++)
+        {
+            await Task.Delay(1000);
+            if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+                return;
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                _color.RestoreLockedSessionGamma();
+                _viewModel.ReapplyColorTemperature();
+            });
+        }
+    }
+
+    private async void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
+    {
+        // Resuming re-initializes the display hardware, which drops any applied ramp.
+        if (e.Mode != PowerModes.Resume)
+            return;
+
+        int resumeSequence = Interlocked.Increment(ref _resumeSequence);
+        Dispatcher.Invoke(() =>
+        {
+            _lastResumeUtc = DateTime.UtcNow;
+            _viewModel.ReapplyColorTemperature();
+            if (_sessionLocked)
+                ApplyLockedSessionTemperature();
+        });
+
+        // Windows may restore its display state after the resume notification; retry only while locked.
+        for (int attempt = 0; attempt < 5; attempt++)
+        {
+            await Task.Delay(1000);
+            if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+                return;
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (resumeSequence == Volatile.Read(ref _resumeSequence) &&
+                    _sessionLocked &&
+                    DateTime.UtcNow - _lastResumeUtc <= TimeSpan.FromSeconds(10))
+                    ApplyLockedSessionTemperature();
+            });
+        }
+    }
+
+    private void ApplyLockedSessionTemperature()
+    {
+        _viewModel.ReapplyColorTemperature();
+        _color.ApplyForLockedSession(_viewModel.ColorTemperature);
     }
 
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
@@ -136,6 +212,7 @@ public partial class App : Application
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         SystemEvents.SessionSwitch -= OnSessionSwitch;
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         _schedule?.Stop();
         _color?.Reset();
         _color?.Dispose();

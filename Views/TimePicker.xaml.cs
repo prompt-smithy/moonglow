@@ -6,7 +6,7 @@ using System.Windows.Input;
 
 namespace Amber.Views;
 
-/// <summary>Hour / minute / AM-PM selectors for a "HH:mm" time; scroll a box to change its value.</summary>
+/// <summary>12-hour / minute / AM-PM selectors for a canonical "HH:mm" time.</summary>
 public partial class TimePicker : UserControl
 {
     private bool _syncing;
@@ -15,20 +15,10 @@ public partial class TimePicker : UserControl
         nameof(Time), typeof(string), typeof(TimePicker),
         new FrameworkPropertyMetadata("00:00", FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnTimeChanged));
 
-    public static readonly DependencyProperty Is24HourProperty = DependencyProperty.Register(
-        nameof(Is24Hour), typeof(bool), typeof(TimePicker),
-        new FrameworkPropertyMetadata(false, OnIs24HourChanged));
-
     public string Time
     {
         get => (string)GetValue(TimeProperty);
         set => SetValue(TimeProperty, value);
-    }
-
-    public bool Is24Hour
-    {
-        get => (bool)GetValue(Is24HourProperty);
-        set => SetValue(Is24HourProperty, value);
     }
 
     public TimePicker()
@@ -47,29 +37,13 @@ public partial class TimePicker : UserControl
     private static void OnTimeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TimePicker)d).SyncFromTime();
 
-    private static void OnIs24HourChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        var picker = (TimePicker)d;
-        picker.RebuildHours();
-        picker.SyncFromTime();
-    }
-
     private void RebuildHours()
     {
         _syncing = true;
         HourCombo.Items.Clear();
-        if (Is24Hour)
-        {
-            for (int h = 0; h < 24; h++)
-                HourCombo.Items.Add(h.ToString("00", CultureInfo.InvariantCulture));
-            AmPmCombo.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            for (int h = 1; h <= 12; h++)
-                HourCombo.Items.Add(h.ToString(CultureInfo.InvariantCulture));
-            AmPmCombo.Visibility = Visibility.Visible;
-        }
+        for (int h = 1; h <= 12; h++)
+            HourCombo.Items.Add(h.ToString(CultureInfo.InvariantCulture));
+        AmPmCombo.Visibility = Visibility.Visible;
         _syncing = false;
     }
 
@@ -83,18 +57,11 @@ public partial class TimePicker : UserControl
 
         _syncing = true;
         MinuteCombo.SelectedItem = ts.Minutes.ToString("00", CultureInfo.InvariantCulture);
-        if (Is24Hour)
-        {
-            HourCombo.SelectedItem = ts.Hours.ToString("00", CultureInfo.InvariantCulture);
-        }
-        else
-        {
-            int hour12 = ts.Hours % 12;
-            if (hour12 == 0)
-                hour12 = 12;
-            HourCombo.SelectedItem = hour12.ToString(CultureInfo.InvariantCulture);
-            AmPmCombo.SelectedItem = ts.Hours >= 12 ? "PM" : "AM";
-        }
+        int hour12 = ts.Hours % 12;
+        if (hour12 == 0)
+            hour12 = 12;
+        HourCombo.SelectedItem = hour12.ToString(CultureInfo.InvariantCulture);
+        AmPmCombo.SelectedItem = ts.Hours >= 12 ? "PM" : "AM";
         _syncing = false;
     }
 
@@ -112,17 +79,9 @@ public partial class TimePicker : UserControl
             !int.TryParse(minuteText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int minute))
             return;
 
-        int hour24;
-        if (Is24Hour)
-        {
-            hour24 = hour;
-        }
-        else
-        {
-            hour24 = hour % 12;
-            if ((AmPmCombo.SelectedItem as string) == "PM")
-                hour24 += 12;
-        }
+        int hour24 = hour % 12;
+        if ((AmPmCombo.SelectedItem as string) == "PM")
+            hour24 += 12;
 
         Time = $"{hour24:00}:{minute:00}";
     }

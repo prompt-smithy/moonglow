@@ -27,7 +27,6 @@ public sealed class AppSettings
     public int ManualBrightness { get; set; } = 80;
     public int ManualColorTempK { get; set; } = 6500;
     public bool RunAtStartup { get; set; }
-    public bool Use24HourFormat { get; set; } = true;
     public string LightModeTheme { get; set; } = "Light Amber";
     public string DarkModeTheme { get; set; } = "Dark Amber";
 
