@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -16,6 +19,8 @@ public partial class App : Application
 {
     private static Mutex? _instanceMutex;
     private TaskbarIcon? _tray;
+    private EventWaitHandle? _shutdownEvent;
+    private RegisteredWaitHandle? _shutdownWait;
     private MonitorService _monitors = null!;
     private BrightnessService _brightness = null!;
     private ColorTemperatureService _color = null!;
@@ -32,6 +37,13 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        if (Array.Exists(e.Args, arg => string.Equals(arg, "--shutdown", StringComparison.OrdinalIgnoreCase)))
+        {
+            RequestRunningInstanceShutdown();
+            Shutdown();
+            return;
+        }
+
         // Only allow one instance per user session (RunAtStartup + a manual launch would otherwise duplicate).
         _instanceMutex = new Mutex(true, @"Local\Amber.SingleInstance", out bool createdNew);
         if (!createdNew)
@@ -39,6 +51,14 @@ public partial class App : Application
             Shutdown();
             return;
         }
+
+        _shutdownEvent = new EventWaitHandle(false, EventResetMode.AutoReset, GetShutdownEventName());
+        _shutdownWait = ThreadPool.RegisterWaitForSingleObject(
+            _shutdownEvent,
+            (_, _) => Dispatcher.BeginInvoke(new Action(Shutdown)),
+            null,
+            Timeout.Infinite,
+            executeOnlyOnce: true);
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
@@ -210,7 +230,33 @@ public partial class App : Application
         _color?.Dispose();
         _monitors?.Dispose();
         _tray?.Dispose();
+        _shutdownWait?.Unregister(null);
+        _shutdownEvent?.Dispose();
         _instanceMutex?.Dispose();
         base.OnExit(e);
+    }
+
+    private static void RequestRunningInstanceShutdown()
+    {
+        try
+        {
+            using EventWaitHandle shutdownEvent = EventWaitHandle.OpenExisting(GetShutdownEventName());
+            shutdownEvent.Set();
+        }
+        catch (WaitHandleCannotBeOpenedException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private static string GetShutdownEventName()
+    {
+        string processPath = Process.GetCurrentProcess().MainModule?.FileName
+            ?? AppDomain.CurrentDomain.BaseDirectory;
+        using SHA256 sha256 = SHA256.Create();
+        byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(processPath.ToUpperInvariant()));
+        return @"Local\Amber.Shutdown." + BitConverter.ToString(hash).Replace("-", string.Empty);
     }
 }
