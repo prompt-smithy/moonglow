@@ -108,9 +108,9 @@ switched off.
   time.
 - Day and night targets are edited as one two-handle bar, never as two independent values:
   the range keeps `night <= day` and snaps to the 100 K step.
-- The popup uses neutral system-grey controls and text, regardless of the selected appearance
-  palette. The color-temperature slider keeps its warm-to-cool gradient; its other controls remain
-  neutral. The settings window uses the selected light and dark palettes.
+- The popup is a native AppKit menu with system styling and no app palette applied. Its brightness
+  and temperature sliders use standard system controls; the Settings window continues to use the
+  selected light and dark palettes.
 - Displays and Appearance are always visible in the settings window; schedule controls are followed
   by Startup, Displays, and Appearance.
 - A display capability is never reported unless the backend can actually apply it.

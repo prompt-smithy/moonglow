@@ -28,14 +28,14 @@ Verified under Xcode 27.0:
 | Ten palettes, ordering, control accents | `Services/ThemeCatalog.swift` | `Services/ThemeCatalog.cs` |
 | Service protocols | `Services/ServiceProtocols.swift` | `Services/DisplayServices.cs` |
 | View model: clamping, persistence, capability gates, callbacks | `ViewModels/MainViewModel.swift` | `ViewModels/MainViewModel.cs` |
-| App shell: accessory policy, status item, popover, hide-on-close | `Sources/Amber/Shell/` | `App.axaml.cs`, `QuickControlsWindow.axaml.cs` |
+| App shell: accessory policy, native status menu, settings-window lifecycle | `Sources/Amber/Shell/` | `App.axaml.cs`, `QuickControlsWindow.axaml.cs` |
 | Theme application from system appearance | `Sources/Amber/Theme/ThemeService.swift` | `Services/ThemeService.cs` |
 | Hex-to-colour conversion | `Sources/Amber/Theme/Color+Hex.swift` | Avalonia brushes |
 | Twelve-hour clock conversion and formatting | `Sources/AmberKit/Models/TwelveHourTime.swift` | `ClockIdentifier` mapping in `MainViewModel.cs` |
 | Colour temperature window as one value | `Sources/AmberKit/Models/TemperatureRange.swift` | day/night target clamping in `AppSettings.cs` |
 | Settings window, palette-drawn drop-down pickers, two-handle range bar | `Sources/Amber/Views/SettingsView.swift`, `Sources/Amber/Views/TimeOfDayPicker.swift`, `Sources/Amber/Views/ThemedDropDown.swift`, `Sources/Amber/Views/TemperatureRangeSlider.swift` | `Views/MainWindow.axaml` |
 | Native backends: display enumeration, gamma colour temperature, DDC/CI brightness | `Sources/AmberKit/Services/NativeBridge.swift` | `MacDisplayService.cs`, `MacColorTemperatureService.cs`, `MacDdcBrightnessService.cs`, `MacNative.cs` |
-| Menu-bar popup: brightness, colour temperature, automatic toggle | `Sources/Amber/Views/QuickControlsView.swift` | `Views/QuickControlsWindow.axaml` |
+| Native menu-bar controls: brightness, colour temperature, automatic toggle | `Sources/Amber/Shell/AppDelegate.swift`, `Sources/Amber/Shell/MenuSliderRow.swift` | `Views/QuickControlsWindow.axaml` |
 | Unit tests | `Tests/AmberKitTests/` | `Amber MacOS.Tests/` |
 
 **Deliberately not ported:** legacy settings import (`DisplayController/settings.json`) and
@@ -73,22 +73,20 @@ The service reports failure rather than hiding it: `SMAppService.mainApp` regist
 bundle, so under `swift run` — or any binary launched out of `.build` — there is no bundle to
 register and every call fails. Test through `artifacts/Night Mode Controller.app`, not the bare binary.
 
-### Palette-drawn popup controls
+### Native menu-bar controls
 
-The popup's Settings and Quit buttons use `Views/ThemedButtonStyle.swift`, and its colour
-temperature slider is `Views/TemperatureSlider.swift` on the warm-to-cool ramp in
-`Views/TemperatureGradient.swift` (shared with the settings window's two-handle bar, so the two
-cannot drift). Both exist because the equivalent system controls cannot be recoloured: SwiftUI's
-built-in button styles take their surface from the system, and `Slider` draws a flat `.tint`
-colour with no gradient track. `Slider` additionally draws a row of tick marks along the track of
-any stepped slider, which AppKit sliders never do — the 100 K step is therefore applied in the
-binding via `TemperatureRange.snap`, not through `step:`.
+The popup is an AppKit `NSMenu`, following the native menu presentation used by Display Source
+Switch. Its controls use system appearance and are independent of the selected palette; only the
+Settings window is themed. Brightness and colour temperature use standard AppKit sliders embedded
+in menu rows. Software brightness and colour temperature share the same gamma ramp, so adjusting
+one does not overwrite the other.
 
 ## Not started
 
-### 1. SwiftUI views
+### 1. Settings view
 
-Both windows are ported: `SettingsView` and `QuickControlsView`.
+`SettingsView` is SwiftUI and retains the app's selected palette. The popup is a native AppKit menu
+and deliberately does not apply that palette.
 
 **Clock format.** The .NET `TimePicker` took a `ClockIdentifier` (`24HourClock` /
 `12HourClock`). AppKit has no equivalent — 24-hour display is a locale property — so the
@@ -149,27 +147,8 @@ and persistence stays `HH:mm`. `TwelveHourTimeTests` round-trips all 1440 minute
   window's own events: a drop-down opens a window of its own, so counting only the settings window's
   events would let it vanish mid-choice. Verified by opening the sheet and polling: still visible at
   9 s, hidden by 12 s.
-- The popup is a borderless, non-activating `NSPanel` (`Shell/MenuBarPanel.swift`) rather than an
-  `NSPopover`. A popover always draws an anchor arrow and AppKit exposes no way to suppress it —
-  `NSPopover.h` has no arrow API — so the popup uses the panel style Apple's own menu-bar popups use
-  (Control Center, the input-source list): no arrow, rounded corners, a translucent material, and it
-  sits almost flush under the status item — a 2 pt gap, because a visible gap reads as hanging lower
-  than the system's own popups — with the right edges aligned and clamped to the screen. The panel must be
-  sized *to* its content: a window created with a `.zero` content rect keeps that size, and
-  assigning `contentView` resizes the view *down* to match it — so without an explicit
-  `setContentSize(contentView.fittingSize)` the popup is a zero-sized window that never appears.
-- The panel draws no chrome; `QuickControlsView` supplies the rounded surface from AppKit's real
-  `.popover` material (`Views/VisualEffectBackground.swift`), not from a SwiftUI `Material` — the
-  latter is noticeably flatter than Apple's own menu-bar popups. It follows the system light/dark
-  appearance. Palette colours are used for text only; the settings window keeps its opaque palette
-  surfaces, as a real window should.
-- Dismissal has two routes: the status item toggles the popup, and a global mouse-down monitor
-  catches clicks that land in another application or on the desktop, which are never delivered to
-  Night Mode Controller at all. The monitor exists only while the popup is shown, and is removed on quit.
-- Do **not** dismiss this popup from `NSWindow.didResignKeyNotification`, and do not set
-  `hidesOnDeactivate` on the panel. Both were tried and both were wrong: a real click on the status
-  item hands key straight back, so the observer closed the panel in the same frame — a flicker that
-  writes nothing to any log and looks exactly like "the popup never opened".
+- The popup is a standard `NSMenu` attached to the status item, so macOS owns its appearance and
+  dismissal. It is not passed `ThemeService`; selecting a palette changes Settings only.
 - No single-instance enforcement, matching the original. Login-item registration is now present;
   see **Beyond the port**.
 
