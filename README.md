@@ -8,7 +8,7 @@ for implementation status and platform details.
 
 ## Download
 
-[Download the macOS installer (Apple Silicon)](https://example.com/Night-Mode-Controller-macOS-arm64.dmg)
+[Download the macOS installer (Apple Silicon)](https://github.com/prompt-smithy/Night_Mode_Controller-MacOS/releases/download/v2/Night-Mode-Controller-macOS-arm64.dmg.zip)
 
 Requires macOS 14 or later on an Apple Silicon Mac. This test build is ad-hoc signed and not
 notarized; on first launch, Control-click the app and choose **Open** if macOS blocks it.
@@ -23,7 +23,6 @@ notarized; on first launch, Control-click the app and choose **Open** if macOS b
 | `Tests/AmberKitTests/` | Swift Testing suite for everything in `AmberKit`. |
 | `Packaging/` | `Info.plist` and `build-app.sh` (app bundle, DMG, ZIP). |
 | `Resources/` | App icon source (`Amber.png`) used to generate the app bundle icon. |
-| `legacy-csharp/` | The original .NET 10 / Avalonia implementation, kept as a read-only reference for the port. |
 
 ## Requirements
 
