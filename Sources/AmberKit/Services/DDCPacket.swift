@@ -39,6 +39,18 @@ public enum DDCPacket {
         return packet
     }
 
+    /// Builds the IOKit Intel transaction payload, including the DDC data address.
+    public static func buildIntelWritePayload(percent: Int) -> [UInt8] {
+        [UInt8(dataAddress)] + buildWritePacket(percent: percent)
+    }
+
+    /// Intel IOKit reads include the DDC data address in the outgoing I2C payload.
+    public static var intelProbePayload: [UInt8] {
+        var payload: [UInt8] = [UInt8(dataAddress), 0x82, 0x01, 0x10, 0]
+        payload[4] = checksum(of: Array(payload.dropFirst()))
+        return payload
+    }
+
     /// XOR checksum over the seed, the data address, and the first five payload bytes.
     public static func checksum(of packet: [UInt8]) -> UInt8 {
         var value = checksumSeed ^ UInt8(dataAddress)

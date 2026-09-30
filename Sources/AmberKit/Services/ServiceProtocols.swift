@@ -14,6 +14,40 @@ public protocol DisplayService: AnyObject {
 public protocol BrightnessService: AnyObject {
     var isSupported: Bool { get }
     func setBrightness(percent: Int)
+    func dispose()
+}
+
+public extension BrightnessService {
+    func dispose() {}
+}
+
+/// Uses hardware brightness when its DDC/CI probe succeeds, otherwise software gamma dimming.
+public final class BrightnessFallbackService: BrightnessService {
+
+    private let hardware: BrightnessService
+    private let software: BrightnessService
+
+    public init(hardware: BrightnessService, software: BrightnessService) {
+        self.hardware = hardware
+        self.software = software
+    }
+
+    public var isSupported: Bool {
+        hardware.isSupported || software.isSupported
+    }
+
+    public func setBrightness(percent: Int) {
+        if hardware.isSupported {
+            hardware.setBrightness(percent: percent)
+        } else if software.isSupported {
+            software.setBrightness(percent: percent)
+        }
+    }
+
+    public func dispose() {
+        hardware.dispose()
+        software.dispose()
+    }
 }
 
 /// Gamma-table colour temperature.

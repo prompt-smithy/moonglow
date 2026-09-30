@@ -3,9 +3,8 @@ set -euo pipefail
 
 # Builds artifacts/Night Mode Controller.app plus a drag-to-Applications DMG and a ZIP.
 #
-# Replaces legacy-csharp/Amber MacOS/Packaging/build-macos.sh. The .NET script published a
-# self-contained osx-arm64 apphost; SwiftPM produces a plain arm64 binary that this script
-# wraps in the bundle.
+# SwiftPM produces separate architecture binaries; this script combines them into one universal
+# app bundle for Intel and Apple Silicon Macs.
 #
 # Distribution signing is not performed here. Ad-hoc signing makes the bundle locally
 # runnable; a real release needs:
@@ -15,15 +14,21 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd "$script_dir/.." && pwd)"
-artifacts_dir="$repo_dir/artifacts"
-release_dir="$repo_dir/release"
+artifacts_dir="${AMBER_ARTIFACTS_DIR:-$repo_dir/artifacts}"
+release_dir="${AMBER_RELEASE_DIR:-$repo_dir/release}"
+build_dir="${AMBER_BUILD_DIR:-$repo_dir/.build/universal}"
 app_dir="$artifacts_dir/Night Mode Controller.app"
 dmg_staging_dir="$artifacts_dir/dmg"
 iconset_dir="$artifacts_dir/Night Mode Controller.iconset"
-zip_path="$release_dir/Night-Mode-Controller-macOS-arm64.zip"
-dmg_path="$release_dir/Night-Mode-Controller-macOS-arm64.dmg"
+zip_path="$release_dir/Night-Mode-Controller-macOS-universal.zip"
+dmg_path="$release_dir/Night-Mode-Controller-macOS-universal.dmg"
 icon_source="$repo_dir/Resources/Amber.png"
 configuration="${AMBER_CONFIGURATION:-release}"
+deployment_target="12.0"
+arm64_triple="arm64-apple-macosx$deployment_target"
+x86_64_triple="x86_64-apple-macosx$deployment_target"
+arm64_scratch_path="$build_dir/arm64"
+x86_64_scratch_path="$build_dir/x86_64"
 
 # Fail early and explain, rather than emitting a half-built bundle. A broken active developer
 # directory (mismatched SwiftPM, compiler, or SDK) makes every SwiftPM command fail, including
@@ -47,8 +52,10 @@ MESSAGE
 fi
 
 cd "$repo_dir"
-swift build --configuration "$configuration"
-bin_dir="$(swift build --configuration "$configuration" --show-bin-path)"
+swift build --scratch-path "$arm64_scratch_path" --configuration "$configuration" --triple "$arm64_triple"
+arm64_bin_dir="$(swift build --scratch-path "$arm64_scratch_path" --configuration "$configuration" --triple "$arm64_triple" --show-bin-path)"
+swift build --scratch-path "$x86_64_scratch_path" --configuration "$configuration" --triple "$x86_64_triple"
+x86_64_bin_dir="$(swift build --scratch-path "$x86_64_scratch_path" --configuration "$configuration" --triple "$x86_64_triple" --show-bin-path)"
 
 # Remove the previous generated names as well as this build's outputs.
 rm -rf \
@@ -64,7 +71,10 @@ rm -f \
     "$zip_path" \
     "$dmg_path"
 
-cp "$bin_dir/Amber" "$app_dir/Contents/MacOS/Amber"
+lipo -create \
+    "$arm64_bin_dir/Amber" \
+    "$x86_64_bin_dir/Amber" \
+    -output "$app_dir/Contents/MacOS/Amber"
 chmod +x "$app_dir/Contents/MacOS/Amber"
 cp "$script_dir/Info.plist" "$app_dir/Contents/Info.plist"
 
@@ -80,8 +90,8 @@ sips -z 512 512 "$icon_source" --out "$iconset_dir/icon_512x512.png" >/dev/null
 cp "$icon_source" "$iconset_dir/icon_512x512@2x.png"
 iconutil -c icns "$iconset_dir" -o "$app_dir/Contents/Resources/NightModeController.icns"
 
-# Ad-hoc signing makes the binary valid on Apple Silicon. It does not replace Developer ID
-# signing or notarization.
+# Ad-hoc signing is for local testing only. It does not replace Developer ID signing or
+# notarization.
 codesign --force --deep --sign - "$app_dir"
 codesign --verify --deep --strict "$app_dir"
 

@@ -79,6 +79,21 @@ struct KelvinConversionTests {
         }
     }
 
+    @Test("Brightness scale dims all channels without changing ramp shape")
+    func brightnessScaleDimsRamp() {
+        let ramp = KelvinConversion.buildRamp(
+            capacity: 3,
+            redScale: 1,
+            greenScale: 0.8,
+            blueScale: 0.6,
+            brightnessScale: 0.5
+        )
+
+        #expect(ramp.red == [0, 0.25, 0.5])
+        #expect(ramp.green == [0, 0.2, 0.4])
+        #expect(ramp.blue == [0, 0.15, 0.3])
+    }
+
     @Test("A single-entry ramp is fully saturated rather than dividing by zero")
     func singleEntryRamp() {
         let ramp = KelvinConversion.buildRamp(capacity: 1, redScale: 1.0, greenScale: 1.0, blueScale: 1.0)

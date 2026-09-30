@@ -116,7 +116,9 @@ public final class CoreGraphicsDisplayService: DisplayService {
                 name: isPrimary ? "Built-in or primary display" : "External display \(index + 1)",
                 identifier: String(id),
                 isPrimary: isPrimary,
-                supportsBrightness: ddcBrightnessSupported && isPrimary && !isBuiltin,
+                supportsBrightness: ddcBrightnessSupported
+                    ? isPrimary && !isBuiltin
+                    : supportsGamma,
                 supportsColorTemperature: supportsGamma
             )
         }
@@ -135,6 +137,8 @@ public final class CoreGraphicsColorTemperatureService: ColorTemperatureService 
     /// CoreGraphics is serialized behind a lock as the .NET original was: two overlapping writes can
     /// otherwise interleave the ramps of two different temperatures.
     private let lock = NSLock()
+    private var currentKelvin = 6500
+    private var softwareBrightness = 100
 
     public init(displayService: DisplayService) {
         self.displayService = displayService
@@ -144,7 +148,7 @@ public final class CoreGraphicsColorTemperatureService: ColorTemperatureService 
     /// through `DisplayInfo.supportsColorTemperature`.
     public var isSupported: Bool { true }
 
-    /// Applies `kelvin` to every display that accepts gamma tables.
+    /// Applies `kelvin` and the current software brightness to every display that accepts gamma tables.
     ///
     /// Returns whether at least one display took the ramp, so a caller can tell "applied" from "no
     /// capable display attached".
@@ -153,7 +157,27 @@ public final class CoreGraphicsColorTemperatureService: ColorTemperatureService 
         lock.lock()
         defer { lock.unlock() }
 
-        let scale = KelvinConversion.rgbScale(kelvin: kelvin)
+        currentKelvin = kelvin
+        return applyCurrentRamp()
+    }
+
+    /// Whether at least one active display can use a gamma ramp for software brightness.
+    public var supportsSoftwareBrightness: Bool {
+        displayService.displays.contains { $0.supportsColorTemperature }
+    }
+
+    /// Applies software dimming through the same gamma ramp as colour temperature.
+    public func setSoftwareBrightness(percent: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        softwareBrightness = AppSettings.clampBrightness(percent)
+        _ = applyCurrentRamp()
+    }
+
+    private func applyCurrentRamp() -> Bool {
+        let scale = KelvinConversion.rgbScale(kelvin: currentKelvin)
+        let brightnessScale = Double(softwareBrightness) / 100.0
         var applied = false
 
         for display in displayService.displays where display.supportsColorTemperature {
@@ -164,7 +188,8 @@ public final class CoreGraphicsColorTemperatureService: ColorTemperatureService 
                 capacity: capacity,
                 redScale: scale.red,
                 greenScale: scale.green,
-                blueScale: scale.blue
+                blueScale: scale.blue,
+                brightnessScale: brightnessScale
             )
 
             if setTransferTable(for: display.nativeId, ramp: ramp, capacity: capacity) {
@@ -179,6 +204,8 @@ public final class CoreGraphicsColorTemperatureService: ColorTemperatureService 
     ///
     /// Called on the way out, so quitting Night Mode Controller never leaves a display tinted.
     public func reset() {
+        lock.lock()
+        defer { lock.unlock() }
         CGDisplayRestoreColorSyncSettings()
     }
 
@@ -202,6 +229,22 @@ public final class CoreGraphicsColorTemperatureService: ColorTemperatureService 
         }
 
         return error == .success
+    }
+}
+
+/// Software brightness fallback backed by the shared temperature gamma ramps.
+public final class CoreGraphicsBrightnessService: BrightnessService {
+
+    private let colorService: CoreGraphicsColorTemperatureService
+
+    public init(colorService: CoreGraphicsColorTemperatureService) {
+        self.colorService = colorService
+    }
+
+    public var isSupported: Bool { colorService.supportsSoftwareBrightness }
+
+    public func setBrightness(percent: Int) {
+        colorService.setSoftwareBrightness(percent: percent)
     }
 }
 

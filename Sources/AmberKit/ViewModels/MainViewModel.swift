@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Combine
 
 /// UI state for both the quick-controls popup and the settings window.
 ///
@@ -11,11 +11,9 @@ import Observation
 /// - Colour temperature: `900...6600` K, in 100 K steps.
 ///
 /// ## Observation
-/// `@Observable` replaces `ObservableObject` + `CommunityToolkit.Mvvm`. Views read these
-/// properties directly; mutations mark only the touched property as changed.
+/// Published properties keep the popup and settings window in sync on macOS 13 and later.
 @MainActor
-@Observable
-public final class MainViewModel {
+public final class MainViewModel: ObservableObject {
 
     // MARK: - Dependencies
 
@@ -30,14 +28,14 @@ public final class MainViewModel {
     // MARK: - State
 
     /// Normalized settings. Mutate through the properties below so writes are persisted.
-    public private(set) var settings: AppSettings
+    @Published public private(set) var settings: AppSettings
 
     /// Active displays, refreshed on demand.
-    public private(set) var displays: [DisplayInfo] = []
+    @Published public private(set) var displays: [DisplayInfo] = []
 
     /// The temperature currently on screen. In automatic mode this tracks the schedule
     /// rather than the saved manual value, which is why it is stored separately.
-    private var displayedTemperature: Int
+    @Published private var displayedTemperature: Int
 
     // MARK: - Callbacks
 
@@ -95,7 +93,7 @@ public final class MainViewModel {
 
     public var brightnessStatus: String {
         hasBrightnessSupport
-            ? "Hardware brightness is available through DDC/CI."
+            ? "Brightness control is available."
             : "Brightness control is unavailable for the detected display connection."
     }
 
@@ -255,7 +253,7 @@ public final class MainViewModel {
 
     /// True when macOS has accepted the registration but is holding it until the user approves it
     /// in System Settings. The toggle reads as on, yet Night Mode Controller will not start until then.
-    public private(set) var loginItemRequiresApproval = false
+    @Published public private(set) var loginItemRequiresApproval = false
 
     /// Describes the login-item state for the settings window.
     ///

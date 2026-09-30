@@ -44,4 +44,14 @@ struct DDCPacketTests {
         #expect(DDCPacket.probeRequest.count == 4)
         #expect(DDCPacket.probeRequest[2] == 0x10)
     }
+
+    @Test("Intel I2C payloads include the data address and valid checksum")
+    func intelPayloadsIncludeAddressAndChecksum() {
+        let write = DDCPacket.buildIntelWritePayload(percent: 50)
+        let probe = DDCPacket.intelProbePayload
+
+        #expect(write.first == UInt8(DDCPacket.dataAddress))
+        #expect(Array(write.dropFirst()) == DDCPacket.buildWritePacket(percent: 50))
+        #expect(probe == [0x51, 0x82, 0x01, 0x10, 0xAC])
+    }
 }

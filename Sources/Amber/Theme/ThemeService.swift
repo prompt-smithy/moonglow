@@ -1,6 +1,6 @@
 import AppKit
+import Combine
 import AmberKit
-import Observation
 
 /// Applies the palette that matches the current system appearance.
 ///
@@ -10,11 +10,10 @@ import Observation
 /// `effectiveAppearance` is KVO-observable, which is the AppKit equivalent of Avalonia's
 /// `ActualThemeVariantChanged`.
 @MainActor
-@Observable
-final class ThemeService: ThemeApplying {
+final class ThemeService: ObservableObject, ThemeApplying {
 
     /// The palette in effect right now.
-    private(set) var current: AppTheme = ThemeCatalog.light[0]
+    @Published private(set) var current: AppTheme = ThemeCatalog.light[0]
 
     private var latestSettings: AppSettings = .default
     private var appearanceObservation: NSKeyValueObservation?

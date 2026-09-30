@@ -10,12 +10,19 @@ import AmberKit
 /// claims a registration the system did not actually make.
 final class SMAppServiceLoginItemService: LoginItemService {
 
-    var isEnabled: Bool { SMAppService.mainApp.status == .enabled }
+    var isEnabled: Bool {
+        guard #available(macOS 13.0, *) else { return false }
+        return SMAppService.mainApp.status == .enabled
+    }
 
-    var requiresApproval: Bool { SMAppService.mainApp.status == .requiresApproval }
+    var requiresApproval: Bool {
+        guard #available(macOS 13.0, *) else { return false }
+        return SMAppService.mainApp.status == .requiresApproval
+    }
 
     @discardableResult
     func setEnabled(_ enabled: Bool) -> Bool {
+        guard #available(macOS 13.0, *) else { return false }
         let service = SMAppService.mainApp
 
         // `register()` throws if the item is already registered, so the no-op cases are handled
@@ -41,6 +48,7 @@ final class SMAppServiceLoginItemService: LoginItemService {
     }
 
     func openLoginItemsSettings() {
+        guard #available(macOS 13.0, *) else { return }
         SMAppService.openSystemSettingsLoginItems()
     }
 }

@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var themeService: ThemeService?
     private var schedule: ScheduleService?
     private var colorService: ColorTemperatureService?
-    private var brightnessService: AppleSiliconBrightnessService?
+    private var brightnessService: BrightnessFallbackService?
     private var loginItemService: LoginItemService?
     private var viewModel: MainViewModel?
 
@@ -49,11 +49,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Order matters: the brightness backend owns the DDC probe, and the display service needs its
         // answer before it can claim any display is brightness-capable.
-        let brightnessService = AppleSiliconBrightnessService()
+        let hardwareBrightnessService: BrightnessService
+        #if arch(arm64)
+        hardwareBrightnessService = AppleSiliconBrightnessService()
+        #else
+        hardwareBrightnessService = IntelDDCBrightnessService(displayID: CGMainDisplayID())
+        #endif
         let displayService = CoreGraphicsDisplayService(
-            ddcBrightnessSupported: brightnessService.isSupported
+            ddcBrightnessSupported: hardwareBrightnessService.isSupported
         )
         let colorService = CoreGraphicsColorTemperatureService(displayService: displayService)
+        let brightnessService = BrightnessFallbackService(
+            hardware: hardwareBrightnessService,
+            software: CoreGraphicsBrightnessService(colorService: colorService)
+        )
         let schedule = ScheduleService(colorService: colorService)
         let loginItemService = SMAppServiceLoginItemService()
 

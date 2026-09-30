@@ -8,6 +8,45 @@ import Testing
 @MainActor
 struct MainViewModelTests {
 
+    @Test("Hardware brightness takes priority over software dimming")
+    func hardwareBrightnessTakesPriority() {
+        let hardware = FakeBrightnessService(isSupported: true)
+        let software = FakeBrightnessService(isSupported: true)
+        let service = BrightnessFallbackService(hardware: hardware, software: software)
+
+        service.setBrightness(percent: 40)
+
+        #expect(service.isSupported)
+        #expect(hardware.applied == [40])
+        #expect(software.applied.isEmpty)
+    }
+
+    @Test("Software brightness is used when hardware DDC is unavailable")
+    func softwareBrightnessIsFallback() {
+        let hardware = FakeBrightnessService(isSupported: false)
+        let software = FakeBrightnessService(isSupported: true)
+        let service = BrightnessFallbackService(hardware: hardware, software: software)
+
+        service.setBrightness(percent: 40)
+
+        #expect(service.isSupported)
+        #expect(hardware.applied.isEmpty)
+        #expect(software.applied == [40])
+    }
+
+    @Test("Brightness is unavailable when neither strategy is supported")
+    func unsupportedBrightnessHasNoFallback() {
+        let hardware = FakeBrightnessService(isSupported: false)
+        let software = FakeBrightnessService(isSupported: false)
+        let service = BrightnessFallbackService(hardware: hardware, software: software)
+
+        service.setBrightness(percent: 40)
+
+        #expect(!service.isSupported)
+        #expect(hardware.applied.isEmpty)
+        #expect(software.applied.isEmpty)
+    }
+
     @Test("Starts from the persisted values")
     func startsFromPersistedValues() {
         var settings = AppSettings.default
@@ -102,7 +141,7 @@ struct MainViewModelTests {
         let supported = makeHarness()
         #expect(supported.viewModel.hasBrightnessSupport)
         #expect(supported.viewModel.hasColorSupport)
-        #expect(supported.viewModel.brightnessStatus == "Hardware brightness is available through DDC/CI.")
+        #expect(supported.viewModel.brightnessStatus == "Brightness control is available.")
         #expect(supported.viewModel.colorStatus == "CoreGraphics gamma control is available.")
 
         let unsupported = makeHarness(brightnessSupported: false, colorSupported: false)

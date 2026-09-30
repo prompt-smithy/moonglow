@@ -1,6 +1,5 @@
 import SwiftUI
 import AmberKit
-import Observation
 
 /// The menu-bar popup.
 ///
@@ -14,11 +13,11 @@ import Observation
 /// - "Settings" button calling `viewModel.showSettings()`
 /// - "Quit" button calling `viewModel.quit()`
 ///
-/// Use `@Bindable` (as below) to get two-way bindings into the `@Observable` view model.
+/// `@ObservedObject` provides two-way bindings into the shared view model.
 struct QuickControlsView: View {
 
-    @Bindable var viewModel: MainViewModel
-    @Bindable var themeService: ThemeService
+    @ObservedObject var viewModel: MainViewModel
+    @ObservedObject var themeService: ThemeService
 
     private var theme: AppTheme { themeService.current }
 

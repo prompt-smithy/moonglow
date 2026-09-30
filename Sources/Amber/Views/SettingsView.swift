@@ -1,6 +1,5 @@
 import SwiftUI
 import AmberKit
-import Observation
 
 /// The main settings window.
 ///
@@ -11,8 +10,8 @@ import Observation
 /// ``TemperatureRangeSlider``, instead of the two separate sliders the .NET window used.
 struct SettingsView: View {
 
-    @Bindable var viewModel: MainViewModel
-    @Bindable var themeService: ThemeService
+    @ObservedObject var viewModel: MainViewModel
+    @ObservedObject var themeService: ThemeService
 
     /// Reports the height the whole sheet needs once it has been laid out so the window can fit it.
     var onHeightChange: ((CGFloat) -> Void)?
@@ -38,7 +37,7 @@ struct SettingsView: View {
         }
         .frame(minWidth: Self.minimumWidth, alignment: .topLeading)
         .background(theme.windowBackgroundColor)
-        .onChange(of: contentHeight) { _, height in
+        .onChange(of: contentHeight) { height in
             guard height > 0 else { return }
             onHeightChange?(height)
         }
@@ -50,7 +49,7 @@ struct SettingsView: View {
         GeometryReader { geometry in
             Color.clear
                 .onAppear { assign(geometry.size.height) }
-                .onChange(of: geometry.size.height) { _, height in assign(height) }
+                .onChange(of: geometry.size.height) { height in assign(height) }
         }
     }
 
