@@ -1,10 +1,17 @@
 # Night Mode Controller
 
-A macOS menu-bar app for external-display hardware brightness and colour temperature.
+A macOS menu-bar app for external-display hardware brightness and scheduled colour temperature.
 
-**Status: early Swift port.** The pure application logic is ported and tested, the settings window
-and the menu-bar popup are in place, and the native display backends are implemented. See
-[`docs/PORTING.md`](docs/PORTING.md).
+The app includes a neutral, macOS-style menu-bar popup and a settings window for the temperature
+schedule, startup behavior, displays, and appearance. See [`docs/PORTING.md`](docs/PORTING.md)
+for implementation status and platform details.
+
+## Download
+
+[Download the macOS installer (Apple Silicon)](https://example.com/Night-Mode-Controller-macOS-arm64.dmg)
+
+Requires macOS 14 or later on an Apple Silicon Mac. This test build is ad-hoc signed and not
+notarized; on first launch, Control-click the app and choose **Open** if macOS blocks it.
 
 ## Layout
 
@@ -27,9 +34,29 @@ and the menu-bar popup are in place, and the native display backends are impleme
 ## Commands
 
 ```bash
-swift build                 # build both targets
-swift test                  # run the AmberKit test suite (86 tests, 8 suites)
-bash Packaging/build-app.sh # build artifacts/Night Mode Controller.app, plus a DMG and ZIP in release/
+swift build                  # build the app and AmberKit
+swift test                   # run the complete test suite
+swift run                    # run from the SwiftPM build (login-item registration requires a packaged app)
+bash Packaging/build-app.sh  # build the app bundle, DMG, and ZIP
+```
+
+The packaging script creates:
+
+- `artifacts/Night Mode Controller.app`
+- `release/Night-Mode-Controller-macOS-arm64.dmg`
+- `release/Night-Mode-Controller-macOS-arm64.zip`
+
+It builds an Apple Silicon (`arm64`) app for macOS 14 or later. The app bundle is ad-hoc signed
+for local testing; it is not Developer ID signed or notarized. Users may need to Control-click the
+app and choose **Open** on first launch.
+
+To preserve the normal outputs when making a separate verification build, set alternate output
+directories:
+
+```bash
+AMBER_ARTIFACTS_DIR="$PWD/artifacts/test-build" \
+AMBER_RELEASE_DIR="$PWD/release/test-build" \
+bash Packaging/build-app.sh
 ```
 
 If every `swift` command fails with a `dyld` symbol error, an "SDK is not supported by the
@@ -51,9 +78,10 @@ container, matching the original design.
 - Colour temperature uses CoreGraphics gamma transfer tables. Hardware brightness uses
   DDC/CI over the **private** CoreDisplay `IOAVService*` API on Apple Silicon.
 
-The private API is isolated in `Sources/AmberKit/Services/NativeBridge.swift`. Night Mode
-Controller is distributed directly (Developer ID + notarization), not through the Mac App
-Store, because of that dependency.
+The private API is isolated in `Sources/AmberKit/Services/NativeBridge.swift`. The app is
+distributed directly rather than through the Mac App Store because of that dependency. The current
+packaging script applies only an ad-hoc signature; public distribution still requires Developer ID
+signing and notarization.
 
 Startup is a login item registered through `SMAppService.mainApp`, which registers *the running
 bundle*: the toggle in the settings window does nothing when Night Mode Controller is launched
@@ -67,15 +95,19 @@ switched off.
 
 - Brightness stays in `1...100` percent; colour temperature in `900...6600` K, in 100 K steps.
 - Defaults: manual brightness 80%, manual temperature 6500 K, day 6500 K, night 1200 K,
-  automatic mode on, schedule 06:00–07:00 and 17:30–18:30.
+  automatic mode on, schedule 06:00–07:00 and 17:30–18:30, Light Green and Dark Green palettes.
+- Existing settings that contain the original Light Orange/Dark Orange default pair migrate to
+  Light Green/Dark Green. Other saved palette selections are preserved.
 - Time is always twelve-hour. Morning and evening are set with separate hour, minute, and AM/PM
   drop-downs, and the stored value is always `HH:mm`, so the display can never move a scheduled
   time.
 - Day and night targets are edited as one two-handle bar, never as two independent values:
   the range keeps `night <= day` and snaps to the 100 K step.
-- Controls are drawn from the palette, including drop-downs. Native menus and pop-up buttons
-  are avoided because they paint their bezel and selected row with the system accent, which
-  reads as system blue in every palette.
+- The popup uses neutral system-grey controls and text, regardless of the selected appearance
+  palette. The color-temperature slider keeps its warm-to-cool gradient; its other controls remain
+  neutral. The settings window uses the selected light and dark palettes.
+- Displays and Appearance are always visible in the settings window; schedule controls are followed
+  by Startup, Displays, and Appearance.
 - A display capability is never reported unless the backend can actually apply it.
 - ColourSync gamma state is restored on quit.
 - Settings remain at `~/Library/Application Support/Amber/settings.json` for compatibility with existing installs.
