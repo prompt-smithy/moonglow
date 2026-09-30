@@ -17,7 +17,7 @@ import Foundation
 ///
 /// `IOAVServiceCreate`, `IOAVServiceReadI2C`, and `IOAVServiceWriteI2C` are the only way to drive
 /// DDC/CI on Apple Silicon. They are bound in ``CoreDisplayBridge`` with `dlopen`/`dlsym`, which is
-/// why Amber is distributed directly rather than through the Mac App Store.
+/// why Night Mode Controller is distributed directly rather than through the Mac App Store.
 ///
 /// The service object they return is a Core Foundation value: it is held as an `Unmanaged`
 /// reference and released explicitly, or it leaks.
@@ -177,7 +177,7 @@ public final class CoreGraphicsColorTemperatureService: ColorTemperatureService 
 
     /// Restores the ColorSync state, undoing every ramp this service applied.
     ///
-    /// Called on the way out, so quitting Amber never leaves a display tinted.
+    /// Called on the way out, so quitting Night Mode Controller never leaves a display tinted.
     public func reset() {
         CGDisplayRestoreColorSyncSettings()
     }

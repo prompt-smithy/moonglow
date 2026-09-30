@@ -29,8 +29,8 @@ struct SettingsStoreTests {
         #expect(settings.dayColorTempK == 6500)
         #expect(settings.nightColorTempK == 1200)
         #expect(settings.autoColorTemperature)
-        #expect(settings.lightModeTheme == "Light Orange")
-        #expect(settings.darkModeTheme == "Dark Orange")
+        #expect(settings.lightModeTheme == "Light Green")
+        #expect(settings.darkModeTheme == "Dark Green")
         #expect(settings.launchAtLogin == false)
         #expect(settings.morningStart == TimeOfDay(hour: 6, minute: 0))
         #expect(settings.morningEnd == TimeOfDay(hour: 7, minute: 0))
@@ -91,8 +91,22 @@ struct SettingsStoreTests {
 
         let loaded = store.load()
 
-        #expect(loaded.lightModeTheme == "Light Orange")
-        #expect(loaded.darkModeTheme == "Dark Orange")
+        #expect(loaded.lightModeTheme == "Light Green")
+        #expect(loaded.darkModeTheme == "Dark Green")
+    }
+
+    @Test("Legacy orange defaults migrate to green")
+    func legacyOrangeDefaultsMigrateToGreen() throws {
+        let store = Self.makeStore()
+        try Self.write(
+            #"{"lightModeTheme":"Light Orange","darkModeTheme":"Dark Orange"}"#,
+            to: store
+        )
+
+        let loaded = store.load()
+
+        #expect(loaded.lightModeTheme == "Light Green")
+        #expect(loaded.darkModeTheme == "Dark Green")
     }
 
     @Test("Known theme names survive a round trip")

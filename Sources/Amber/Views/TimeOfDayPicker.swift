@@ -5,7 +5,7 @@ import AmberKit
 ///
 /// Each drop-down shows one value at rest and opens a scrolling list. They are ``ThemedDropDown``s
 /// rather than native menus or AppKit's `NSDatePicker` because every system control in this slot
-/// paints itself with the *system* accent, which reads as system blue inside an Amber palette:
+/// paints itself with the *system* accent, which reads as system blue inside the app palette:
 ///
 /// - A native menu paints its bezel and its selected row with the system accent, and `NSMenu`
 ///   highlighting follows the macOS accent setting, so `.tint` cannot repaint it.
@@ -14,7 +14,7 @@ import AmberKit
 ///   editor, so `selectedTextAttributes` cannot reach the highlight, the focus ring and control
 ///   colours do not affect it, and there is no editable switch to suppress it.
 ///
-/// Amber is twelve-hour only, so AM/PM is always available. The bound value stays the 24-hour
+/// Night Mode Controller is twelve-hour only, so AM/PM is always available. The bound value stays the 24-hour
 /// ``TimeOfDay``, so the displayed format can never move a scheduled time.
 struct TimeOfDayPicker: View {
 

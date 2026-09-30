@@ -1,4 +1,4 @@
-# Amber
+# Night Mode Controller
 
 A macOS menu-bar app for external-display hardware brightness and colour temperature.
 
@@ -15,7 +15,7 @@ and the menu-bar popup are in place, and the native display backends are impleme
 | `Sources/Amber/` | macOS app shell: entry point, status item, popover, settings window, SwiftUI views, native bridges. |
 | `Tests/AmberKitTests/` | Swift Testing suite for everything in `AmberKit`. |
 | `Packaging/` | `Info.plist` and `build-app.sh` (app bundle, DMG, ZIP). |
-| `Resources/` | App icon source (`Amber.png`) used to generate `Amber.icns`. |
+| `Resources/` | App icon source (`Amber.png`) used to generate the app bundle icon. |
 | `legacy-csharp/` | The original .NET 10 / Avalonia implementation, kept as a read-only reference for the port. |
 
 ## Requirements
@@ -29,7 +29,7 @@ and the menu-bar popup are in place, and the native display backends are impleme
 ```bash
 swift build                 # build both targets
 swift test                  # run the AmberKit test suite (86 tests, 8 suites)
-bash Packaging/build-app.sh # build artifacts/Amber.app, plus a DMG and ZIP in release/
+bash Packaging/build-app.sh # build artifacts/Night Mode Controller.app, plus a DMG and ZIP in release/
 ```
 
 If every `swift` command fails with a `dyld` symbol error, an "SDK is not supported by the
@@ -51,14 +51,15 @@ container, matching the original design.
 - Colour temperature uses CoreGraphics gamma transfer tables. Hardware brightness uses
   DDC/CI over the **private** CoreDisplay `IOAVService*` API on Apple Silicon.
 
-The private API is isolated in `Sources/AmberKit/Services/NativeBridge.swift`. Amber is
-distributed directly (Developer ID + notarization), not through the Mac App Store, because
-of that dependency.
+The private API is isolated in `Sources/AmberKit/Services/NativeBridge.swift`. Night Mode
+Controller is distributed directly (Developer ID + notarization), not through the Mac App
+Store, because of that dependency.
 
 Startup is a login item registered through `SMAppService.mainApp`, which registers *the running
-bundle*: the toggle in the settings window does nothing when Amber is launched straight from
-`.build` rather than from `Amber.app`. The stored setting is only the user's intent — the real
-registration lives in the system and can be changed outside Amber — so a change the system
+bundle*: the toggle in the settings window does nothing when Night Mode Controller is launched
+straight from `.build` rather than from `Night Mode Controller.app`. The stored setting is only
+the user's intent — the real registration lives in the system and can be changed outside the
+app — so a change the system
 refuses is not recorded, and a login item added by hand in System Settings is adopted rather than
 switched off.
 
@@ -74,7 +75,7 @@ switched off.
   the range keeps `night <= day` and snaps to the 100 K step.
 - Controls are drawn from the palette, including drop-downs. Native menus and pop-up buttons
   are avoided because they paint their bezel and selected row with the system accent, which
-  reads as system blue in every Amber palette.
+  reads as system blue in every palette.
 - A display capability is never reported unless the backend can actually apply it.
 - ColourSync gamma state is restored on quit.
-- Settings live at `~/Library/Application Support/Amber/settings.json`.
+- Settings remain at `~/Library/Application Support/Amber/settings.json` for compatibility with existing installs.

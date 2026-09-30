@@ -2,7 +2,7 @@ import AppKit
 
 /// A window that hides instead of closing, and hides itself when left alone.
 ///
-/// Ported from `Views/MainWindow.axaml.cs`: closing the settings window keeps Amber alive in the
+/// Ported from `Views/MainWindow.axaml.cs`: closing the settings window keeps the app alive in the
 /// menu bar, and ten seconds without interaction puts the window away on its own.
 final class HidingWindow: NSWindow {
 

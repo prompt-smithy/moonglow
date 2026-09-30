@@ -41,6 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let store = SettingsStore()
+        let installationStore = InstallationStore()
+        let installIdentifier = Bundle.main.object(forInfoDictionaryKey: "AmberInstallationID") as? String
+            ?? "legacy-or-unpackaged"
+        let isFirstLaunchAfterInstall = !installationStore.hasSeen(identifier: installIdentifier)
         let themeService = ThemeService()
 
         // Order matters: the brightness backend owns the DDC probe, and the display service needs its
@@ -83,7 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusItem(viewModel: viewModel, themeService: themeService)
 
         viewModel.applyInitialState()
-        viewModel.applyLoginItemState()
+        viewModel.applyLoginItemState(isFirstLaunchAfterInstall: isFirstLaunchAfterInstall)
+        if isFirstLaunchAfterInstall {
+            installationStore.markSeen(identifier: installIdentifier)
+        }
         schedule.start()
     }
 
@@ -102,7 +109,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func configureStatusItem(viewModel: MainViewModel, themeService: ThemeService) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            let image = NSImage(systemSymbolName: "sun.max.fill", accessibilityDescription: "Amber")
+            let image = NSImage(
+                systemSymbolName: "sun.max.fill",
+                accessibilityDescription: "Night Mode Controller"
+            )
             image?.isTemplate = true
             button.image = image
             button.target = self
@@ -113,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A hosting view is used directly rather than an `NSPopover` because AppKit gives no way to
         // turn off a popover's anchor arrow.
         let hosting = NSHostingView(
-            rootView: QuickControlsView(viewModel: viewModel, themeService: themeService)
+            rootView: QuickControlsView(viewModel: viewModel)
         )
 
         self.statusItem = item
@@ -130,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         position(panel, under: button)
 
-        // A non-activating panel takes key status without activating Amber, so the popup opens
+        // A non-activating panel takes key status without activating the app, so the popup opens
         // without pulling focus away from whatever the user was doing.
         panel.makeKeyAndOrderFront(nil)
         watchForOutsideClicks()
@@ -166,7 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Closes the popup on a click outside it, including clicks that land in another application.
-    /// Those are never delivered to Amber, and a non-activating panel does not resign key when
+    /// Those are never delivered to the app, and a non-activating panel does not resign key when
     /// another app takes focus, so nothing else would notice them.
     private func watchForOutsideClicks() {
         stopWatchingForOutsideClicks()
@@ -204,7 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Amber"
+            window.title = "Night Mode Controller"
             window.isReleasedWhenClosed = false
             window.minSize = NSSize(width: SettingsView.minimumWidth, height: 320)
 

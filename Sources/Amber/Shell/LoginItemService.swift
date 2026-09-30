@@ -4,8 +4,8 @@ import AmberKit
 /// ``LoginItemService`` backed by `SMAppService`.
 ///
 /// `SMAppService.mainApp` registers *the running bundle*, so this only does anything from a
-/// packaged `Amber.app`. Launched straight out of the build directory — `swift run`, or the bare
-/// binary under `.build` — there is no bundle for the system to register and every call reports
+/// packaged `Night Mode Controller.app`. Launched straight out of the build directory — `swift run`,
+/// or the bare binary under `.build` — there is no bundle for the system to register and every call reports
 /// failure. That is surfaced rather than swallowed: the settings toggle reverts, so it never
 /// claims a registration the system did not actually make.
 final class SMAppServiceLoginItemService: LoginItemService {

@@ -3,7 +3,7 @@ import Foundation
 /// Persisted application settings.
 ///
 /// Ported from `Models/AppSettings.cs`. Range constants and defaults are preserved exactly.
-/// The .NET `Use24HourClock` setting is not carried over: Amber is twelve-hour only, so the
+/// The .NET `Use24HourClock` setting is not carried over: Night Mode Controller is twelve-hour only, so the
 /// schedule pickers always show AM/PM. The on-disk representation is camelCase, and the legacy
 /// .NET settings file is deliberately not read (this is a fresh start).
 public struct AppSettings: Equatable, Sendable {
@@ -29,8 +29,8 @@ public struct AppSettings: Equatable, Sendable {
     public static let defaultManualColorTempK = 6500
     public static let defaultManualBrightness = 80
 
-    public static let defaultLightThemeName = "Light Orange"
-    public static let defaultDarkThemeName = "Dark Orange"
+    public static let defaultLightThemeName = "Light Green"
+    public static let defaultDarkThemeName = "Dark Green"
 
     // MARK: - Values
 
@@ -46,10 +46,10 @@ public struct AppSettings: Equatable, Sendable {
     public var lightModeTheme: String = defaultLightThemeName
     public var darkModeTheme: String = defaultDarkThemeName
 
-    /// Whether the user wants Amber to start with the Mac.
+    /// Whether the user wants Night Mode Controller to start with the Mac.
     ///
     /// This records intent only. The actual registration lives in the system's login items, which
-    /// the user can change outside Amber, so it is re-asserted at launch rather than trusted.
+    /// the user can change outside the app, so it is re-asserted at launch rather than trusted.
     public var launchAtLogin: Bool = false
 
     public init() {}
@@ -70,6 +70,11 @@ public struct AppSettings: Equatable, Sendable {
     /// valid, and every schedule time well formed.
     public func normalized() -> AppSettings {
         var copy = self
+
+        if lightModeTheme == "Light Orange", darkModeTheme == "Dark Orange" {
+            copy.lightModeTheme = AppSettings.defaultLightThemeName
+            copy.darkModeTheme = AppSettings.defaultDarkThemeName
+        }
 
         copy.manualBrightness = AppSettings.clampBrightness(manualBrightness)
         copy.manualColorTempK = AppSettings.clampKelvin(manualColorTempK)

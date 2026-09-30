@@ -1,6 +1,6 @@
 import Foundation
 
-/// One active display and the controls Amber believes it can drive.
+/// One active display and the controls Night Mode Controller believes it can drive.
 ///
 /// Ported from `Models/DisplayInfo.cs`. `nativeId` is the CoreGraphics display ID.
 public struct DisplayInfo: Identifiable, Equatable, Sendable {

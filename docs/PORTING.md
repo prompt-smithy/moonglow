@@ -11,7 +11,7 @@ Verified under Xcode 27.0:
 | --- | --- |
 | `swift build` | Passes |
 | `swift test` | Passes — 86 tests in 8 suites |
-| `bash Packaging/build-app.sh` | Passes — produces `Amber.app`, DMG, and ZIP |
+| `bash Packaging/build-app.sh` | Passes — produces `Night Mode Controller.app`, DMG, and ZIP |
 | App launch | Stays running with the stub backends; no crash reports |
 
 ## Done
@@ -54,7 +54,7 @@ settings window. `LoginItemService` (`Services/ServiceProtocols.swift`) is the s
 `Sources/Amber/Shell/LoginItemService.swift` implements it with `SMAppService.mainApp`.
 
 The setting records *intent* only — the real registration lives in the system's login items,
-which the user can change outside Amber — so it is treated as two pieces of state that can
+which the user can change outside Night Mode Controller — so it is treated as two pieces of state that can
 disagree:
 
 - `launchAtLogin` is the stored preference and is what the toggle binds to.
@@ -71,7 +71,7 @@ the user has not approved is not running and claiming otherwise is a lie they ca
 
 The service reports failure rather than hiding it: `SMAppService.mainApp` registers the running
 bundle, so under `swift run` — or any binary launched out of `.build` — there is no bundle to
-register and every call fails. Test through `artifacts/Amber.app`, not the bare binary.
+register and every call fails. Test through `artifacts/Night Mode Controller.app`, not the bare binary.
 
 ### Palette-drawn popup controls
 
@@ -97,12 +97,12 @@ conversions live in `Models/TwelveHourTime.swift` and the picker in
 
 Divergences from the .NET original:
 
-- Amber is **twelve-hour only**. The `Use24HourClock` setting and its toggle are gone
+- Night Mode Controller is **twelve-hour only**. The `Use24HourClock` setting and its toggle are gone
   entirely: `AppSettings` no longer has the key (older files simply drop it, since the decoder
   ignores unknown keys) and AM/PM is always available.
 - The time and the appearance pickers are ``ThemedDropDown``s drawn from the palette rather than
   built on a system control. Two system controls were tried and rejected for the same reason —
-  each paints itself with the *system* accent, which reads as system blue inside an Amber palette:
+  each paints itself with the *system* accent, which reads as system blue inside a palette:
   - A native `Picker` menu paints its bezel and its selected row with the system accent, and
     `NSMenu` highlighting follows the macOS accent setting, so `.tint` cannot repaint it.
   - `NSDatePicker` — the control System Settings uses for the Night Shift schedule — paints the
@@ -165,7 +165,7 @@ and persistence stays `HH:mm`. `TwelveHourTimeTests` round-trips all 1440 minute
   surfaces, as a real window should.
 - Dismissal has two routes: the status item toggles the popup, and a global mouse-down monitor
   catches clicks that land in another application or on the desktop, which are never delivered to
-  Amber at all. The monitor exists only while the popup is shown, and is removed on quit.
+  Night Mode Controller at all. The monitor exists only while the popup is shown, and is removed on quit.
 - Do **not** dismiss this popup from `NSWindow.didResignKeyNotification`, and do not set
   `hidesOnDeactivate` on the panel. Both were tried and both were wrong: a real click on the status
   item hands key straight back, so the observer closed the panel in the same frame — a flicker that

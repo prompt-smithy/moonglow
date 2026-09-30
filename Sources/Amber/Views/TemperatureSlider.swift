@@ -10,7 +10,6 @@ import AmberKit
 struct TemperatureSlider: View {
 
     @Binding var value: Int
-    let theme: AppTheme
 
     /// When false the control is dimmed and inert, which is what the popup needs while automatic
     /// colour temperature is driving the display instead of the user.
@@ -26,7 +25,7 @@ struct TemperatureSlider: View {
 
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(theme.controlBackgroundColor)
+                    .fill(Color.primary.opacity(0.12))
                     .frame(height: trackHeight)
 
                 // The whole ramp stays visible rather than only the travelled part: the track is
@@ -67,10 +66,9 @@ struct TemperatureSlider: View {
 
     private func handle(at x: CGFloat) -> some View {
         Circle()
-            .fill(theme.accentColor)
+            .fill(Color(nsColor: .systemGray))
             .overlay {
-                Circle()
-                    .strokeBorder(theme.cardBackgroundColor, lineWidth: 2)
+                Circle().strokeBorder(Color(nsColor: .controlBackgroundColor), lineWidth: 2)
             }
             .frame(width: handleDiameter, height: handleDiameter)
             .shadow(color: .black.opacity(0.18), radius: 1.5, y: 0.5)

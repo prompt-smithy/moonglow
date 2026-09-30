@@ -3,11 +3,7 @@ import AmberKit
 
 /// The main settings window.
 ///
-/// Ported from `Views/MainWindow.axaml`. Sections and gating follow the original: the
-/// brightness slider is gated on `hasBrightnessSupport`, the manual colour-temperature
-/// slider on `manualColorEnabled`, and the schedule and appearance controls stay available
-/// even when no display can be driven — the same trade-off the .NET window made, so a
-/// preference can be set before hardware is attached.
+/// The schedule is the primary settings surface, followed by startup, displays, and appearance.
 ///
 /// Morning and evening times use ``TimeOfDayPicker``: separate hour, minute, and AM/PM
 /// drop-downs drawn from the palette. The day and night targets share a single two-handle bar,
@@ -17,49 +13,33 @@ struct SettingsView: View {
     @Bindable var viewModel: MainViewModel
     @Bindable var themeService: ThemeService
 
-    /// Reports the height the whole sheet needs once it has been laid out (and again whenever a
-    /// section is expanded or collapsed), so the window can be sized to fit it and the sheet
-    /// never opens with a scroll bar.
+    /// Reports the height the whole sheet needs once it has been laid out so the window can fit it.
     var onHeightChange: ((CGFloat) -> Void)?
 
-    /// The sheet's minimum width. The schedule rows are the binding constraint: two 196 pt time
-    /// fields plus the FROM/TO label need 456 pt before the surrounding padding, so anything
-    /// narrower squeezes the time selector.
-    static let minimumWidth: CGFloat = 480
+    /// Fits two 196 pt time fields, their 12 pt gap, card padding, and outer padding.
+    static let minimumWidth: CGFloat = 456
 
     private var theme: AppTheme { themeService.current }
 
-    /// Displays and Appearance start collapsed: they are reference material rather than
-    /// everyday controls, and collapsing them keeps the sheet short.
-    @State private var isDisplaysExpanded = false
-    @State private var isAppearanceExpanded = false
-
-    /// Laid-out heights, summed and reported through ``onHeightChange``.
-    @State private var headerHeight: CGFloat = 0
+    /// Laid-out content height reported through ``onHeightChange``.
     @State private var contentHeight: CGFloat = 0
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .background(heightReader { headerHeight = $0 })
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    displaysSection
-                    brightnessSection
-                    colorTemperatureSection
-                    appearanceSection
-                    startupSection
-                }
-                .padding(14)
-                .background(heightReader { contentHeight = $0 })
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                scheduleSection
+                startupSection
+                displaysSection
+                appearanceSection
             }
+            .padding(14)
+            .background(heightReader { contentHeight = $0 })
         }
         .frame(minWidth: Self.minimumWidth, alignment: .topLeading)
         .background(theme.windowBackgroundColor)
-        .onChange(of: headerHeight + contentHeight) { _, total in
-            guard total > 0 else { return }
-            onHeightChange?(total)
+        .onChange(of: contentHeight) { _, height in
+            guard height > 0 else { return }
+            onHeightChange?(height)
         }
     }
 
@@ -73,25 +53,13 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Header
-
-    /// Just the app name — the sheet already has a window title, so a subtitle and a platform
-    /// badge only cost vertical space.
-    private var header: some View {
-        Text("Amber")
-            .font(.system(size: 15, weight: .bold))
-            .foregroundStyle(theme.onAccentTextColor)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(theme.accentColor)
-    }
-
     // MARK: - Displays
 
     private var displaysSection: some View {
-        collapsibleCard(title: "Displays", isExpanded: $isDisplaysExpanded) {
+        card {
             VStack(alignment: .leading, spacing: 8) {
+                sectionTitle("Displays")
+
                 HStack {
                     Spacer()
                     Button("Refresh") { viewModel.refreshDisplays() }
@@ -124,41 +92,11 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Brightness
-
-    private var brightnessSection: some View {
-        card {
-            VStack(alignment: .leading, spacing: 7) {
-                HStack {
-                    sectionTitle("Brightness")
-                    Spacer()
-                    valueLabel("\(viewModel.brightness)%")
-                }
-
-                Slider(value: brightnessBinding, in: 1...100)
-                    .tint(theme.controlAccentColor)
-                    .disabled(!viewModel.hasBrightnessSupport)
-
-                caption(viewModel.brightnessStatus)
-            }
-        }
-    }
-
     // MARK: - Colour temperature and schedule
 
-    private var colorTemperatureSection: some View {
+    private var scheduleSection: some View {
         card {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    sectionTitle("Color temperature")
-                    Spacer()
-                    valueLabel("\(viewModel.colorTemperature) K")
-                }
-
-                Slider(value: colorTemperatureBinding, in: 900...6600)
-                    .tint(theme.controlAccentColor)
-                    .disabled(!viewModel.manualColorEnabled)
-
                 Toggle("Automatic (time based)", isOn: $viewModel.autoColorTemperature)
                     .font(.system(size: 13))
                     .foregroundStyle(theme.primaryTextColor)
@@ -168,17 +106,15 @@ struct SettingsView: View {
                 temperatureRangeControl
 
                 scheduleGroup(
-                    title: "MORNING",
+                    title: "Morning transition (warm → cool)",
                     from: morningStartBinding,
                     to: morningEndBinding
                 )
                 scheduleGroup(
-                    title: "EVENING",
+                    title: "Evening transition (cool → warm)",
                     from: eveningStartBinding,
                     to: eveningEndBinding
                 )
-
-                caption(viewModel.colorStatus)
             }
         }
     }
@@ -196,9 +132,9 @@ struct SettingsView: View {
             TemperatureRangeSlider(range: temperatureRangeBinding, theme: theme)
 
             HStack {
-                caption("NIGHT \(viewModel.nightColorTemp) K")
+                caption("WARM \(viewModel.nightColorTemp) K")
                 Spacer()
-                caption("DAY \(viewModel.dayColorTemp) K")
+                caption("COOL \(viewModel.dayColorTemp) K")
             }
         }
     }
@@ -209,7 +145,9 @@ struct SettingsView: View {
         to: Binding<TimeOfDay>
     ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            caption(title)
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(theme.secondaryTextColor)
 
             HStack(alignment: .top, spacing: 12) {
                 timeField(label: "FROM", time: from)
@@ -252,18 +190,22 @@ struct SettingsView: View {
     // MARK: - Appearance
 
     private var appearanceSection: some View {
-        collapsibleCard(title: "Appearance", isExpanded: $isAppearanceExpanded) {
-            HStack(alignment: .top, spacing: 12) {
-                themeColumn(
-                    title: "LIGHT MODE",
-                    selection: $viewModel.lightModeTheme,
-                    names: viewModel.lightThemes
-                )
-                themeColumn(
-                    title: "DARK MODE",
-                    selection: $viewModel.darkModeTheme,
-                    names: viewModel.darkThemes
-                )
+        card {
+            VStack(alignment: .leading, spacing: 8) {
+                sectionTitle("Appearance")
+
+                HStack(alignment: .top, spacing: 12) {
+                    themeColumn(
+                        title: "LIGHT MODE",
+                        selection: $viewModel.lightModeTheme,
+                        names: viewModel.lightThemes
+                    )
+                    themeColumn(
+                        title: "DARK MODE",
+                        selection: $viewModel.darkModeTheme,
+                        names: viewModel.darkThemes
+                    )
+                }
             }
         }
     }
@@ -289,53 +231,6 @@ struct SettingsView: View {
     }
 
     // MARK: - Layout helpers
-
-    /// A card whose body stays hidden until the title row is clicked. Used for the sections
-    /// that are reference material, so the sheet opens short.
-    private func collapsibleCard<Content: View>(
-        title: String,
-        isExpanded: Binding<Bool>,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: isExpanded.wrappedValue ? 8 : 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.12)) {
-                    isExpanded.wrappedValue.toggle()
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    sectionTitle(title)
-
-                    Spacer(minLength: 4)
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(theme.secondaryTextColor)
-                        .rotationEffect(.degrees(isExpanded.wrappedValue ? 90 : 0))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(title)
-            .accessibilityHint(
-                isExpanded.wrappedValue ? "Collapses the section" : "Expands the section"
-            )
-
-            if isExpanded.wrappedValue {
-                content()
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            theme.cardBackgroundColor,
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(theme.borderColor, lineWidth: 1)
-        }
-    }
 
     private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
@@ -371,22 +266,6 @@ struct SettingsView: View {
     }
 
     // MARK: - Bindings
-
-    private var brightnessBinding: Binding<Double> {
-        Binding(
-            get: { Double(viewModel.brightness) },
-            set: { viewModel.brightness = Int($0.rounded()) }
-        )
-    }
-
-    /// Snapping happens here rather than through the slider's `step:`, because SwiftUI draws a row
-    /// of tick marks along the track of any stepped slider -- AppKit sliders have no such marks.
-    private var colorTemperatureBinding: Binding<Double> {
-        Binding(
-            get: { Double(viewModel.colorTemperature) },
-            set: { viewModel.colorTemperature = TemperatureRange.snap(Int($0.rounded())) }
-        )
-    }
 
     private var temperatureRangeBinding: Binding<TemperatureRange> {
         Binding(

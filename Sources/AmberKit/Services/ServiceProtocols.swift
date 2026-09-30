@@ -1,6 +1,6 @@
 import Foundation
 
-/// Enumerates displays and reports what Amber can control on each one.
+/// Enumerates displays and reports what Night Mode Controller can control on each one.
 ///
 /// Ported from `IDisplayService` in `Services/DisplayServices.cs`.
 public protocol DisplayService: AnyObject {
@@ -38,9 +38,9 @@ public protocol ThemeApplying: AnyObject {
     func applyForCurrentMode(settings: AppSettings)
 }
 
-/// Registers Amber as a login item so it starts with the Mac.
+/// Registers Night Mode Controller as a login item so it starts with the Mac.
 ///
-/// The system owns this state, not Amber: the user can remove the login item in System Settings,
+/// The system owns this state, not the app: the user can remove the login item in System Settings,
 /// and macOS can accept a registration but hold it pending approval. The protocol therefore
 /// reports status instead of storing a flag, and ``setEnabled(_:)`` says whether the system
 /// accepted the change so a caller never records intent that did not take effect.

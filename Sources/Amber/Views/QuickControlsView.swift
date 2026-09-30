@@ -9,15 +9,11 @@ import AmberKit
 /// off *and* a gamma-capable display — so neither offers a control the backend cannot apply.
 ///
 /// The view supplies the popup's rounded material surface, because the borderless panel behind it
-/// draws no chrome of its own. It uses AppKit's real `.popover` material rather than a SwiftUI
-/// `Material`, which is flatter than Apple's own menu-bar popups. Palette colours are used for text
-/// so the popup stays recognisably Amber.
+/// draws no chrome of its own. Controls use the system appearance, independent of the selected
+/// settings palette.
 struct QuickControlsView: View {
 
     @Bindable var viewModel: MainViewModel
-    @Bindable var themeService: ThemeService
-
-    private var theme: AppTheme { themeService.current }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -28,14 +24,18 @@ struct QuickControlsView: View {
                 Button("Settings") {
                     viewModel.showSettings()
                 }
-                .buttonStyle(ThemedButtonStyle(emphasis: .prominent, theme: theme))
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .tint(Color(nsColor: .systemGray))
 
                 Spacer()
 
                 Button("Quit") {
                     viewModel.quit()
                 }
-                .buttonStyle(ThemedButtonStyle(emphasis: .standard, theme: theme))
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(Color(nsColor: .systemGray))
             }
         }
         .padding(16)
@@ -68,7 +68,7 @@ struct QuickControlsView: View {
             }
 
             Slider(value: brightnessBinding, in: 1...100)
-                .tint(theme.controlAccentColor)
+                .tint(Color(nsColor: .systemGray))
                 .disabled(!viewModel.hasBrightnessSupport)
         }
     }
@@ -85,15 +85,13 @@ struct QuickControlsView: View {
 
             TemperatureSlider(
                 value: colorTemperatureBinding,
-                theme: theme,
                 isEnabled: viewModel.manualColorEnabled
             )
 
             Toggle("Automatic color", isOn: $viewModel.autoColorTemperature)
                 .font(.system(size: 12))
-                .foregroundStyle(theme.primaryTextColor)
                 .toggleStyle(.switch)
-                .tint(theme.controlAccentColor)
+                .tint(Color(nsColor: .systemGray))
                 .controlSize(.small)
         }
     }
@@ -103,14 +101,14 @@ struct QuickControlsView: View {
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(theme.strongTextColor)
+            .foregroundStyle(.primary)
     }
 
     private func valueLabel(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 12, weight: .semibold))
             .monospacedDigit()
-            .foregroundStyle(theme.strongTextColor)
+            .foregroundStyle(.primary)
     }
 
     // MARK: - Bindings

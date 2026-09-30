@@ -3,7 +3,7 @@ import AmberKit
 
 /// A push button drawn from the active palette.
 ///
-/// SwiftUI's own button styles take their surface from the system, so inside an Amber palette the
+/// SwiftUI's own button styles take their surface from the system, so inside the app palette the
 /// popup's actions came out system grey. Drawing them here keeps them on-palette, the same way
 /// ``ThemedDropDown`` draws its own field rather than accepting the system bezel.
 struct ThemedButtonStyle: ButtonStyle {

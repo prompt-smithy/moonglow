@@ -208,7 +208,7 @@ struct MainViewModelTests {
 
         harness.viewModel.lightModeTheme = "Chartreuse"
 
-        #expect(harness.viewModel.lightModeTheme == "Light Orange")
+        #expect(harness.viewModel.lightModeTheme == "Light Green")
         #expect(harness.theme.applyCount == 0)
     }
 
@@ -320,6 +320,20 @@ struct MainViewModelTests {
         #expect(harness.loginItem.requests == [true])
     }
 
+    @Test("A first launch after install clears a preserved login preference")
+    func firstLaunchAfterInstallDisablesLoginItem() {
+        var settings = AppSettings.default
+        settings.launchAtLogin = true
+        let harness = makeHarness(settings: settings, loginItemAlreadyEnabled: true)
+
+        harness.viewModel.applyLoginItemState(isFirstLaunchAfterInstall: true)
+
+        #expect(!harness.viewModel.launchAtLogin)
+        #expect(!harness.store.load().launchAtLogin)
+        #expect(!harness.loginItem.isEnabled)
+        #expect(harness.loginItem.requests == [false])
+    }
+
     @Test("Nothing is registered at launch when the preference is off")
     func nothingRegisteredWhenPreferenceOff() {
         let harness = makeHarness()
@@ -330,9 +344,9 @@ struct MainViewModelTests {
         #expect(harness.viewModel.launchAtLoginStatus.contains("only when you launch"))
     }
 
-    @Test("A login item Amber did not create is adopted, not switched off")
+    @Test("A login item Night Mode Controller did not create is adopted, not switched off")
     func existingRegistrationIsAdopted() {
-        // The user added Amber at login in System Settings before this setting existed. Launching
+        // The user added Night Mode Controller at login in System Settings before this setting existed. Launching
         // must not report "off" while the system says otherwise, and must not unregister it.
         let harness = makeHarness(loginItemAlreadyEnabled: true)
 

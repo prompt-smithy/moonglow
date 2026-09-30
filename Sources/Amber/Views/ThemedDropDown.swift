@@ -4,7 +4,7 @@ import AmberKit
 /// A drop-down that draws its own field and its own list with the active palette.
 ///
 /// The native `Picker` menu styles both its bezel and its selected row with the *system*
-/// accent colour, which shows up as system blue inside an Amber palette. That colour is not
+/// accent colour, which shows up as system blue inside the app palette. That colour is not
 /// addressable from SwiftUI — `NSMenu` highlighting follows the user's macOS accent setting,
 /// and `.tint` does not repaint it — so the control draws its own field and its own scrolling
 /// list to stay on-palette.
