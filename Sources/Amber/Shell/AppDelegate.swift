@@ -123,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A hosting view is used directly rather than an `NSPopover` because AppKit gives no way to
         // turn off a popover's anchor arrow.
         let hosting = NSHostingView(
-            rootView: QuickControlsView(viewModel: viewModel)
+            rootView: QuickControlsView(viewModel: viewModel, themeService: themeService)
         )
 
         self.statusItem = item

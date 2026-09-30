@@ -1,5 +1,6 @@
 import SwiftUI
 import AmberKit
+import Observation
 
 /// The main settings window.
 ///

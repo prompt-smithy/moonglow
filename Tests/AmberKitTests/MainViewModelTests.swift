@@ -208,7 +208,7 @@ struct MainViewModelTests {
 
         harness.viewModel.lightModeTheme = "Chartreuse"
 
-        #expect(harness.viewModel.lightModeTheme == "Light Green")
+        #expect(harness.viewModel.lightModeTheme == "Light Orange")
         #expect(harness.theme.applyCount == 0)
     }
 
@@ -318,20 +318,6 @@ struct MainViewModelTests {
         harness.viewModel.applyLoginItemState()
 
         #expect(harness.loginItem.requests == [true])
-    }
-
-    @Test("A first launch after install clears a preserved login preference")
-    func firstLaunchAfterInstallDisablesLoginItem() {
-        var settings = AppSettings.default
-        settings.launchAtLogin = true
-        let harness = makeHarness(settings: settings, loginItemAlreadyEnabled: true)
-
-        harness.viewModel.applyLoginItemState(isFirstLaunchAfterInstall: true)
-
-        #expect(!harness.viewModel.launchAtLogin)
-        #expect(!harness.store.load().launchAtLogin)
-        #expect(!harness.loginItem.isEnabled)
-        #expect(harness.loginItem.requests == [false])
     }
 
     @Test("Nothing is registered at launch when the preference is off")

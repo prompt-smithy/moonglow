@@ -15,8 +15,8 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd "$script_dir/.." && pwd)"
-artifacts_dir="${AMBER_ARTIFACTS_DIR:-$repo_dir/artifacts}"
-release_dir="${AMBER_RELEASE_DIR:-$repo_dir/release}"
+artifacts_dir="$repo_dir/artifacts"
+release_dir="$repo_dir/release"
 app_dir="$artifacts_dir/Night Mode Controller.app"
 dmg_staging_dir="$artifacts_dir/dmg"
 iconset_dir="$artifacts_dir/Night Mode Controller.iconset"
@@ -67,9 +67,6 @@ rm -f \
 cp "$bin_dir/Amber" "$app_dir/Contents/MacOS/Amber"
 chmod +x "$app_dir/Contents/MacOS/Amber"
 cp "$script_dir/Info.plist" "$app_dir/Contents/Info.plist"
-install_identifier="$(uuidgen)"
-/usr/libexec/PlistBuddy -c "Add :AmberInstallationID string $install_identifier" \
-    "$app_dir/Contents/Info.plist"
 
 sips -z 16 16 "$icon_source" --out "$iconset_dir/icon_16x16.png" >/dev/null
 sips -z 32 32 "$icon_source" --out "$iconset_dir/icon_16x16@2x.png" >/dev/null
