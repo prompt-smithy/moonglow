@@ -249,6 +249,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 defer: false
             )
             window.title = "Night Mode Controller"
+            window.titleVisibility = .hidden
+            addTitlebarLabel(to: window)
             window.isReleasedWhenClosed = false
             window.minSize = NSSize(width: SettingsView.minimumWidth, height: 320)
 
@@ -279,6 +281,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         settingsWindow?.showWithInactivityTimeout()
+    }
+
+    private func addTitlebarLabel(to window: NSWindow) {
+        guard
+            let zoomButton = window.standardWindowButton(.zoomButton),
+            let titlebarView = zoomButton.superview
+        else { return }
+
+        let label = NSTextField(labelWithString: "Night Mode Controller")
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.alignment = .left
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        titlebarView.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: zoomButton.trailingAnchor, constant: 6),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: titlebarView.trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: zoomButton.centerYAnchor)
+        ])
     }
 
     /// Sizes the settings window to the height the sheet actually needs, so it opens without a

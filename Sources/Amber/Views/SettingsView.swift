@@ -26,12 +26,17 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                scheduleSection
-                startupSection
-                displaysSection
+            VStack(alignment: .leading, spacing: 6) {
+                caption("Set the automatic color temperature range and daily transition times. Use the tray slider for manual adjustments.")
+
+                VStack(alignment: .leading, spacing: 12) {
+                    scheduleSection
+                    startupSection
+                    displaysSection
+                }
             }
-            .padding(14)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
             .background(heightReader { contentHeight = $0 })
         }
         .frame(minWidth: Self.minimumWidth, alignment: .topLeading)
@@ -84,12 +89,19 @@ struct SettingsView: View {
 
     private var scheduleSection: some View {
         card {
-            VStack(alignment: .leading, spacing: 10) {
-                Toggle("Automatic (time based)", isOn: $viewModel.autoColorTemperature)
-                    .font(.system(size: 13))
-                    .foregroundStyle(theme.primaryTextColor)
-                    .toggleStyle(.switch)
-                    .tint(Color(nsColor: .systemGray))
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Follow color temperature schedule")
+                        .font(.system(size: 13))
+                        .foregroundStyle(theme.primaryTextColor)
+
+                    Spacer()
+
+                    Toggle("", isOn: $viewModel.autoColorTemperature)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(Color(nsColor: .systemGray))
+                }
 
                 temperatureRangeControl
 
@@ -141,7 +153,17 @@ struct SettingsView: View {
                 timeField(label: "FROM", time: from)
                 timeField(label: "TO", time: to)
             }
+
+            caption(transitionDescription(for: title))
         }
+    }
+
+    private func transitionDescription(for title: String) -> String {
+        if title.hasPrefix("Morning") {
+            return "The screen cools from the warm value back up to the cool value between these times."
+        }
+
+        return "The screen warms from the cool value down to the warm value between these times."
     }
 
     private func timeField(label: String, time: Binding<TimeOfDay>) -> some View {
@@ -156,7 +178,7 @@ struct SettingsView: View {
 
     private var startupSection: some View {
         card {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 sectionTitle("Startup")
 
                 Toggle("Launch at login", isOn: $viewModel.launchAtLogin)
