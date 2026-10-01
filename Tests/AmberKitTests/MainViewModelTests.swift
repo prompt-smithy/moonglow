@@ -241,26 +241,6 @@ struct MainViewModelTests {
         #expect(harness.store.load().morningStart == TimeOfDay(hour: 5, minute: 15))
     }
 
-    @Test("An unknown theme name is rejected")
-    func unknownThemeNameIsRejected() {
-        let harness = makeHarness()
-
-        harness.viewModel.lightModeTheme = "Chartreuse"
-
-        #expect(harness.viewModel.lightModeTheme == "Light Orange")
-        #expect(harness.theme.applyCount == 0)
-    }
-
-    @Test("A valid theme change is persisted and applied")
-    func validThemeChangeIsApplied() {
-        let harness = makeHarness()
-
-        harness.viewModel.darkModeTheme = "Dark Violet"
-
-        #expect(harness.store.load().darkModeTheme == "Dark Violet")
-        #expect(harness.theme.applyCount == 1)
-    }
-
     @Test("Callbacks fire for the settings window and quit")
     func callbacksFire() {
         let harness = makeHarness()
@@ -312,6 +292,8 @@ struct MainViewModelTests {
         #expect(harness.viewModel.launchAtLogin == false)
         #expect(harness.store.load().launchAtLogin == false)
         #expect(harness.loginItem.requests == [true])
+        #expect(harness.viewModel.loginItemRegistrationFailed)
+        #expect(harness.viewModel.launchAtLoginStatus.contains("did not accept"))
     }
 
     @Test("A stored preference the system now refuses is reported")
@@ -392,7 +374,6 @@ private struct Harness {
     let displays: FakeDisplayService
     let brightness: FakeBrightnessService
     let color: FakeColorService
-    let theme: FakeTheme
     let loginItem: FakeLoginItemService
     let viewModel: MainViewModel
 }
@@ -440,15 +421,6 @@ private final class FakeColorService: ColorTemperatureService {
 
     func reset() {
         resetCount += 1
-    }
-}
-
-@MainActor
-private final class FakeTheme: ThemeApplying {
-    private(set) var applyCount = 0
-
-    func applyForCurrentMode(settings: AppSettings) {
-        applyCount += 1
     }
 }
 
@@ -512,7 +484,6 @@ private func makeHarness(
     let displayService = FakeDisplayService(displays: displayList)
     let brightnessService = FakeBrightnessService(isSupported: brightnessSupported)
     let colorService = FakeColorService(isSupported: colorSupported)
-    let themeService = FakeTheme()
     let schedule = ScheduleService(colorService: colorService)
     let loginItemService = FakeLoginItemService(
         acceptsChanges: loginItemRegisters,
@@ -526,7 +497,6 @@ private func makeHarness(
         brightnessService: brightnessService,
         colorService: colorService,
         schedule: schedule,
-        theme: themeService,
         loginItemService: loginItemService
     )
 
@@ -535,7 +505,6 @@ private func makeHarness(
         displays: displayService,
         brightness: brightnessService,
         color: colorService,
-        theme: themeService,
         loginItem: loginItemService,
         viewModel: viewModel
     )

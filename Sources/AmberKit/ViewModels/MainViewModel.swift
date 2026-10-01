@@ -22,7 +22,6 @@ public final class MainViewModel: ObservableObject {
     private let brightnessService: BrightnessService
     private let colorService: ColorTemperatureService
     private let schedule: ScheduleService
-    private let theme: ThemeApplying
     private let loginItemService: LoginItemService
 
     // MARK: - State
@@ -52,7 +51,6 @@ public final class MainViewModel: ObservableObject {
         brightnessService: BrightnessService,
         colorService: ColorTemperatureService,
         schedule: ScheduleService,
-        theme: ThemeApplying,
         loginItemService: LoginItemService
     ) {
         self.store = store
@@ -60,7 +58,6 @@ public final class MainViewModel: ObservableObject {
         self.brightnessService = brightnessService
         self.colorService = colorService
         self.schedule = schedule
-        self.theme = theme
         self.loginItemService = loginItemService
 
         let loaded = store.load()
@@ -204,35 +201,6 @@ public final class MainViewModel: ObservableObject {
         set { setTime(newValue, \.eveningEnd) }
     }
 
-    // MARK: - Themes
-
-    public var lightThemes: [String] { ThemeCatalog.lightNames }
-    public var darkThemes: [String] { ThemeCatalog.darkNames }
-
-    public var lightModeTheme: String {
-        get { settings.lightModeTheme }
-        set {
-            guard ThemeCatalog.lightNames.contains(newValue),
-                  newValue != settings.lightModeTheme
-            else { return }
-
-            mutateSettings { $0.lightModeTheme = newValue }
-            theme.applyForCurrentMode(settings: settings)
-        }
-    }
-
-    public var darkModeTheme: String {
-        get { settings.darkModeTheme }
-        set {
-            guard ThemeCatalog.darkNames.contains(newValue),
-                  newValue != settings.darkModeTheme
-            else { return }
-
-            mutateSettings { $0.darkModeTheme = newValue }
-            theme.applyForCurrentMode(settings: settings)
-        }
-    }
-
     // MARK: - Startup
 
     /// Whether Night Mode Controller should start with the Mac.
@@ -244,12 +212,18 @@ public final class MainViewModel: ObservableObject {
         get { settings.launchAtLogin }
         set {
             guard newValue != settings.launchAtLogin else { return }
-            guard loginItemService.setEnabled(newValue) else { return }
+            guard loginItemService.setEnabled(newValue) else {
+                loginItemRegistrationFailed = true
+                return
+            }
 
+            loginItemRegistrationFailed = false
             mutateSettings { $0.launchAtLogin = newValue }
             loginItemRequiresApproval = loginItemService.requiresApproval
         }
     }
+
+    @Published public private(set) var loginItemRegistrationFailed = false
 
     /// True when macOS has accepted the registration but is holding it until the user approves it
     /// in System Settings. The toggle reads as on, yet Night Mode Controller will not start until then.
@@ -261,6 +235,9 @@ public final class MainViewModel: ObservableObject {
     /// legitimately disagree — the user can remove the login item in System Settings without
     /// Night Mode Controller ever finding out.
     public var launchAtLoginStatus: String {
+        if loginItemRegistrationFailed {
+            return "macOS did not accept this login item. Run the packaged app on macOS 13 or later, then try again."
+        }
         // Approval is tested first: a request the user has not approved yet is not running, and
         // saying "opens automatically" would be a lie the user cannot act on.
         if loginItemService.requiresApproval {

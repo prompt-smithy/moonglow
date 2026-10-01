@@ -30,7 +30,6 @@ struct SettingsView: View {
                 scheduleSection
                 startupSection
                 displaysSection
-                appearanceSection
             }
             .padding(14)
             .background(heightReader { contentHeight = $0 })
@@ -57,31 +56,20 @@ struct SettingsView: View {
 
     private var displaysSection: some View {
         card {
-            VStack(alignment: .leading, spacing: 8) {
-                sectionTitle("Displays")
-
+            VStack(alignment: .leading, spacing: 4) {
                 HStack {
+                    sectionTitle("Displays")
                     Spacer()
                     Button("Refresh") { viewModel.refreshDisplays() }
                         .controlSize(.small)
                 }
 
                 ForEach(viewModel.displays) { display in
-                    HStack(spacing: 10) {
-                        Circle()
-                            .fill(theme.accentColor)
-                            .frame(width: 7, height: 7)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(display.name)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(theme.primaryTextColor)
-                            caption(display.capabilitySummary)
-                        }
-
-                        Spacer()
-
-                        caption(display.identifier)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(display.name)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(theme.primaryTextColor)
+                        caption(display.capabilitySummary)
                     }
                 }
 
@@ -101,7 +89,7 @@ struct SettingsView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(theme.primaryTextColor)
                     .toggleStyle(.switch)
-                    .tint(theme.controlAccentColor)
+                    .tint(Color(nsColor: .systemGray))
 
                 temperatureRangeControl
 
@@ -175,7 +163,7 @@ struct SettingsView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(theme.primaryTextColor)
                     .toggleStyle(.switch)
-                    .tint(theme.controlAccentColor)
+                    .tint(Color(nsColor: .systemGray))
 
                 caption(viewModel.launchAtLoginStatus)
 
@@ -185,49 +173,6 @@ struct SettingsView: View {
                 }
             }
         }
-    }
-
-    // MARK: - Appearance
-
-    private var appearanceSection: some View {
-        card {
-            VStack(alignment: .leading, spacing: 8) {
-                sectionTitle("Appearance")
-
-                HStack(alignment: .top, spacing: 12) {
-                    themeColumn(
-                        title: "LIGHT MODE",
-                        selection: $viewModel.lightModeTheme,
-                        names: viewModel.lightThemes
-                    )
-                    themeColumn(
-                        title: "DARK MODE",
-                        selection: $viewModel.darkModeTheme,
-                        names: viewModel.darkThemes
-                    )
-                }
-            }
-        }
-    }
-
-    private func themeColumn(
-        title: String,
-        selection: Binding<String>,
-        names: [String]
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            caption(title)
-
-            ThemedDropDown(
-                options: names,
-                selection: selection,
-                theme: theme,
-                accessibilityName: title,
-                title: { $0 },
-                listWidth: 200
-            )
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Layout helpers

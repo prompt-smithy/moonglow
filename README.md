@@ -2,8 +2,8 @@
 
 A macOS menu-bar app for external-display hardware brightness and scheduled colour temperature.
 
-The app includes a neutral, macOS-style menu-bar popup and a settings window for the temperature
-schedule, startup behavior, displays, and appearance. See [`docs/PORTING.md`](docs/PORTING.md)
+The app includes a native menu-bar popup and a settings window for the temperature schedule,
+startup behavior, and displays. Its light or dark appearance follows macOS automatically. See [`docs/PORTING.md`](docs/PORTING.md)
 for implementation status and platform details.
 
 ## Download
@@ -19,7 +19,7 @@ notarized; on first launch, Control-click the app and choose **Open** if macOS b
 | Path | Purpose |
 | --- | --- |
 | `Package.swift` | SwiftPM manifest. Two targets: `AmberKit` and `Amber`. |
-| `Sources/AmberKit/` | Platform logic: models, settings, schedule math, theme catalog, view model, service protocols. No UI framework dependency. |
+| `Sources/AmberKit/` | Platform logic: models, settings, schedule math, light/dark appearance colors, view model, service protocols. No UI framework dependency. |
 | `Sources/Amber/` | macOS app shell: entry point, status item, popover, settings window, SwiftUI views, native bridges. |
 | `Tests/AmberKitTests/` | Swift Testing suite for everything in `AmberKit`. |
 | `Packaging/` | `Info.plist` and `build-app.sh` (app bundle, DMG, ZIP). |
@@ -76,7 +76,7 @@ container, matching the original design.
   and automatic-mode state stay in sync without a second settings path.
 - Platform behaviour is behind `DisplayService`, `BrightnessService`, and
   `ColorTemperatureService`. `AmberKit` never imports SwiftUI; the app target supplies
-  `ThemeApplying` and `LoginItemService`.
+  automatic appearance handling and `LoginItemService`.
 - View state uses Combine's `ObservableObject` and `@Published`, keeping the deployment target at
   macOS 12 while supporting both Intel and Apple Silicon.
 - Colour temperature and software brightness share CoreGraphics gamma transfer tables. Hardware
@@ -100,19 +100,17 @@ switched off.
 
 - Brightness stays in `1...100` percent; colour temperature in `900...6600` K, in 100 K steps.
 - Defaults: manual brightness 80%, manual temperature 6500 K, day 6500 K, night 1200 K,
-  automatic mode on, schedule 06:00–07:00 and 17:30–18:30, Light Green and Dark Green palettes.
-- Existing settings that contain the original Light Orange/Dark Orange default pair migrate to
-  Light Green/Dark Green. Other saved palette selections are preserved.
+  automatic mode on, schedule 06:00–07:00 and 17:30–18:30.
 - Time is always twelve-hour. Morning and evening are set with separate hour, minute, and AM/PM
   drop-downs, and the stored value is always `HH:mm`, so the display can never move a scheduled
   time.
 - Day and night targets are edited as one two-handle bar, never as two independent values:
   the range keeps `night <= day` and snaps to the 100 K step.
-- The popup is a native AppKit menu with system styling and no app palette applied. Its brightness
-  and temperature sliders use standard system controls; the Settings window continues to use the
-  selected light and dark palettes.
-- Displays and Appearance are always visible in the settings window; schedule controls are followed
-  by Startup, Displays, and Appearance.
+- The popup is a native AppKit menu with system styling. Brightness uses a system slider and color
+  temperature uses the warm-to-cool gradient slider. The Settings window switches automatically
+  between neutral light and dark appearances with macOS.
+- Displays are always available in the settings window; schedule controls are followed by Startup
+  and Displays.
 - A display capability is never reported unless the backend can actually apply it.
 - ColourSync gamma state is restored on quit.
 - Settings remain at `~/Library/Application Support/Amber/settings.json` for compatibility with existing installs.

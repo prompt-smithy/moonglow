@@ -29,8 +29,6 @@ struct SettingsStoreTests {
         #expect(settings.dayColorTempK == 6500)
         #expect(settings.nightColorTempK == 1200)
         #expect(settings.autoColorTemperature)
-        #expect(settings.lightModeTheme == "Light Green")
-        #expect(settings.darkModeTheme == "Dark Green")
         #expect(settings.launchAtLogin == false)
         #expect(settings.morningStart == TimeOfDay(hour: 6, minute: 0))
         #expect(settings.morningEnd == TimeOfDay(hour: 7, minute: 0))
@@ -76,52 +74,19 @@ struct SettingsStoreTests {
         #expect(loaded.nightColorTempK == 900)
     }
 
-    @Test("An unknown theme name falls back to the default palette")
-    func unknownThemeFallsBackToDefault() throws {
+    @Test("Legacy theme preferences are ignored and not written again")
+    func legacyThemePreferencesAreIgnored() throws {
         let store = Self.makeStore()
         try Self.write(
-            """
-            {
-              "lightModeTheme": "Chartreuse",
-              "darkModeTheme": "Amber Dark"
-            }
-            """,
+            #"{"lightModeTheme":"Light Violet","darkModeTheme":"Black"}"#,
             to: store
         )
 
-        let loaded = store.load()
+        store.save(store.load())
+        let saved = try String(contentsOf: store.fileURL, encoding: .utf8)
 
-        #expect(loaded.lightModeTheme == "Light Green")
-        #expect(loaded.darkModeTheme == "Dark Green")
-    }
-
-    @Test("Legacy orange defaults migrate to green")
-    func legacyOrangeDefaultsMigrateToGreen() throws {
-        let store = Self.makeStore()
-        try Self.write(
-            #"{"lightModeTheme":"Light Orange","darkModeTheme":"Dark Orange"}"#,
-            to: store
-        )
-
-        let loaded = store.load()
-
-        #expect(loaded.lightModeTheme == "Light Green")
-        #expect(loaded.darkModeTheme == "Dark Green")
-    }
-
-    @Test("Known theme names survive a round trip")
-    func knownThemeNamesSurviveRoundTrip() {
-        let store = Self.makeStore()
-
-        var settings = AppSettings.default
-        settings.lightModeTheme = "Light Violet"
-        settings.darkModeTheme = "Black"
-        store.save(settings)
-
-        let loaded = store.load()
-
-        #expect(loaded.lightModeTheme == "Light Violet")
-        #expect(loaded.darkModeTheme == "Black")
+        #expect(!saved.contains("lightModeTheme"))
+        #expect(!saved.contains("darkModeTheme"))
     }
 
     @Test("Saving normalizes before writing")
@@ -151,8 +116,6 @@ struct SettingsStoreTests {
         settings.morningEnd = TimeOfDay(hour: 6, minute: 15)
         settings.eveningStart = TimeOfDay(hour: 19, minute: 5)
         settings.eveningEnd = TimeOfDay(hour: 20, minute: 45)
-        settings.lightModeTheme = "Light Green"
-        settings.darkModeTheme = "Dark Violet"
         settings.launchAtLogin = true
 
         store.save(settings)
@@ -169,8 +132,8 @@ struct SettingsStoreTests {
         try Self.write(
             """
             {"manualBrightness":55,"autoColorTemperature":false,"manualColorTempK":4300,
-             "dayColorTempK":6500,"nightColorTempK":1200,"lightModeTheme":"Light Green",
-             "darkModeTheme":"Dark Violet"}
+             "dayColorTempK":6500,"nightColorTempK":1200,
+             "lightModeTheme":"Light Green","darkModeTheme":"Dark Violet"}
             """,
             to: store
         )
@@ -179,7 +142,6 @@ struct SettingsStoreTests {
 
         #expect(loaded.manualBrightness == 55)
         #expect(loaded.autoColorTemperature == false)
-        #expect(loaded.lightModeTheme == "Light Green")
         #expect(loaded.launchAtLogin == false)
         #expect(loaded.morningStart == AppSettings.defaultMorningStart)
     }

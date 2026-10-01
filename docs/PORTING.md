@@ -25,7 +25,7 @@ Verified under Xcode 27.0:
 | Kelvin to RGB scale, gamma ramp construction | `Services/KelvinConversion.swift` | `MacColorTemperatureService` |
 | MCCS luminance packet and checksum | `Services/DDCPacket.swift` | `MacDdcBrightnessService.BuildWritePacket` |
 | Schedule evaluation and the 10 s runner | `Services/ScheduleService.swift` | `Services/ScheduleService.cs` |
-| Ten palettes, ordering, control accents | `Services/ThemeCatalog.swift` | `Services/ThemeCatalog.cs` |
+| Automatic light/dark appearance | `Sources/Amber/Theme/ThemeService.swift`, `Sources/AmberKit/Services/ThemeCatalog.swift` | system appearance changes |
 | Service protocols | `Services/ServiceProtocols.swift` | `Services/DisplayServices.cs` |
 | View model: clamping, persistence, capability gates, callbacks | `ViewModels/MainViewModel.swift` | `ViewModels/MainViewModel.cs` |
 | App shell: accessory policy, native status menu, settings-window lifecycle | `Sources/Amber/Shell/` | `App.axaml.cs`, `QuickControlsWindow.axaml.cs` |
@@ -33,14 +33,14 @@ Verified under Xcode 27.0:
 | Hex-to-colour conversion | `Sources/Amber/Theme/Color+Hex.swift` | Avalonia brushes |
 | Twelve-hour clock conversion and formatting | `Sources/AmberKit/Models/TwelveHourTime.swift` | `ClockIdentifier` mapping in `MainViewModel.cs` |
 | Colour temperature window as one value | `Sources/AmberKit/Models/TemperatureRange.swift` | day/night target clamping in `AppSettings.cs` |
-| Settings window, palette-drawn drop-down pickers, two-handle range bar | `Sources/Amber/Views/SettingsView.swift`, `Sources/Amber/Views/TimeOfDayPicker.swift`, `Sources/Amber/Views/ThemedDropDown.swift`, `Sources/Amber/Views/TemperatureRangeSlider.swift` | `Views/MainWindow.axaml` |
+| Settings window, custom time pickers, two-handle range bar, automatic light/dark appearance | `Sources/Amber/Views/SettingsView.swift`, `Sources/Amber/Views/TimeOfDayPicker.swift`, `Sources/Amber/Views/ThemedDropDown.swift`, `Sources/Amber/Views/TemperatureRangeSlider.swift` | `Views/MainWindow.axaml` |
 | Native backends: display enumeration, gamma colour temperature, DDC/CI brightness | `Sources/AmberKit/Services/NativeBridge.swift` | `MacDisplayService.cs`, `MacColorTemperatureService.cs`, `MacDdcBrightnessService.cs`, `MacNative.cs` |
 | Native menu-bar controls: brightness, colour temperature, automatic toggle | `Sources/Amber/Shell/AppDelegate.swift`, `Sources/Amber/Shell/MenuSliderRow.swift` | `Views/QuickControlsWindow.axaml` |
 | Unit tests | `Tests/AmberKitTests/` | `Amber MacOS.Tests/` |
 
-**Deliberately not ported:** legacy settings import (`DisplayController/settings.json`) and
-legacy dark theme-name migration. This port starts fresh, so `SettingsStore` has no migration
-path and the old JSON is not read.
+**Deliberately not ported:** legacy settings import (`DisplayController/settings.json`). Theme
+preferences are no longer user settings; older theme keys are ignored when loading and omitted
+when saving.
 
 ## Beyond the port (macOS only)
 
@@ -76,17 +76,17 @@ register and every call fails. Test through `artifacts/Night Mode Controller.app
 ### Native menu-bar controls
 
 The popup is an AppKit `NSMenu`, following the native menu presentation used by Display Source
-Switch. Its controls use system appearance and are independent of the selected palette; only the
-Settings window is themed. Brightness and colour temperature use standard AppKit sliders embedded
-in menu rows. Software brightness and colour temperature share the same gamma ramp, so adjusting
-one does not overwrite the other.
+Switch. It follows system appearance automatically. Brightness uses a standard AppKit slider and
+colour temperature uses the warm-to-cool gradient control embedded in a menu row. Software
+brightness and colour temperature share the same gamma ramp, so adjusting one does not overwrite
+the other.
 
 ## Not started
 
 ### 1. Settings view
 
-`SettingsView` is SwiftUI and retains the app's selected palette. The popup is a native AppKit menu
-and deliberately does not apply that palette.
+`SettingsView` is SwiftUI and follows the current macOS light or dark appearance. The popup is a
+native AppKit menu and also follows system appearance.
 
 **Clock format.** The .NET `TimePicker` took a `ClockIdentifier` (`24HourClock` /
 `12HourClock`). AppKit has no equivalent — 24-hour display is a locale property — so the
@@ -190,7 +190,7 @@ parts that still need a person looking at the screen.
 - [ ] Gamma apply and reset on quit, across sleep/wake and display-mode changes.
 - [ ] DDC brightness writes on an external display over HDMI/DisplayPort/USB-C.
 - [ ] HDR behaviour with gamma tables applied.
-- [ ] Light/dark switching across all ten palettes.
+- [ ] Settings window updates when macOS appearance changes between light and dark.
 - [ ] All five schedule states, including both transitions.
 - [ ] Settings round trip through `~/Library/Application Support/Amber/settings.json`.
 - [ ] Menu-bar-only behaviour: no Dock icon, no app-switcher entry, no quit on window close.

@@ -29,9 +29,6 @@ public struct AppSettings: Equatable, Sendable {
     public static let defaultManualColorTempK = 6500
     public static let defaultManualBrightness = 80
 
-    public static let defaultLightThemeName = "Light Green"
-    public static let defaultDarkThemeName = "Dark Green"
-
     // MARK: - Values
 
     public var dayColorTempK: Int = defaultDayColorTempK
@@ -43,9 +40,6 @@ public struct AppSettings: Equatable, Sendable {
     public var autoColorTemperature: Bool = true
     public var manualBrightness: Int = defaultManualBrightness
     public var manualColorTempK: Int = defaultManualColorTempK
-    public var lightModeTheme: String = defaultLightThemeName
-    public var darkModeTheme: String = defaultDarkThemeName
-
     /// Whether the user wants Night Mode Controller to start with the Mac.
     ///
     /// This records intent only. The actual registration lives in the system's login items, which
@@ -66,27 +60,14 @@ public struct AppSettings: Equatable, Sendable {
         min(max(value, kelvinRange.lowerBound), kelvinRange.upperBound)
     }
 
-    /// Returns a copy with every value inside its supported range, every theme name
-    /// valid, and every schedule time well formed.
+    /// Returns a copy with every value inside its supported range and every schedule time well formed.
     public func normalized() -> AppSettings {
         var copy = self
-
-        if lightModeTheme == "Light Orange", darkModeTheme == "Dark Orange" {
-            copy.lightModeTheme = AppSettings.defaultLightThemeName
-            copy.darkModeTheme = AppSettings.defaultDarkThemeName
-        }
 
         copy.manualBrightness = AppSettings.clampBrightness(manualBrightness)
         copy.manualColorTempK = AppSettings.clampKelvin(manualColorTempK)
         copy.dayColorTempK = AppSettings.clampKelvin(dayColorTempK)
         copy.nightColorTempK = AppSettings.clampKelvin(nightColorTempK)
-
-        if !ThemeCatalog.lightNames.contains(lightModeTheme) {
-            copy.lightModeTheme = AppSettings.defaultLightThemeName
-        }
-        if !ThemeCatalog.darkNames.contains(darkModeTheme) {
-            copy.darkModeTheme = AppSettings.defaultDarkThemeName
-        }
 
         if !morningStart.isValid { copy.morningStart = AppSettings.defaultMorningStart }
         if !morningEnd.isValid { copy.morningEnd = AppSettings.defaultMorningEnd }
@@ -110,8 +91,6 @@ extension AppSettings: Codable {
         case autoColorTemperature
         case manualBrightness
         case manualColorTempK
-        case lightModeTheme
-        case darkModeTheme
         case launchAtLogin
     }
 
@@ -131,8 +110,6 @@ extension AppSettings: Codable {
         autoColorTemperature = Self.decode(container, .autoColorTemperature, autoColorTemperature)
         manualBrightness = Self.decode(container, .manualBrightness, manualBrightness)
         manualColorTempK = Self.decode(container, .manualColorTempK, manualColorTempK)
-        lightModeTheme = Self.decode(container, .lightModeTheme, lightModeTheme)
-        darkModeTheme = Self.decode(container, .darkModeTheme, darkModeTheme)
         launchAtLogin = Self.decode(container, .launchAtLogin, launchAtLogin)
     }
 
@@ -148,8 +125,6 @@ extension AppSettings: Codable {
         try container.encode(autoColorTemperature, forKey: .autoColorTemperature)
         try container.encode(manualBrightness, forKey: .manualBrightness)
         try container.encode(manualColorTempK, forKey: .manualColorTempK)
-        try container.encode(lightModeTheme, forKey: .lightModeTheme)
-        try container.encode(darkModeTheme, forKey: .darkModeTheme)
         try container.encode(launchAtLogin, forKey: .launchAtLogin)
     }
 

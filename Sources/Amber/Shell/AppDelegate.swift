@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var quickControlsMenu: NSMenu?
     private var brightnessMenuRow: MenuSliderRow?
-    private var temperatureMenuRow: MenuSliderRow?
+    private var temperatureMenuRow: MenuTemperatureSliderRow?
     private var automaticMenuRow: MenuToggleRow?
     private var menuStatusItem: NSMenuItem?
     private var settingsWindow: HidingWindow?
@@ -77,7 +77,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             brightnessService: brightnessService,
             colorService: colorService,
             schedule: schedule,
-            theme: themeService,
             loginItemService: loginItemService
         )
         viewModel.onShowSettings = { [weak self] in
@@ -94,7 +93,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.loginItemService = loginItemService
         self.viewModel = viewModel
 
-        themeService.applyForCurrentMode(settings: viewModel.settings)
         configureStatusItem(viewModel: viewModel)
 
         viewModel.applyInitialState()
@@ -149,15 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(brightnessItem)
         self.brightnessMenuRow = brightnessRow
 
-        let temperatureRow = MenuSliderRow(
-            title: "Color temperature",
-            unit: " K",
-            value: viewModel.colorTemperature,
-            minimum: 900,
-            maximum: 6600,
-            target: self,
-            action: #selector(temperatureChanged(_:))
-        )
+        let temperatureRow = MenuTemperatureSliderRow(viewModel: viewModel)
         let temperatureItem = NSMenuItem()
         temperatureItem.view = temperatureRow
         menu.addItem(temperatureItem)
@@ -181,25 +171,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.menuStatusItem = statusItem
 
         menu.addItem(.separator())
-        let refreshItem = NSMenuItem(
-            title: "Refresh Displays",
-            action: #selector(refreshDisplays),
-            keyEquivalent: ""
-        )
-        refreshItem.target = self
-        menu.addItem(refreshItem)
-
-        let settingsItem = NSMenuItem(
-            title: "Settings…",
-            action: #selector(showSettingsFromMenu),
-            keyEquivalent: ""
-        )
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
-        let quitItem = NSMenuItem(title: "Quit", action: #selector(quitFromMenu), keyEquivalent: "")
-        quitItem.target = self
-        menu.addItem(quitItem)
+        menu.addItem(actionMenuItem(title: "Refresh Displays", action: #selector(refreshDisplays)))
+        menu.addItem(actionMenuItem(title: "Settings…", action: #selector(showSettingsFromMenu)))
+        menu.addItem(actionMenuItem(title: "Quit", action: #selector(quitFromMenu)))
 
         self.statusItem = item
         self.quickControlsMenu = menu
@@ -207,13 +181,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateQuickControlsMenu(viewModel: viewModel)
     }
 
-    @objc private func brightnessChanged(_ sender: NSSlider) {
-        viewModel?.brightness = sender.integerValue
-        if let viewModel { updateQuickControlsMenu(viewModel: viewModel) }
+    private func actionMenuItem(title: String, action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.view = MenuActionRow(title: title)
+        return item
     }
 
-    @objc private func temperatureChanged(_ sender: NSSlider) {
-        viewModel?.colorTemperature = sender.integerValue
+    @objc private func brightnessChanged(_ sender: NSSlider) {
+        viewModel?.brightness = sender.integerValue
         if let viewModel { updateQuickControlsMenu(viewModel: viewModel) }
     }
 
@@ -239,8 +215,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateQuickControlsMenu(viewModel: MainViewModel) {
         brightnessMenuRow?.update(value: viewModel.brightness)
         brightnessMenuRow?.slider.isEnabled = viewModel.hasBrightnessSupport
-        temperatureMenuRow?.update(value: viewModel.colorTemperature)
-        temperatureMenuRow?.slider.isEnabled = viewModel.manualColorEnabled
         automaticMenuRow?.button.state = viewModel.autoColorTemperature ? .on : .off
         menuStatusItem?.title = viewModel.hasNoDisplays
             ? "No active displays found"
@@ -249,6 +223,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         if let viewModel { updateQuickControlsMenu(viewModel: viewModel) }
+    }
+
+    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+        for menuItem in menu.items {
+            (menuItem.view as? MenuHoverableRow)?.isMenuHighlighted = menuItem === item
+        }
     }
 
     // MARK: - Settings window

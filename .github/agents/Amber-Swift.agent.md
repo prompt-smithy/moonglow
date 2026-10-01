@@ -27,7 +27,7 @@ platform-specific release artifacts.
 - `AppDelegate` is the composition root. Do not introduce a DI container without a concrete need.
 - One `MainViewModel` instance backs both the popup and the settings window. Never create a second.
 - Platform behaviour is isolated behind `DisplayService`, `BrightnessService`, and
-  `ColorTemperatureService`. `ThemeApplying` is implemented in the app target.
+  `ColorTemperatureService`. `ThemeService` observes the system appearance in the app target.
 - `legacy-csharp/` is the original .NET 10 / Avalonia app. Treat it as **read-only reference**.
   Never build, modify, or extend it unless explicitly asked.
 - `docs/PORTING.md` is the authoritative status of what is ported, stubbed, and outstanding.
@@ -36,9 +36,9 @@ platform-specific release artifacts.
 
 - Brightness stays in `1...100` percent. Colour temperature stays in `900...6600` K, in 100 K steps.
 - Defaults: manual brightness 80, manual temperature 6500 K, day 6500 K, night 1200 K, automatic
-  mode on, schedule 06:00–07:00 and 17:30–18:30, light theme "Light Orange", dark "Dark Orange".
-- Preserve the exact light and dark theme order and the neutral control accents for White,
-  Dark Grey, and Black. `ThemeCatalogTests` asserts these.
+  mode on, schedule 06:00–07:00 and 17:30–18:30.
+- Appearance is automatic: the system's light/dark mode selects one of two built-in neutral styles.
+  Theme preferences are not persisted or user-selectable.
 - Never report a display capability unless the backend can actually apply it.
 - Restore ColorSync gamma state on normal exit.
 - Keep the private CoreDisplay `IOAVService*` API confined to `NativeBridge.swift` and document

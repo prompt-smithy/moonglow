@@ -60,18 +60,6 @@ public protocol ColorTemperatureService: AnyObject {
     func reset()
 }
 
-/// Applies the palette matching the current system appearance.
-///
-/// This lives in AmberKit as a protocol so the view model can trigger theme changes
-/// without AmberKit depending on SwiftUI. The app target provides the implementation.
-///
-/// Settings are passed in rather than looked up so the theme layer never re-reads from
-/// disk and the view model stays the single source of truth.
-@MainActor
-public protocol ThemeApplying: AnyObject {
-    func applyForCurrentMode(settings: AppSettings)
-}
-
 /// Registers Night Mode Controller as a login item so it starts with the Mac.
 ///
 /// The system owns this state, not the app: the user can remove the login item in System Settings,
