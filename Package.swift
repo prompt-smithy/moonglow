@@ -13,7 +13,7 @@ import PackageDescription
 let package = Package(
     name: "Amber",
     platforms: [
-        .macOS(.v14)
+        .macOS(.v12)
     ],
     products: [
         .executable(name: "Amber", targets: ["Amber"]),
@@ -22,7 +22,8 @@ let package = Package(
     targets: [
         .target(
             name: "AmberKit",
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v5)],
+            linkerSettings: [.linkedFramework("IOKit")]
         ),
         .executableTarget(
             name: "Amber",

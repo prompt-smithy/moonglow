@@ -61,7 +61,7 @@ struct TemperatureRangeSlider: View {
 
     private func handle(at x: CGFloat) -> some View {
         Circle()
-            .fill(theme.accentColor)
+            .fill(Color(nsColor: .systemGray))
             .overlay {
                 Circle()
                     .strokeBorder(theme.cardBackgroundColor, lineWidth: 2)

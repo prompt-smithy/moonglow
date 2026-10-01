@@ -54,6 +54,5 @@ extension AppTheme {
     var buttonHoverColor: Color { Color(hex: buttonHover) }
     var strongTextColor: Color { Color(hex: strongText) }
 
-    /// The accent used for control tinting; neutral for White, Dark Grey, and Black.
-    var controlAccentColor: Color { Color(hex: ThemeCatalog.controlAccent(for: self)) }
+    var controlAccentColor: Color { accentColor }
 }

@@ -2,15 +2,16 @@
 
 A macOS menu-bar app for external-display hardware brightness and scheduled colour temperature.
 
-The app includes a neutral, macOS-style menu-bar popup and a settings window for the temperature
-schedule, startup behavior, displays, and appearance. See [`docs/PORTING.md`](docs/PORTING.md)
+The app includes a native menu-bar popup and a settings window for the temperature schedule,
+startup behavior, and displays. Its light or dark appearance follows macOS automatically. See [`docs/PORTING.md`](docs/PORTING.md)
 for implementation status and platform details.
 
 ## Download
 
 [Download the macOS installer (Apple Silicon)](https://github.com/prompt-smithy/Night_Mode_Controller-MacOS/releases/download/v2/Night-Mode-Controller-macOS-arm64.dmg.zip)
 
-Requires macOS 14 or later on an Apple Silicon Mac. This test build is ad-hoc signed and not
+The current download is for Apple Silicon and requires macOS 14 or later. The packaging script
+builds a universal app for macOS 12 or later. This test build is ad-hoc signed and not
 notarized; on first launch, Control-click the app and choose **Open** if macOS blocks it.
 
 ## Layout
@@ -18,7 +19,7 @@ notarized; on first launch, Control-click the app and choose **Open** if macOS b
 | Path | Purpose |
 | --- | --- |
 | `Package.swift` | SwiftPM manifest. Two targets: `AmberKit` and `Amber`. |
-| `Sources/AmberKit/` | Platform logic: models, settings, schedule math, theme catalog, view model, service protocols. No UI framework dependency. |
+| `Sources/AmberKit/` | Platform logic: models, settings, schedule math, light/dark appearance colors, view model, service protocols. No UI framework dependency. |
 | `Sources/Amber/` | macOS app shell: entry point, status item, popover, settings window, SwiftUI views, native bridges. |
 | `Tests/AmberKitTests/` | Swift Testing suite for everything in `AmberKit`. |
 | `Packaging/` | `Info.plist` and `build-app.sh` (app bundle, DMG, ZIP). |
@@ -26,7 +27,7 @@ notarized; on first launch, Control-click the app and choose **Open** if macOS b
 
 ## Requirements
 
-- macOS 14 or later (deployment target).
+- macOS 12 or later (deployment target).
 - **Full Xcode** (27.0 verified). A Command Line Tools-only install is not sufficient on this
   machine — its SwiftPM, compiler, and SDK disagree with each other. See `docs/PORTING.md`.
 
@@ -42,12 +43,16 @@ bash Packaging/build-app.sh  # build the app bundle, DMG, and ZIP
 The packaging script creates:
 
 - `artifacts/Night Mode Controller.app`
-- `release/Night-Mode-Controller-macOS-arm64.dmg`
-- `release/Night-Mode-Controller-macOS-arm64.zip`
+- `release/Night-Mode-Controller-macOS-universal.dmg`
+- `release/Night-Mode-Controller-macOS-universal.zip`
 
-It builds an Apple Silicon (`arm64`) app for macOS 14 or later. The app bundle is ad-hoc signed
-for local testing; it is not Developer ID signed or notarized. Users may need to Control-click the
-app and choose **Open** on first launch.
+It builds a universal (`arm64` and `x86_64`) app for macOS 12 or later. On Intel, the app probes
+the primary external display for DDC/CI brightness and falls back to software gamma dimming when
+DDC/CI is unavailable. Software dimming changes image output, not the display's backlight, and
+requires CoreGraphics gamma support. Login-item management requires macOS 13 or later. The app
+bundle is ad-hoc signed for local testing; it is not
+Developer ID signed or notarized. Users may need to Control-click the app and choose **Open** on
+first launch.
 
 To preserve the normal outputs when making a separate verification build, set alternate output
 directories:
@@ -71,11 +76,12 @@ container, matching the original design.
   and automatic-mode state stay in sync without a second settings path.
 - Platform behaviour is behind `DisplayService`, `BrightnessService`, and
   `ColorTemperatureService`. `AmberKit` never imports SwiftUI; the app target supplies
-  `ThemeApplying` and `LoginItemService`.
-- View state uses the `Observation` framework (`@Observable`), which is why the deployment
-  target is macOS 14.
-- Colour temperature uses CoreGraphics gamma transfer tables. Hardware brightness uses
-  DDC/CI over the **private** CoreDisplay `IOAVService*` API on Apple Silicon.
+  automatic appearance handling and `LoginItemService`.
+- View state uses Combine's `ObservableObject` and `@Published`, keeping the deployment target at
+  macOS 12 while supporting both Intel and Apple Silicon.
+- Colour temperature and software brightness share CoreGraphics gamma transfer tables. Hardware
+  brightness uses the private CoreDisplay `IOAVService*` API on Apple Silicon and IOKit framebuffer
+  I2C on Intel, with gamma dimming as the fallback when DDC/CI is unavailable.
 
 The private API is isolated in `Sources/AmberKit/Services/NativeBridge.swift`. The app is
 distributed directly rather than through the Mac App Store because of that dependency. The current
@@ -94,19 +100,17 @@ switched off.
 
 - Brightness stays in `1...100` percent; colour temperature in `900...6600` K, in 100 K steps.
 - Defaults: manual brightness 80%, manual temperature 6500 K, day 6500 K, night 1200 K,
-  automatic mode on, schedule 06:00–07:00 and 17:30–18:30, Light Green and Dark Green palettes.
-- Existing settings that contain the original Light Orange/Dark Orange default pair migrate to
-  Light Green/Dark Green. Other saved palette selections are preserved.
+  automatic mode on, schedule 06:00–07:00 and 17:30–18:30.
 - Time is always twelve-hour. Morning and evening are set with separate hour, minute, and AM/PM
   drop-downs, and the stored value is always `HH:mm`, so the display can never move a scheduled
   time.
 - Day and night targets are edited as one two-handle bar, never as two independent values:
   the range keeps `night <= day` and snaps to the 100 K step.
-- The popup uses neutral system-grey controls and text, regardless of the selected appearance
-  palette. The color-temperature slider keeps its warm-to-cool gradient; its other controls remain
-  neutral. The settings window uses the selected light and dark palettes.
-- Displays and Appearance are always visible in the settings window; schedule controls are followed
-  by Startup, Displays, and Appearance.
+- The popup is a native AppKit menu with system styling. Brightness uses a system slider and color
+  temperature uses the warm-to-cool gradient slider. The Settings window switches automatically
+  between neutral light and dark appearances with macOS.
+- Displays are always available in the settings window; schedule controls are followed by Startup
+  and Displays.
 - A display capability is never reported unless the backend can actually apply it.
 - ColourSync gamma state is restored on quit.
 - Settings remain at `~/Library/Application Support/Amber/settings.json` for compatibility with existing installs.

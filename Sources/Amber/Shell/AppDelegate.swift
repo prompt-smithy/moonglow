@@ -14,19 +14,22 @@ import AmberKit
 /// 4. Wire callbacks, create the popup and settings window.
 /// 5. Apply the persisted state to the hardware and start the scheduler.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     static let shared = AppDelegate()
 
     private var statusItem: NSStatusItem?
-    private var quickControlsPanel: MenuBarPanel?
-    private var outsideClickMonitor: Any?
+    private var quickControlsMenu: NSMenu?
+    private var brightnessMenuRow: MenuSliderRow?
+    private var temperatureMenuRow: MenuTemperatureSliderRow?
+    private var automaticMenuRow: MenuToggleRow?
+    private var menuStatusItem: NSMenuItem?
     private var settingsWindow: HidingWindow?
 
     private var themeService: ThemeService?
     private var schedule: ScheduleService?
     private var colorService: ColorTemperatureService?
-    private var brightnessService: AppleSiliconBrightnessService?
+    private var brightnessService: BrightnessFallbackService?
     private var loginItemService: LoginItemService?
     private var viewModel: MainViewModel?
 
@@ -49,11 +52,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Order matters: the brightness backend owns the DDC probe, and the display service needs its
         // answer before it can claim any display is brightness-capable.
-        let brightnessService = AppleSiliconBrightnessService()
+        let hardwareBrightnessService: BrightnessService
+        #if arch(arm64)
+        hardwareBrightnessService = AppleSiliconBrightnessService()
+        #else
+        hardwareBrightnessService = IntelDDCBrightnessService(displayID: CGMainDisplayID())
+        #endif
         let displayService = CoreGraphicsDisplayService(
-            ddcBrightnessSupported: brightnessService.isSupported
+            ddcBrightnessSupported: hardwareBrightnessService.isSupported
         )
         let colorService = CoreGraphicsColorTemperatureService(displayService: displayService)
+        let brightnessService = BrightnessFallbackService(
+            hardware: hardwareBrightnessService,
+            software: CoreGraphicsBrightnessService(colorService: colorService)
+        )
         let schedule = ScheduleService(colorService: colorService)
         let loginItemService = SMAppServiceLoginItemService()
 
@@ -65,11 +77,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             brightnessService: brightnessService,
             colorService: colorService,
             schedule: schedule,
-            theme: themeService,
             loginItemService: loginItemService
         )
         viewModel.onShowSettings = { [weak self] in
-            self?.closeQuickControls()
             self?.showSettingsWindow()
         }
         viewModel.onQuit = {
@@ -83,8 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.loginItemService = loginItemService
         self.viewModel = viewModel
 
-        themeService.applyForCurrentMode(settings: viewModel.settings)
-        configureStatusItem(viewModel: viewModel, themeService: themeService)
+        configureStatusItem(viewModel: viewModel)
 
         viewModel.applyInitialState()
         viewModel.applyLoginItemState(isFirstLaunchAfterInstall: isFirstLaunchAfterInstall)
@@ -101,12 +110,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         colorService?.reset()
         brightnessService?.dispose()
         settingsWindow?.allowClose = true
-        stopWatchingForOutsideClicks()
     }
 
     // MARK: - Status item and popup
 
-    private func configureStatusItem(viewModel: MainViewModel, themeService: ThemeService) {
+    private func configureStatusItem(viewModel: MainViewModel) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             let image = NSImage(
@@ -115,86 +123,112 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             image?.isTemplate = true
             button.image = image
-            button.target = self
-            button.action = #selector(toggleQuickControls)
         }
 
-        // The panel draws no chrome, so the rounded material surface comes from the SwiftUI content.
-        // A hosting view is used directly rather than an `NSPopover` because AppKit gives no way to
-        // turn off a popover's anchor arrow.
-        let hosting = NSHostingView(
-            rootView: QuickControlsView(viewModel: viewModel, themeService: themeService)
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.delegate = self
+
+        let titleItem = NSMenuItem(title: "Night Mode Controller", action: nil, keyEquivalent: "")
+        titleItem.isEnabled = false
+        menu.addItem(titleItem)
+        menu.addItem(.separator())
+
+        let brightnessRow = MenuSliderRow(
+            title: "Brightness",
+            value: viewModel.brightness,
+            minimum: 1,
+            maximum: 100,
+            target: self,
+            action: #selector(brightnessChanged(_:))
         )
+        let brightnessItem = NSMenuItem()
+        brightnessItem.view = brightnessRow
+        menu.addItem(brightnessItem)
+        self.brightnessMenuRow = brightnessRow
+
+        let temperatureRow = MenuTemperatureSliderRow(viewModel: viewModel)
+        let temperatureItem = NSMenuItem()
+        temperatureItem.view = temperatureRow
+        menu.addItem(temperatureItem)
+        self.temperatureMenuRow = temperatureRow
+
+        let automaticRow = MenuToggleRow(
+            title: "Automatic (time based)",
+            isOn: viewModel.autoColorTemperature,
+            target: self,
+            action: #selector(automaticColorTemperatureChanged(_:))
+        )
+        let automaticItem = NSMenuItem()
+        automaticItem.view = automaticRow
+        menu.addItem(automaticItem)
+        self.automaticMenuRow = automaticRow
+
+        let statusItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        statusItem.isEnabled = false
+        menu.addItem(.separator())
+        menu.addItem(statusItem)
+        self.menuStatusItem = statusItem
+
+        menu.addItem(.separator())
+        menu.addItem(actionMenuItem(title: "Refresh Displays", action: #selector(refreshDisplays)))
+        menu.addItem(actionMenuItem(title: "Settings…", action: #selector(showSettingsFromMenu)))
+        menu.addItem(actionMenuItem(title: "Quit", action: #selector(quitFromMenu)))
 
         self.statusItem = item
-        self.quickControlsPanel = MenuBarPanel(contentView: hosting)
+        self.quickControlsMenu = menu
+        item.menu = menu
+        updateQuickControlsMenu(viewModel: viewModel)
     }
 
-    @objc private func toggleQuickControls() {
-        guard let panel = quickControlsPanel, let button = statusItem?.button else { return }
+    private func actionMenuItem(title: String, action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.view = MenuActionRow(title: title)
+        return item
+    }
 
-        if panel.isVisible {
-            closeQuickControls()
-            return
+    @objc private func brightnessChanged(_ sender: NSSlider) {
+        viewModel?.brightness = sender.integerValue
+        if let viewModel { updateQuickControlsMenu(viewModel: viewModel) }
+    }
+
+    @objc private func automaticColorTemperatureChanged(_ sender: NSButton) {
+        guard let viewModel else { return }
+        viewModel.autoColorTemperature = sender.state == .on
+        updateQuickControlsMenu(viewModel: viewModel)
+    }
+
+    @objc private func refreshDisplays() {
+        viewModel?.refreshDisplays()
+        if let viewModel { updateQuickControlsMenu(viewModel: viewModel) }
+    }
+
+    @objc private func showSettingsFromMenu() {
+        viewModel?.showSettings()
+    }
+
+    @objc private func quitFromMenu() {
+        viewModel?.quit()
+    }
+
+    private func updateQuickControlsMenu(viewModel: MainViewModel) {
+        brightnessMenuRow?.update(value: viewModel.brightness)
+        brightnessMenuRow?.slider.isEnabled = viewModel.hasBrightnessSupport
+        automaticMenuRow?.button.state = viewModel.autoColorTemperature ? .on : .off
+        menuStatusItem?.title = viewModel.hasNoDisplays
+            ? "No active displays found"
+            : "\(viewModel.displays.count) display(s) available"
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        if let viewModel { updateQuickControlsMenu(viewModel: viewModel) }
+    }
+
+    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+        for menuItem in menu.items {
+            (menuItem.view as? MenuHoverableRow)?.isMenuHighlighted = menuItem === item
         }
-
-        position(panel, under: button)
-
-        // A non-activating panel takes key status without activating the app, so the popup opens
-        // without pulling focus away from whatever the user was doing.
-        panel.makeKeyAndOrderFront(nil)
-        watchForOutsideClicks()
-    }
-
-    /// Places the popup under the status item, right edges aligned, clamped to the screen.
-    private func position(_ panel: NSWindow, under button: NSStatusBarButton) {
-        guard let buttonWindow = button.window else { return }
-
-        let buttonFrame = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
-        let size = panel.frame.size
-
-        var origin = NSPoint(
-            x: buttonFrame.maxX - size.width,
-            y: buttonFrame.minY - Self.quickControlsGap - size.height
-        )
-
-        if let visible = (buttonWindow.screen ?? NSScreen.main)?.visibleFrame {
-            origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - size.width - 8)
-            origin.y = max(origin.y, visible.minY + 8)
-        }
-
-        panel.setFrame(NSRect(origin: origin, size: size), display: true)
-    }
-
-    /// Gap between the menu bar and the popup. Apple's own menu-bar popups sit almost flush, so this
-    /// is deliberately small — a visible gap reads as the popup hanging lower than the system's.
-    private static let quickControlsGap: CGFloat = 2
-
-    private func closeQuickControls() {
-        stopWatchingForOutsideClicks()
-        quickControlsPanel?.orderOut(nil)
-    }
-
-    /// Closes the popup on a click outside it, including clicks that land in another application.
-    /// Those are never delivered to the app, and a non-activating panel does not resign key when
-    /// another app takes focus, so nothing else would notice them.
-    private func watchForOutsideClicks() {
-        stopWatchingForOutsideClicks()
-
-        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] _ in
-            // Global monitors are delivered on the main thread.
-            MainActor.assumeIsolated {
-                self?.closeQuickControls()
-            }
-        }
-    }
-
-    private func stopWatchingForOutsideClicks() {
-        guard let outsideClickMonitor else { return }
-        NSEvent.removeMonitor(outsideClickMonitor)
-        self.outsideClickMonitor = nil
     }
 
     // MARK: - Settings window
@@ -215,6 +249,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 defer: false
             )
             window.title = "Night Mode Controller"
+            window.titleVisibility = .hidden
+            addTitlebarLabel(to: window)
             window.isReleasedWhenClosed = false
             window.minSize = NSSize(width: SettingsView.minimumWidth, height: 320)
 
@@ -245,6 +281,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         settingsWindow?.showWithInactivityTimeout()
+    }
+
+    private func addTitlebarLabel(to window: NSWindow) {
+        guard
+            let zoomButton = window.standardWindowButton(.zoomButton),
+            let titlebarView = zoomButton.superview
+        else { return }
+
+        let label = NSTextField(labelWithString: "Night Mode Controller")
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.alignment = .left
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        titlebarView.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: zoomButton.trailingAnchor, constant: 6),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: titlebarView.trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: zoomButton.centerYAnchor)
+        ])
     }
 
     /// Sizes the settings window to the height the sheet actually needs, so it opens without a

@@ -1,6 +1,5 @@
 import SwiftUI
 import AmberKit
-import Observation
 
 /// The main settings window.
 ///
@@ -11,8 +10,8 @@ import Observation
 /// ``TemperatureRangeSlider``, instead of the two separate sliders the .NET window used.
 struct SettingsView: View {
 
-    @Bindable var viewModel: MainViewModel
-    @Bindable var themeService: ThemeService
+    @ObservedObject var viewModel: MainViewModel
+    @ObservedObject var themeService: ThemeService
 
     /// Reports the height the whole sheet needs once it has been laid out so the window can fit it.
     var onHeightChange: ((CGFloat) -> Void)?
@@ -27,18 +26,22 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                scheduleSection
-                startupSection
-                displaysSection
-                appearanceSection
+            VStack(alignment: .leading, spacing: 6) {
+                caption("Set the automatic color temperature range and daily transition times. Use the tray slider for manual adjustments.")
+
+                VStack(alignment: .leading, spacing: 12) {
+                    scheduleSection
+                    startupSection
+                    displaysSection
+                }
             }
-            .padding(14)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
             .background(heightReader { contentHeight = $0 })
         }
         .frame(minWidth: Self.minimumWidth, alignment: .topLeading)
         .background(theme.windowBackgroundColor)
-        .onChange(of: contentHeight) { _, height in
+        .onChange(of: contentHeight) { height in
             guard height > 0 else { return }
             onHeightChange?(height)
         }
@@ -50,7 +53,7 @@ struct SettingsView: View {
         GeometryReader { geometry in
             Color.clear
                 .onAppear { assign(geometry.size.height) }
-                .onChange(of: geometry.size.height) { _, height in assign(height) }
+                .onChange(of: geometry.size.height) { height in assign(height) }
         }
     }
 
@@ -58,31 +61,20 @@ struct SettingsView: View {
 
     private var displaysSection: some View {
         card {
-            VStack(alignment: .leading, spacing: 8) {
-                sectionTitle("Displays")
-
+            VStack(alignment: .leading, spacing: 4) {
                 HStack {
+                    sectionTitle("Displays")
                     Spacer()
                     Button("Refresh") { viewModel.refreshDisplays() }
                         .controlSize(.small)
                 }
 
                 ForEach(viewModel.displays) { display in
-                    HStack(spacing: 10) {
-                        Circle()
-                            .fill(theme.accentColor)
-                            .frame(width: 7, height: 7)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(display.name)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(theme.primaryTextColor)
-                            caption(display.capabilitySummary)
-                        }
-
-                        Spacer()
-
-                        caption(display.identifier)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(display.name)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(theme.primaryTextColor)
+                        caption(display.capabilitySummary)
                     }
                 }
 
@@ -97,12 +89,19 @@ struct SettingsView: View {
 
     private var scheduleSection: some View {
         card {
-            VStack(alignment: .leading, spacing: 10) {
-                Toggle("Automatic (time based)", isOn: $viewModel.autoColorTemperature)
-                    .font(.system(size: 13))
-                    .foregroundStyle(theme.primaryTextColor)
-                    .toggleStyle(.switch)
-                    .tint(theme.controlAccentColor)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Follow color temperature schedule")
+                        .font(.system(size: 13))
+                        .foregroundStyle(theme.primaryTextColor)
+
+                    Spacer()
+
+                    Toggle("", isOn: $viewModel.autoColorTemperature)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(Color(nsColor: .systemGray))
+                }
 
                 temperatureRangeControl
 
@@ -154,7 +153,17 @@ struct SettingsView: View {
                 timeField(label: "FROM", time: from)
                 timeField(label: "TO", time: to)
             }
+
+            caption(transitionDescription(for: title))
         }
+    }
+
+    private func transitionDescription(for title: String) -> String {
+        if title.hasPrefix("Morning") {
+            return "The screen cools from the warm value back up to the cool value between these times."
+        }
+
+        return "The screen warms from the cool value down to the warm value between these times."
     }
 
     private func timeField(label: String, time: Binding<TimeOfDay>) -> some View {
@@ -169,14 +178,14 @@ struct SettingsView: View {
 
     private var startupSection: some View {
         card {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 sectionTitle("Startup")
 
                 Toggle("Launch at login", isOn: $viewModel.launchAtLogin)
                     .font(.system(size: 13))
                     .foregroundStyle(theme.primaryTextColor)
                     .toggleStyle(.switch)
-                    .tint(theme.controlAccentColor)
+                    .tint(Color(nsColor: .systemGray))
 
                 caption(viewModel.launchAtLoginStatus)
 
@@ -186,49 +195,6 @@ struct SettingsView: View {
                 }
             }
         }
-    }
-
-    // MARK: - Appearance
-
-    private var appearanceSection: some View {
-        card {
-            VStack(alignment: .leading, spacing: 8) {
-                sectionTitle("Appearance")
-
-                HStack(alignment: .top, spacing: 12) {
-                    themeColumn(
-                        title: "LIGHT MODE",
-                        selection: $viewModel.lightModeTheme,
-                        names: viewModel.lightThemes
-                    )
-                    themeColumn(
-                        title: "DARK MODE",
-                        selection: $viewModel.darkModeTheme,
-                        names: viewModel.darkThemes
-                    )
-                }
-            }
-        }
-    }
-
-    private func themeColumn(
-        title: String,
-        selection: Binding<String>,
-        names: [String]
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            caption(title)
-
-            ThemedDropDown(
-                options: names,
-                selection: selection,
-                theme: theme,
-                accessibilityName: title,
-                title: { $0 },
-                listWidth: 200
-            )
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Layout helpers

@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Combine
 
 /// UI state for both the quick-controls popup and the settings window.
 ///
@@ -11,11 +11,9 @@ import Observation
 /// - Colour temperature: `900...6600` K, in 100 K steps.
 ///
 /// ## Observation
-/// `@Observable` replaces `ObservableObject` + `CommunityToolkit.Mvvm`. Views read these
-/// properties directly; mutations mark only the touched property as changed.
+/// Published properties keep the popup and settings window in sync on macOS 13 and later.
 @MainActor
-@Observable
-public final class MainViewModel {
+public final class MainViewModel: ObservableObject {
 
     // MARK: - Dependencies
 
@@ -24,20 +22,19 @@ public final class MainViewModel {
     private let brightnessService: BrightnessService
     private let colorService: ColorTemperatureService
     private let schedule: ScheduleService
-    private let theme: ThemeApplying
     private let loginItemService: LoginItemService
 
     // MARK: - State
 
     /// Normalized settings. Mutate through the properties below so writes are persisted.
-    public private(set) var settings: AppSettings
+    @Published public private(set) var settings: AppSettings
 
     /// Active displays, refreshed on demand.
-    public private(set) var displays: [DisplayInfo] = []
+    @Published public private(set) var displays: [DisplayInfo] = []
 
     /// The temperature currently on screen. In automatic mode this tracks the schedule
     /// rather than the saved manual value, which is why it is stored separately.
-    private var displayedTemperature: Int
+    @Published private var displayedTemperature: Int
 
     // MARK: - Callbacks
 
@@ -54,7 +51,6 @@ public final class MainViewModel {
         brightnessService: BrightnessService,
         colorService: ColorTemperatureService,
         schedule: ScheduleService,
-        theme: ThemeApplying,
         loginItemService: LoginItemService
     ) {
         self.store = store
@@ -62,7 +58,6 @@ public final class MainViewModel {
         self.brightnessService = brightnessService
         self.colorService = colorService
         self.schedule = schedule
-        self.theme = theme
         self.loginItemService = loginItemService
 
         let loaded = store.load()
@@ -95,7 +90,7 @@ public final class MainViewModel {
 
     public var brightnessStatus: String {
         hasBrightnessSupport
-            ? "Hardware brightness is available through DDC/CI."
+            ? "Brightness control is available."
             : "Brightness control is unavailable for the detected display connection."
     }
 
@@ -206,35 +201,6 @@ public final class MainViewModel {
         set { setTime(newValue, \.eveningEnd) }
     }
 
-    // MARK: - Themes
-
-    public var lightThemes: [String] { ThemeCatalog.lightNames }
-    public var darkThemes: [String] { ThemeCatalog.darkNames }
-
-    public var lightModeTheme: String {
-        get { settings.lightModeTheme }
-        set {
-            guard ThemeCatalog.lightNames.contains(newValue),
-                  newValue != settings.lightModeTheme
-            else { return }
-
-            mutateSettings { $0.lightModeTheme = newValue }
-            theme.applyForCurrentMode(settings: settings)
-        }
-    }
-
-    public var darkModeTheme: String {
-        get { settings.darkModeTheme }
-        set {
-            guard ThemeCatalog.darkNames.contains(newValue),
-                  newValue != settings.darkModeTheme
-            else { return }
-
-            mutateSettings { $0.darkModeTheme = newValue }
-            theme.applyForCurrentMode(settings: settings)
-        }
-    }
-
     // MARK: - Startup
 
     /// Whether Night Mode Controller should start with the Mac.
@@ -246,16 +212,22 @@ public final class MainViewModel {
         get { settings.launchAtLogin }
         set {
             guard newValue != settings.launchAtLogin else { return }
-            guard loginItemService.setEnabled(newValue) else { return }
+            guard loginItemService.setEnabled(newValue) else {
+                loginItemRegistrationFailed = true
+                return
+            }
 
+            loginItemRegistrationFailed = false
             mutateSettings { $0.launchAtLogin = newValue }
             loginItemRequiresApproval = loginItemService.requiresApproval
         }
     }
 
+    @Published public private(set) var loginItemRegistrationFailed = false
+
     /// True when macOS has accepted the registration but is holding it until the user approves it
     /// in System Settings. The toggle reads as on, yet Night Mode Controller will not start until then.
-    public private(set) var loginItemRequiresApproval = false
+    @Published public private(set) var loginItemRequiresApproval = false
 
     /// Describes the login-item state for the settings window.
     ///
@@ -263,6 +235,9 @@ public final class MainViewModel {
     /// legitimately disagree — the user can remove the login item in System Settings without
     /// Night Mode Controller ever finding out.
     public var launchAtLoginStatus: String {
+        if loginItemRegistrationFailed {
+            return "macOS did not accept this login item. Run the packaged app on macOS 13 or later, then try again."
+        }
         // Approval is tested first: a request the user has not approved yet is not running, and
         // saying "opens automatically" would be a lie the user cannot act on.
         if loginItemService.requiresApproval {

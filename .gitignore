@@ -1,5 +1,17 @@
-# Swift Package Manager
+# Amber (macOS) ignore policy
+#
+# Committed on purpose - do NOT add ignore rules for these:
+#   Package.swift, Sources/**, Tests/**, Resources/**, Packaging/**, docs/**,
+#   README.md, LICENSE, .github/**  (shared agent definitions)
+#   .sourcekit-lsp/config.json      (pins the Swift extension to the `swiftbuild` build system,
+#                                    which avoids the SwiftPM `.build` lock deadlock on this
+#                                    machine; see the repo notes)
+#   Package.resolved                (see the note in the SwiftPM section below)
+
+# Swift Package Manager / Swift build tooling
 .build/
+# Scratch dir used by `swiftbuild` and by `swift build --scratch-path .build-run`.
+.build-run/
 .swiftpm/
 Packages/
 index-build/
@@ -23,24 +35,27 @@ xcuserdata/
 *.ipa
 *.dSYM
 *.dSYM.zip
+*.xcresult
 
-# Build and release output from Packaging/build-app.sh
+# Generated build and release output from Packaging/build-app.sh
+# artifacts/ holds "Night Mode Controller.app", its .iconset and the DMG staging folder.
 artifacts/
-release/*.dmg
+# Release archives (release/*.dmg is already covered by the *.dmg rule below).
 release/*.zip
+# Disk images are always build output.
+*.dmg
+# Generated app bundles and icon sets must never be committed.
+*.app/
+*.iconset/
 
-# .NET (legacy-csharp, kept as a reference)
-**/bin/
-**/obj/
-.vs/
-*.user
-*.suo
-legacy-csharp/artifacts/
-legacy-csharp/release/*.dmg
-legacy-csharp/release/*.zip
-legacy-csharp/release/windows-x64/Amber.exe
-
-# Editor and OS
+# Local editor / IDE state (machine-specific)
 .vscode/
+.idea/
+.sourcekit-lsp/*
+!.sourcekit-lsp/config.json
+
+# macOS
 .DS_Store
 ._*
+.AppleDouble
+.LSOverride

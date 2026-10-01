@@ -14,6 +14,40 @@ public protocol DisplayService: AnyObject {
 public protocol BrightnessService: AnyObject {
     var isSupported: Bool { get }
     func setBrightness(percent: Int)
+    func dispose()
+}
+
+public extension BrightnessService {
+    func dispose() {}
+}
+
+/// Uses hardware brightness when its DDC/CI probe succeeds, otherwise software gamma dimming.
+public final class BrightnessFallbackService: BrightnessService {
+
+    private let hardware: BrightnessService
+    private let software: BrightnessService
+
+    public init(hardware: BrightnessService, software: BrightnessService) {
+        self.hardware = hardware
+        self.software = software
+    }
+
+    public var isSupported: Bool {
+        hardware.isSupported || software.isSupported
+    }
+
+    public func setBrightness(percent: Int) {
+        if hardware.isSupported {
+            hardware.setBrightness(percent: percent)
+        } else if software.isSupported {
+            software.setBrightness(percent: percent)
+        }
+    }
+
+    public func dispose() {
+        hardware.dispose()
+        software.dispose()
+    }
 }
 
 /// Gamma-table colour temperature.
@@ -24,18 +58,6 @@ public protocol ColorTemperatureService: AnyObject {
     @discardableResult
     func apply(kelvin: Int) -> Bool
     func reset()
-}
-
-/// Applies the palette matching the current system appearance.
-///
-/// This lives in AmberKit as a protocol so the view model can trigger theme changes
-/// without AmberKit depending on SwiftUI. The app target provides the implementation.
-///
-/// Settings are passed in rather than looked up so the theme layer never re-reads from
-/// disk and the view model stays the single source of truth.
-@MainActor
-public protocol ThemeApplying: AnyObject {
-    func applyForCurrentMode(settings: AppSettings)
 }
 
 /// Registers Night Mode Controller as a login item so it starts with the Mac.

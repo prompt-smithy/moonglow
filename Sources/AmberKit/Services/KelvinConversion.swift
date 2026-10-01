@@ -37,12 +37,13 @@ public enum KelvinConversion {
     /// Builds one transfer table per channel for `CGSetDisplayTransferByTable`.
     ///
     /// `capacity` comes from `CGDisplayGammaTableCapacity`. Each table is a linear ramp
-    /// scaled by the channel factor, clamped to `0...1`.
+    /// scaled by the channel and brightness factors, clamped to `0...1`.
     public static func buildRamp(
         capacity: Int,
         redScale: Double,
         greenScale: Double,
-        blueScale: Double
+        blueScale: Double,
+        brightnessScale: Double = 1
     ) -> (red: [Float], green: [Float], blue: [Float]) {
         guard capacity > 0 else { return ([], [], []) }
 
@@ -52,9 +53,9 @@ public enum KelvinConversion {
 
         for index in 0..<capacity {
             let level = capacity == 1 ? 1.0 : Double(index) / Double(capacity - 1)
-            red[index] = Float(clamp(level * redScale, 0, 1))
-            green[index] = Float(clamp(level * greenScale, 0, 1))
-            blue[index] = Float(clamp(level * blueScale, 0, 1))
+            red[index] = Float(clamp(level * redScale * brightnessScale, 0, 1))
+            green[index] = Float(clamp(level * greenScale * brightnessScale, 0, 1))
+            blue[index] = Float(clamp(level * blueScale * brightnessScale, 0, 1))
         }
 
         return (red, green, blue)
