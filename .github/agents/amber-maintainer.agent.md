@@ -35,7 +35,7 @@ Start at the nearest owner and avoid broad repository scans:
 - `Services/MonitorService.cs`: monitor enumeration, DDC capabilities, native-handle ownership, and locking.
 - `Services/ScheduleService.cs`: 10-second schedule ticks, transition interpolation, and 100 K snapping.
 - `Services/SettingsService.cs` and `Models/AppSettings.cs`: JSON persistence, defaults, and schedule parsing.
-- `Services/ThemeService.cs`, `Services/ThemeCatalog.cs`, and `App.xaml`: application resources and shared styles.
+- `Services/ThemeService.cs` and `App.xaml`: light/dark greyscale resources and shared styles.
 - `Views/`: WPF presentation and narrowly scoped interaction code-behind.
 - `Native/NativeMethods.cs`: all P/Invoke declarations and native structures.
 - `Infrastructure/StartupManager.cs`: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registration.

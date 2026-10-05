@@ -13,8 +13,6 @@ public sealed class AppSettings
     public string EveningStart { get; set; } = "18:00";
     public string EveningEnd { get; set; } = "22:00";
 
-    public string LightModeTheme { get; set; } = "Light Green";
-    public string DarkModeTheme { get; set; } = "Dark Green";
     public bool RunAtStartup { get; set; } = false;
 
     public TimeSpan MorningStartTime => TimeSpan.Parse(MorningStart);

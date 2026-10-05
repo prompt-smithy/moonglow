@@ -16,7 +16,7 @@ Night Mode Controller keeps display controls close at hand without adding anothe
 - Applies whole-desktop color temperatures from 1200 K to 6500 K.
 - Smoothly transitions between configurable day and night temperatures.
 - Shares settings between a compact tray popup and the full settings window.
-- Follows Windows light/dark mode and includes selectable themes.
+- Follows Windows light/dark mode with a clean greyscale interface.
 - Refreshes connected displays and can run automatically at sign-in.
 - Runs as a single instance and restores the previous display gamma LUT on exit.
 
@@ -39,7 +39,7 @@ Choose the download that matches your system:
 
 Use an installer for a standard Windows installation, or a portable build to run Night Mode Controller without installing it.
 
-Night Mode Controller runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, themes, time format, and startup options.
+Night Mode Controller runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, time format, and startup options.
 
 ## Limitations
 

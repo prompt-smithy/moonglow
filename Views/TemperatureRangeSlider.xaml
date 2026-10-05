@@ -5,17 +5,23 @@
     <Grid x:Name="Root" Height="28" SizeChanged="Root_SizeChanged">
         <Canvas x:Name="SliderCanvas" Background="Transparent"
                 MouseLeftButtonDown="SliderCanvas_MouseLeftButtonDown">
-            <Border x:Name="BaseTrack" Height="4" CornerRadius="2"
+            <Border x:Name="BaseTrack" Height="6" CornerRadius="3"
                     Background="{DynamicResource ThemeBorder}" />
-            <Border x:Name="SelectedTrack" Height="4" CornerRadius="2"
+            <Border x:Name="SelectedTrack" Height="6" CornerRadius="3"
                     Background="{DynamicResource TemperatureRangeGradient}" />
             <Thumb x:Name="NightThumb" Width="16" Height="16" Focusable="True"
                    ToolTip="Night color temperature" DragDelta="NightThumb_DragDelta"
                    KeyDown="NightThumb_KeyDown">
                 <Thumb.Template>
                     <ControlTemplate TargetType="Thumb">
-                        <Ellipse Fill="#E87925"
-                                 Stroke="{DynamicResource ThemePrimaryText}" StrokeThickness="1" />
+                        <!-- Triangular head, apex up and nudged above the track centre. -->
+                        <Path Data="M 8,0 L 16,15 L 0,15 Z"
+                              Width="16" Height="16"
+                              Stretch="Uniform"
+                              VerticalAlignment="Top" Margin="0,-3,0,0"
+                              Fill="#E87925"
+                              Stroke="{DynamicResource ThemePrimaryText}" StrokeThickness="1"
+                              StrokeLineJoin="Round" />
                     </ControlTemplate>
                 </Thumb.Template>
             </Thumb>
@@ -24,8 +30,14 @@
                    KeyDown="DayThumb_KeyDown">
                 <Thumb.Template>
                     <ControlTemplate TargetType="Thumb">
-                        <Ellipse Fill="#5E91C2"
-                                 Stroke="{DynamicResource ThemePrimaryText}" StrokeThickness="1" />
+                        <!-- Triangular head, apex up and nudged above the track centre. -->
+                        <Path Data="M 8,0 L 16,15 L 0,15 Z"
+                              Width="16" Height="16"
+                              Stretch="Uniform"
+                              VerticalAlignment="Top" Margin="0,-3,0,0"
+                              Fill="#5E91C2"
+                              Stroke="{DynamicResource ThemePrimaryText}" StrokeThickness="1"
+                              StrokeLineJoin="Round" />
                     </ControlTemplate>
                 </Thumb.Template>
             </Thumb>

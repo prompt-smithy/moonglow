@@ -12,6 +12,8 @@ public partial class TemperatureRangeSlider : UserControl
     private const int Maximum = 6600;
     private const int Step = 100;
     private const double ThumbSize = 16;
+    /// <summary>Must match the track <c>Border</c> height in TemperatureRangeSlider.xaml.</summary>
+    private const double TrackThickness = 6;
 
     public static readonly DependencyProperty NightValueProperty = DependencyProperty.Register(
         nameof(NightValue), typeof(int), typeof(TemperatureRangeSlider),
@@ -53,7 +55,7 @@ public partial class TemperatureRangeSlider : UserControl
         double trackWidth = SliderCanvas.ActualWidth - ThumbSize;
         double nightPosition = ValueToPosition(NightValue, trackStart, trackWidth);
         double dayPosition = ValueToPosition(DayValue, trackStart, trackWidth);
-        double trackTop = (SliderCanvas.ActualHeight - 4) / 2;
+        double trackTop = (SliderCanvas.ActualHeight - TrackThickness) / 2;
         double thumbTop = (SliderCanvas.ActualHeight - ThumbSize) / 2;
 
         Canvas.SetLeft(BaseTrack, trackStart);

@@ -111,10 +111,10 @@ Implemented in [`MonitorService`](../Services/MonitorService.cs).
 
 ## Theming
 
-- [`ThemeCatalog`](../Services/ThemeCatalog.cs) defines the palettes (five light, five dark); each [`AppTheme`](../Models/AppTheme.cs) is a set of named colors.
-- [`ThemeService`](../Services/ThemeService.cs) writes those colors into **`Application.Current.Resources`** as `SolidColorBrush` values keyed `ThemeWindowBackground`, `ThemePrimaryText`, etc. UI uses `DynamicResource` against those keys, so a theme switch restyles everything live.
+- The app has exactly **two greyscale modes**: light and dark. There is no user-selectable palette catalog — controls use black, white, and shades of grey, while the color-temperature controls keep their warm-to-cool gradient.
+- [`ThemeService`](../Services/ThemeService.cs) writes the active palette into **`Application.Current.Resources`** as `SolidColorBrush` values keyed `ThemeWindowBackground`, `ThemePrimaryText`, etc. UI uses `DynamicResource` against those keys, so a mode switch restyles everything live.
 - Because the brushes live at **application scope**, control styles and `UserControl`s (e.g. `TimePicker`) resolve them too. Shared control styles (buttons, checkboxes, radios, sliders, scrollbars, **combo boxes**) are defined in [App.xaml](../App.xaml); window-specific styles live in the window.
-- The app **follows Windows light/dark mode**: `IsWindowsLight()` reads the `Personalize` registry value, and `UserPreferenceChanged` re-applies the appropriate light/dark theme. The OS title bar is tinted to match via `DwmSetWindowAttribute`.
+- The app **follows Windows light/dark mode**: `IsWindowsLight()` reads the `Personalize` registry value, and `UserPreferenceChanged` re-applies the matching mode. The OS title bar is tinted to match via `DwmSetWindowAttribute`.
 
 ---
 

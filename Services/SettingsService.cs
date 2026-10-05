@@ -25,8 +25,6 @@ public sealed class SettingsService
                 Settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath)) ?? new AppSettings();
 
             Settings.RunAtStartup = StartupManager.IsEnabled();
-            Settings.LightModeTheme = ThemeCatalog.NormalizeLightName(Settings.LightModeTheme);
-            Settings.DarkModeTheme = ThemeCatalog.NormalizeDarkName(Settings.DarkModeTheme);
         }
         catch
         {

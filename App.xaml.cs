@@ -65,7 +65,7 @@ public partial class App : Application
         _settingsService = new SettingsService();
         _settingsService.Load();
 
-        _theme = new ThemeService(_settingsService);
+        _theme = new ThemeService();
         _theme.ThemeChanged += OnThemeChanged;
         _theme.ApplyForCurrentWindowsMode();
 
@@ -74,7 +74,7 @@ public partial class App : Application
         _brightness = new BrightnessService(_monitors);
         _color = new ColorTemperatureService(_monitors);
         _schedule = new ScheduleService(_color, _settingsService);
-        _viewModel = new MainViewModel(_brightness, _color, _schedule, _settingsService, _monitors, _theme);
+        _viewModel = new MainViewModel(_brightness, _color, _schedule, _settingsService, _monitors);
         _viewModel.OpenSettingsRequested += (_, _) => OpenSettings();
         _viewModel.ExitRequested += (_, _) => Shutdown();
 
@@ -207,7 +207,7 @@ public partial class App : Application
         window.Activate();
     }
 
-    private void OnThemeChanged(AppTheme theme)
+    private void OnThemeChanged()
     {
         if (_settingsWindow is not null)
             _theme.ApplyWindowTitleBar(_settingsWindow);

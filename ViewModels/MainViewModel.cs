@@ -12,7 +12,6 @@ public sealed class MainViewModel : ObservableObject
     private readonly ScheduleService _schedule;
     private readonly SettingsService _settingsService;
     private readonly MonitorService _monitors;
-    private readonly ThemeService _theme;
 
     private bool _applyingFromSchedule;
 
@@ -34,15 +33,13 @@ public sealed class MainViewModel : ObservableObject
         ColorTemperatureService color,
         ScheduleService schedule,
         SettingsService settingsService,
-        MonitorService monitors,
-        ThemeService theme)
+        MonitorService monitors)
     {
         _brightness = brightness;
         _color = color;
         _schedule = schedule;
         _settingsService = settingsService;
         _monitors = monitors;
-        _theme = theme;
 
         _brightnessValue = MathUtil.Clamp(Settings.ManualBrightness, BrightnessService.MinBrightnessPercent, 100);
         _auto = Settings.AutoColorTemperature;
@@ -195,39 +192,6 @@ public sealed class MainViewModel : ObservableObject
         _settingsService.Save();
         RetickIfAuto();
         OnPropertyChanged(propertyName);
-    }
-
-    public IReadOnlyList<string> LightThemes => ThemeCatalog.LightNames;
-    public IReadOnlyList<string> DarkThemes => ThemeCatalog.DarkNames;
-
-    public string LightModeTheme
-    {
-        get => Settings.LightModeTheme;
-        set
-        {
-            if (Settings.LightModeTheme == value)
-                return;
-
-            Settings.LightModeTheme = value;
-            _settingsService.Save();
-            OnPropertyChanged();
-            _theme.ApplyForCurrentWindowsMode();
-        }
-    }
-
-    public string DarkModeTheme
-    {
-        get => Settings.DarkModeTheme;
-        set
-        {
-            if (Settings.DarkModeTheme == value)
-                return;
-
-            Settings.DarkModeTheme = value;
-            _settingsService.Save();
-            OnPropertyChanged();
-            _theme.ApplyForCurrentWindowsMode();
-        }
     }
 
     public bool RunAtStartup

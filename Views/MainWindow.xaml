@@ -125,32 +125,6 @@
             <CheckBox Content="Run Night Mode Controller when I sign in"
                       IsChecked="{Binding RunAtStartup, Mode=TwoWay}" />
 
-            <Expander Margin="0,18,0,0" IsExpanded="False">
-                <Expander.Header>
-                    <TextBlock Text="Appearance" FontSize="13" FontWeight="SemiBold" />
-                </Expander.Header>
-                <StackPanel Margin="0,8,0,0">
-                    <TextBlock Text="Themes follow Windows light/dark mode automatically."
-                               Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,0,0,6" TextWrapping="Wrap" />
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                            <TextBlock Text="Light mode theme" />
-                            <ComboBox Margin="0,4,0,0" ItemsSource="{Binding LightThemes}"
-                                      SelectedItem="{Binding LightModeTheme, Mode=TwoWay}" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                            <TextBlock Text="Dark mode theme" />
-                            <ComboBox Margin="0,4,0,0" ItemsSource="{Binding DarkThemes}"
-                                      SelectedItem="{Binding DarkModeTheme, Mode=TwoWay}" />
-                        </StackPanel>
-                    </Grid>
-                </StackPanel>
-            </Expander>
-
             <Expander Margin="0,8,0,0" IsExpanded="False">
                 <Expander.Header>
                     <TextBlock Text="Detected displays" FontSize="13" FontWeight="SemiBold" />
