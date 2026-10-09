@@ -1,0 +1,18 @@
+Package: nightmodecontroller-linux
+Version: @VERSION@
+Architecture: amd64
+Maintainer: Thomas Martin <tmmuttathara@gmail.com>
+Section: utils
+Priority: optional
+Depends: libc6, libgcc-s1
+Recommends: i2c-tools
+Suggests: gnome-shell-extension-appindicator
+Homepage: https://github.com/prompt-smithy/nightModeController_Linux
+Description: Tray app for external-display brightness and scheduled colour temperature
+ Night Mode Controller drives external-monitor brightness over DDC/CI and
+ follows a morning/evening colour-temperature schedule. It lives in the
+ system tray with per-channel popups, scroll-to-adjust with OSD feedback,
+ a settings window, and a full command-line interface.
+ .
+ DDC/CI brightness needs i2c access: install i2c-tools, join the i2c group
+ (sudo usermod -aG i2c $USER), and log out and back in.

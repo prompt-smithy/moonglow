@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata: shows the app in GNOME Software / KDE Discover. -->
+<component type="desktop-application">
+  <id>io.github.prompt-smithy.nightmodecontroller-linux</id>
+  <name>Night Mode Controller</name>
+  <summary>External-display brightness and scheduled colour temperature</summary>
+  <description>
+    <p>
+      Night Mode Controller drives external-monitor brightness over DDC/CI
+      and follows a morning/evening colour-temperature schedule. It lives
+      in the system tray with per-channel popups, scroll-to-adjust with
+      on-screen feedback, a settings window, and a full command-line
+      interface.
+    </p>
+  </description>
+  <launchable type="desktop-id">nightmodecontroller-linux.desktop</launchable>
+  <icon type="stock">nightmodecontroller-linux</icon>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <provides>
+    <binary>nightmodecontroller-linux</binary>
+  </provides>
+  <releases>
+    <release version="1.0.0" date="2026-10-08">
+      <description>
+        <p>First stable Linux release: DDC/CI brightness, scheduled colour
+        temperature, tray popups with scroll adjustment and OSD feedback,
+        settings window, CLI, and autostart.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1" />
+</component>

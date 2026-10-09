@@ -1,0 +1,34 @@
+# Maintainer: Thomas Martin <tmmuttathara@gmail.com>
+# Release flow: tag linux-v$pkgver upstream, then refresh the checksum with
+# `updpkgsums` (or `makepkg -g`) and regenerate .SRCINFO before pushing to AUR.
+pkgname=nightmodecontroller-linux
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Tray app for external-display DDC/CI brightness and scheduled colour temperature"
+arch=('x86_64' 'aarch64')
+url="https://github.com/prompt-smithy/nightModeController_Linux"
+license=('MIT' 'Apache-2.0')
+depends=('gcc-libs')
+makedepends=('cargo')
+optdepends=('i2c-tools: DDC/CI brightness debugging (i2cdetect)')
+install=nightmodecontroller-linux.install
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/linux-v$pkgver.tar.gz")
+sha256sums=('REPLACE_AFTER_TAG')
+
+build() {
+    cd "nightModeController_Linux-linux-v$pkgver"
+    cargo build --release --locked -p nightmodecontroller-linux
+}
+
+package() {
+    cd "nightModeController_Linux-linux-v$pkgver"
+    install -Dm755 "target/release/nightmodecontroller-linux" "$pkgdir/usr/bin/nightmodecontroller-linux"
+    install -Dm644 "packaging/nightmodecontroller-linux.desktop" "$pkgdir/usr/share/applications/nightmodecontroller-linux.desktop"
+    install -Dm644 "packaging/nightmodecontroller-linux.metainfo.xml" "$pkgdir/usr/share/metainfo/io.github.prompt-smithy.nightmodecontroller-linux.metainfo.xml"
+    for icon in nightmodecontroller-linux nightmodecontroller-linux-brightness; do
+        install -Dm644 "packaging/icons/hicolor/scalable/apps/$icon.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/$icon.svg"
+    done
+    install -Dm644 "packaging/51-nightmodecontroller-linux-i2c.rules" "$pkgdir/usr/lib/udev/rules.d/51-nightmodecontroller-linux-i2c.rules"
+    install -Dm644 "packaging/nightmodecontroller-linux.1" "$pkgdir/usr/share/man/man1/nightmodecontroller-linux.1"
+    gzip -9 "$pkgdir/usr/share/man/man1/nightmodecontroller-linux.1"
+}

@@ -1,0 +1,30 @@
+#!/bin/sh
+# Night Mode Controller postinst: udev rule activation + desktop refreshes.
+set -e
+
+if [ "$1" = configure ]; then
+    # The udev rule assigns /dev/i2c-* to the i2c group; create it when the
+    # i2c-tools package (or an older install) has not already done so.
+    if ! getent group i2c >/dev/null; then
+        addgroup --quiet --system i2c || true
+    fi
+    if command -v udevadm >/dev/null; then
+        udevadm control --reload-rules || true
+        udevadm trigger --subsystem-match=i2c-dev --action=change || true
+    fi
+    cat <<'EOF'
+
+Night Mode Controller: for DDC/CI brightness, join the i2c group and re-login:
+  sudo usermod -aG i2c $USER
+(log out and back in afterwards; i2c-tools is recommended for debugging.)
+EOF
+fi
+
+if command -v gtk-update-icon-cache >/dev/null; then
+    gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+fi
+if command -v update-desktop-database >/dev/null; then
+    update-desktop-database -q || true
+fi
+
+exit 0

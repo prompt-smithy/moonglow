@@ -1,0 +1,25 @@
+# Arch install hooks: udev activation + desktop refreshes.
+post_install() {
+    if ! getent group i2c >/dev/null; then
+        groupadd -r i2c
+    fi
+    udevadm control --reload-rules
+    udevadm trigger --subsystem-match=i2c-dev --action=change
+    gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+    update-desktop-database -q || true
+    cat <<'EOF'
+
+Night Mode Controller: for DDC/CI brightness, join the i2c group and re-login:
+  sudo usermod -aG i2c $USER
+(i2c-tools is recommended for debugging: sudo pacman -S i2c-tools)
+EOF
+}
+
+post_upgrade() {
+    post_install
+}
+
+post_remove() {
+    gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+    update-desktop-database -q || true
+}

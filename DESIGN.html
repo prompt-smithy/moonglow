@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nightmodecontroller-linux — Requirements &amp; Design Decisions (v1.0.0)</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+         line-height: 1.55; max-width: 60rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  h1 { font-size: 1.7rem; margin-bottom: 0.2rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.5rem; border-bottom: 1px solid #8884; padding-bottom: 0.3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.5rem; }
+  code, pre { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.9em; }
+  pre { padding: 0.8rem 1rem; border: 1px solid #8884; border-radius: 6px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.93rem; }
+  th, td { border: 1px solid #8884; padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }
+  th { font-weight: 600; }
+  .sub { opacity: 0.75; margin-top: 0; }
+  nav.toc { border: 1px solid #8884; border-radius: 6px; padding: 0.8rem 1.2rem; }
+  nav.toc ol { margin: 0.4rem 0; padding-left: 1.4rem; }
+  details { margin: 0.6rem 0; }
+  summary { cursor: pointer; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>nightmodecontroller-linux — Requirements &amp; Design Decisions</h1>
+<p class="sub">Version 1.0.0 · Rust port of the macOS Night Mode Controller for Linux ·
+Covers Ubuntu, Debian, Arch, Fedora, openSUSE and derivatives.</p>
+
+<nav class="toc">
+<strong>Contents</strong>
+<ol>
+  <li><a href="#req">Requirements</a></li>
+  <li><a href="#arch">Architecture</a></li>
+  <li><a href="#decisions">Key decisions (with rationale)</a></li>
+  <li><a href="#limits">Limitations &amp; known gaps</a></li>
+  <li><a href="#deps">Dependencies</a></li>
+  <li><a href="#setup">Setup &amp; install</a></li>
+  <li><a href="#verify">Verification matrix</a></li>
+  <li><a href="#layout">Repo layout &amp; release</a></li>
+</ol>
+</nav>
+
+<h2 id="req">1. Requirements</h2>
+<h3>Functional (macOS parity)</h3>
+<ul>
+  <li>External-monitor <strong>brightness</strong> over DDC/CI (1–100%).</li>
+  <li><strong>Scheduled colour temperature</strong>: day/night targets with
+      morning/evening transition windows, plus a manual mode.</li>
+  <li><strong>Tray popup(s)</strong> with steppers, automatic toggle, settings, quit.</li>
+  <li><strong>Settings window</strong>: schedule pickers, day/night range, startup, displays.</li>
+  <li><strong>Start at login</strong> (opt-in) and a <strong>full CLI</strong> mirroring every setting.</li>
+  <li><strong>Scroll-on-icon</strong> adjustment with transient value bubbles (OSD).</li>
+</ul>
+<h3>Platform</h3>
+<ul>
+  <li>Debian/Ubuntu (.deb), Arch (AUR), Fedora/openSUSE (rpm/COPR) from one codebase.</li>
+  <li>GNOME (Wayland), KDE, and X11 desktops; tray-less operation where no host exists.</li>
+  <li>Single self-contained binary; runs from the build dir with zero install.</li>
+  <li>The app itself never needs sudo; hardware access comes from udev rules + group membership.</li>
+  <li>XDG directories for config, state/log, runtime socket; freedesktop autostart entry.</li>
+</ul>
+
+<h2 id="arch">2. Architecture</h2>
+<p>Cargo workspace: <code>nmc-core</code> (pure logic: settings, state machine,
+schedule math, kelvin, traits — no hardware) + <code>nightmodecontroller-linux</code>
+(backends, tray, UI, IPC, CLI). The macOS model layer was ported into the core
+first; Linux backends implement its traits.</p>
+<table>
+  <tr><th>Session</th><th>Colour backend</th><th>Brightness backend</th></tr>
+  <tr><td>GNOME Wayland</td><td>Night Light (SettingsDaemon + schedule ownership)</td><td>DDC/CI</td></tr>
+  <tr><td>KDE</td><td>KWin NightLight D-Bus</td><td>DDC/CI</td></tr>
+  <tr><td>wlroots Wayland</td><td>wlr-gamma protocol</td><td>DDC/CI</td></tr>
+  <tr><td>X11</td><td>RandR gamma ramps</td><td>DDC/CI</td></tr>
+</table>
+<p>Two tray channels (brightness half-disc mark, colour moon) each own a D-Bus
+connection and menu. One Unix-socket IPC server enforces single-instance and
+forwards CLI commands; a settings window (egui) mirrors all state.</p>
+
+<h2 id="decisions">3. Key decisions (with rationale)</h2>
+
+<details open>
+<summary>Stack: Rust + egui + raw zbus (not Tauri, not Python)</summary>
+<p>Tauri would pull WebKitGTK (~100 MB, per-distro webview quirks) for a tray
+daemon; Python would need a runtime + packaging story per distro. Rust gives one
+~17 MB binary with two shared-lib deps (<code>libc6, libgcc-s1</code> — GUI
+libs are dlopen'd at runtime) and fearless refactors under 144 tests.</p>
+</details>
+
+<details open>
+<summary>Tray via raw StatusNotifierItem + dbusmenu (no ayatana libraries)</summary>
+<p>Zero system-library deps and full control of the wire shapes. Hard-won rules:
+one item per D-Bus connection; probe theme dirs and serve an empty
+<code>IconName</code> when the packaged icon is absent (any non-empty name
+bypasses the embedded pixmap silently); <code>GetLayout</code> must declare
+exactly <code>(u(ia{sv}av))</code> — strict hosts reject bare variants with a
+journal-only error while lenient clients hide the bug.</p>
+</details>
+
+<details>
+<summary>Popup UX: steppers + scroll + OSD (no sliders on GNOME)</summary>
+<p>Verified in the ubuntu-appindicators source: the Shell closes the popup on
+<strong>every</strong> item click with no stay-open flag, and the renderer has
+zero slider support. So: ± steppers for discoverability, wheel-on-icon
+(<code>Scroll</code>) for repeated adjustment, and a notification bubble
+showing the new value as the confirmation the popup cannot give.</p>
+</details>
+
+<details>
+<summary>Night Light schedule ownership (GNOME)</summary>
+<p>Writing <code>Temperature</code> while Night Light is inactive is a silent
+no-op, and an enabled GNOME schedule would clobber our value. On first drive
+the backend snapshots five keys, enforces enabled + manual + full-day window
+<code>(0, 24)</code>, mirrors each target, and restores everything on reset.
+Probe fails closed without a readable snapshot; one-shot <code>--status</code>
+never writes keys. A reboot/SIGKILL can strand ownership (see §4).</p>
+</details>
+
+<details>
+<summary>Capability = backend AND live displays; setters persist regardless</summary>
+<p>Every hardware apply is gated on an enumerated display list, so an
+unplugged monitor disables driving everywhere instead of fighting Night Light
+for no screen. Setters still persist intent, so values survive hotplug; a slow
+tick re-probes displays and DDC.</p>
+</details>
+
+<details>
+<summary>Bind-first IPC; forward when live, drive directly when headless</summary>
+<p>Second invocations forward JSON commands over
+<code>$XDG_RUNTIME_DIR/nightmodecontroller-linux.sock</code>. Never unlink
+before bind (a racing primary can steal a live socket) and never remove on
+shutdown. With no daemon, setter flags drive backends directly — handy for
+scripts and keyboard shortcuts.</p>
+</details>
+
+<details>
+<summary>Quit on a dedicated thread, then exit(0)</summary>
+<p>eframe has no programmatic exit and minimized windows starve
+<code>update()</code>, so IPC/tray/Ctrl-C quit paths run cleanup (hardware
+restore, Night Light key restore) on their own thread instead of waiting on
+the event loop. ~10 s stop time is joins + restore, by design.</p>
+</details>
+
+<details>
+<summary>Logging: XDG state dir, stderr-only capture, rotation</summary>
+<p>The daemon dup2's <strong>stderr only</strong> into
+<code>~/.local/state/nightmodecontroller-linux/*.log</code> (2 MB rotation,
+version/timestamp/pid banner). Stdout stays on the terminal and one-shot CLI
+never touches the log.</p>
+</details>
+
+<details>
+<summary>Theme: always follow the OS (winit + gsettings fallback)</summary>
+<p>No manual Light/Dark switch. winit reports <code>None</code> on XWayland,
+so a polled gsettings fallback (<code>color-scheme</code>, 5 s cadence) covers
+that stack; first report is logged for audit.</p>
+</details>
+
+<details>
+<summary>Docs that can't drift: CLI catalog card + strict test</summary>
+<p>The settings window lists all 18 CLI flags (selectable + copy-all). A test
+asserts set-equality against the clap definition, so new flags fail CI until
+documented. Same philosophy for the man page and <code>--help</code> texts.</p>
+</details>
+
+<details>
+<summary>Packaging: explicit per-family files, manual dpkg-deb</summary>
+<p><code>build-deb.sh</code> stages + <code>dpkg-deb -b</code> (no cargo-deb
+dependency, version from <code>Cargo.toml</code>); Arch PKGBUILD +
+<code>.SRCINFO</code> + install hooks; RPM spec for COPR. All three install the
+same file set (binary, desktop, metainfo, two SVG icons, udev rule, gzipped
+man) and run the same post-install logic (create <code>i2c</code> group,
+reload udev, refresh caches, print the group-join notice).</p>
+</details>
+
+<details>
+<summary>Naming: repo <code>nightModeController_Linux</code>, binary/packages lowercase</summary>
+<p>Linux packaging policy forbids uppercase in .deb/.rpm/AUR names, so the
+binary, packages, files, and runtime paths use
+<code>nightmodecontroller-linux</code> while the repo keeps its mixed-case
+name. Human display strings ("Night Mode Controller") are unchanged.</p>
+</details>
+
+<h2 id="limits">4. Limitations &amp; known gaps</h2>
+<ul>
+  <li><strong>KDE paths written but never run live</strong> (KWin backend, native SNI,
+      KDE notifications). Kubuntu is the next required test.</li>
+  <li><strong>First COPR build pending</strong>: the spec is executed-and-proven
+      locally but not yet built on Fedora infrastructure; no Koji (offline) support.</li>
+  <li><strong>Reboot/SIGKILL strands Night Light ownership</strong> (keys stay at the
+      forced full-day window). Planned: persist the snapshot at enforce time and
+      reconcile the <code>(0,24)</code> fingerprint at startup.</li>
+  <li><strong>Manual mode + hotplug</strong>: reappearing monitors re-apply brightness
+      but colour waits for the next interaction.</li>
+  <li><strong>i2c group join is always manual</strong> (per-user, packages can't do it);
+      surfaced in installer output, man page, and README.</li>
+  <li><strong>No Flatpak / immutable-distro story</strong> (Silverblue); i2c access
+      through a sandbox is uncharted. No official Fedora (Koji) build (needs vendoring).</li>
+  <li><strong>Theme flips apply within ~5 s</strong> on XWayland (poll cadence), instantly
+      where winit reports.</li>
+  <li><code>packaging/gnome-shell-extension/</code> is a <strong>frozen experiment</strong>,
+      never installed or shipped; the SNI path needs no extension on KDE and rides
+      Ubuntu's preinstalled AppIndicator support on GNOME.</li>
+  <li>Runtime paths renamed in the 1.0.0 rebrand (socket, log, config, autostart entry):
+      pre-release installs start from default settings.</li>
+</ul>
+
+<h2 id="deps">5. Dependencies</h2>
+<h3>Runtime (shipped .deb)</h3>
+<ul>
+  <li><code>libc6, libgcc-s1</code> — the only linked libs (verified via <code>ldd</code>).</li>
+  <li>X11/Wayland/GL client libs — <strong>dlopen'd at runtime</strong>, present on any GUI system.</li>
+  <li>Recommends: <code>i2c-tools</code> (DDC debugging). Suggests: AppIndicator shell extension (Debian GNOME).</li>
+</ul>
+<h3>Build</h3>
+<ul>
+  <li><code>cargo</code>, <code>rustc</code>, a C linker (<code>gcc</code>, or
+      <code>zig-cc</code> shim where no toolchain exists).</li>
+  <li>Key crates: <code>tokio, zbus, egui/eframe 0.33, clap 4, serde, dirs,
+      rustix, chrono</code>. <code>Cargo.lock</code> is committed for reproducible releases.</li>
+</ul>
+<h3>Packaging tools</h3>
+<ul>
+  <li>.deb: <code>dpkg-deb</code> only. Arch: <code>makepkg</code>. RPM: COPR
+      (<code>buildscm</code> from the release tag).</li>
+</ul>
+
+<h2 id="setup">6. Setup &amp; install</h2>
+<h3>Install (per distro)</h3>
+<p>Releases live at
+<code>github.com/prompt-smithy/nightModeController_Linux/releases</code>;
+each release attaches the <code>.deb</code>
+(<code>nightmodecontroller-linux_&lt;version&gt;_amd64.deb</code>).</p>
+<details open>
+<summary>Ubuntu, Kubuntu, Mint, Pop!_OS, Zorin (.deb)</summary>
+<pre>sudo apt install ./nightmodecontroller-linux_1.0.0_amd64.deb</pre>
+<p>Use <code>apt install ./file.deb</code>, not bare <code>dpkg -i</code>, so
+dependencies resolve. GUI alternative: double-click the file (Software /
+Discover) and install graphically. On Kubuntu the tray icon appears
+immediately — Plasma has a native StatusNotifier host, no extension
+needed. On Ubuntu GNOME the icon rides the preinstalled AppIndicator
+support.</p>
+</details>
+<details open>
+<summary>Debian (.deb)</summary>
+<pre>sudo apt install ./nightmodecontroller-linux_1.0.0_amd64.deb</pre>
+<p>Same file as Ubuntu. On vanilla Debian GNOME, install an AppIndicator
+shell extension (a package <code>Suggests</code>) or the tray icon has no
+host — the app still runs via its settings window and CLI.</p>
+</details>
+<details open>
+<summary>Arch, Manjaro, EndeavourOS (AUR)</summary>
+<pre>yay -S nightmodecontroller-linux
+# or without an AUR helper:
+#   git clone the AUR repo, then makepkg -si</pre>
+<p>The AUR package builds from the release tag tarball. DDC/CI needs the
+<code>i2c-dev</code> module: <code>sudo modprobe i2c-dev</code> (persist via
+<code>/etc/modules-load.d/i2c-dev.conf</code> if wanted), then the group
+join below like every other distro.</p>
+</details>
+<details open>
+<summary>Fedora, RHEL, CentOS (COPR .rpm)</summary>
+<pre>sudo dnf copr enable &lt;you&gt;/nightmodecontroller-linux
+sudo dnf install nightmodecontroller-linux</pre>
+<p>Replace <code>&lt;you&gt;</code> with the maintainer's COPR name (see
+<code>packaging/rpm/COPR.md</code>). First COPR build is still pending —
+until it exists, build from source below.</p>
+</details>
+<details>
+<summary>openSUSE and everything else (build from source)</summary>
+<p>No published binary yet. The release binary links only
+<code>libc</code>, so building on the machine itself always works:</p>
+<pre>cargo build --release -p nightmodecontroller-linux
+sudo install -Dm755 target/release/nightmodecontroller-linux \
+    /usr/local/bin/nightmodecontroller-linux</pre>
+<p>Then install the udev rule by hand and do the group join below:
+<code>sudo install -Dm644 packaging/51-nightmodecontroller-linux-i2c.rules
+/usr/lib/udev/rules.d/ && sudo udevadm control --reload</code>.</p>
+</details>
+<h3>DDC/CI access (all distros, still required after install)</h3>
+<pre>sudo modprobe i2c-dev            # load the I2C bus driver
+sudo usermod -aG i2c "$USER"     # grant this user raw bus access
+# log out and back in, then:
+nightmodecontroller-linux --status</pre>
+<p>What each step does: <code>modprobe</code> creates the
+<code>/dev/i2c-*</code> nodes; the installer drops a udev rule assigning those
+nodes to group <code>i2c</code> (creating the group if missing); the usermod
+line puts <em>you</em> in that group — the one step a package can never do.
+<code>/dev/i2c-*</code> ships root-only, so without it every bus open fails
+with permission denied.</p>
+<h3>Build from source</h3>
+<pre>cargo build --release -p nightmodecontroller-linux
+./target/release/nightmodecontroller-linux        # tray app
+./target/release/nightmodecontroller-linux --status</pre>
+<h3>First launch checklist</h3>
+<ul>
+  <li>Both tray icons appear; popups open; scroll shows value bubbles.</li>
+  <li>Settings window opens (Startup/Displays/Command-line start collapsed).</li>
+  <li>Automatic schedule visibly warms the screen at night; brightness moves the monitor.</li>
+  <li>Quit restores the user's Night Light keys; log lands in the state dir (§3).</li>
+</ul>
+
+<h2 id="verify">7. Verification matrix</h2>
+<ul>
+  <li><strong>144 tests</strong> (<code>cargo test --workspace</code>) + clippy-clean +
+      fmt-checked. Live-hardware tests are <code>#[ignore]</code>d by default and run
+      manually (Night Light round-trip, OSD path).</li>
+  <li>Proven-fail regression tests: tray <code>drive()</code> bridge, CLI catalog
+      drift, OSD urgency pin, pixmap shape witnesses.</li>
+  <li>Distro order after Ubuntu: <strong>Kubuntu → Debian stable → Arch → Fedora</strong>
+      (new DE, oldest stack, rolling ceiling, rpm/SELinux). DDC needs bare metal
+      per GPU vendor; everything else validates in VMs.</li>
+  <li>Installer proof (v1.0.0): .deb rebuilt + extracted binary runs
+      <code>--status</code>; full <code>rpmbuild -ba</code> in a user-local rpm
+      toolchain + extracted binary runs; PKGBUILD <code>package()</code> simulated
+      file-for-file (real <code>makepkg</code> needs Arch).</li>
+</ul>
+
+<h2 id="layout">8. Repo layout &amp; release</h2>
+<pre>nightModeController_Linux/
+├── Cargo.toml / Cargo.lock     # workspace (version = single source of truth)
+├── crates/nmc-core/            # pure logic + traits
+├── crates/nightmodecontroller-linux/  # backends, tray, UI, IPC, CLI
+├── packaging/                  # build-deb.sh, debian/, arch/, rpm/, icons/,
+│                               #   desktop, metainfo, man, udev, RELEASE.md
+├── DESIGN.html                 # this document
+└── README.md</pre>
+<p>Releases: bump <code>Cargo.toml</code> → tests → tag
+<code>linux-vX.Y.Z</code> → attach the .deb to the GitHub release →
+<code>updpkgsums</code> + AUR push → COPR <code>buildscm</code>. Full steps in
+<code>packaging/RELEASE.md</code>.</p>
+
+</body>
+</html>
