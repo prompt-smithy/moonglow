@@ -1,4 +1,4 @@
-# Amber (macOS) ignore policy
+# Moonglow (macOS) ignore policy
 #
 # Committed on purpose - do NOT add ignore rules for these:
 #   Package.swift, Sources/**, Tests/**, Resources/**, Packaging/**, docs/**,
@@ -20,7 +20,7 @@ index-build/
 *.swiftdoc
 *.swiftsourceinfo
 
-# Package.resolved is deliberately NOT listed here. Amber ships as a signed, notarised binary, so
+# Package.resolved is deliberately NOT listed here. Moonglow ships as a signed, notarised binary, so
 # a release build should resolve the exact versions that were tested rather than whatever is
 # newest. The package has no dependencies yet, so there is nothing to pin today.
 
@@ -38,7 +38,7 @@ xcuserdata/
 *.xcresult
 
 # Generated build and release output from Packaging/build-app.sh
-# artifacts/ holds "Night Mode Controller.app", its .iconset and the DMG staging folder.
+# artifacts/ holds "Moonglow.app", its .iconset and the DMG staging folder.
 artifacts/
 # Release archives (release/*.dmg is already covered by the *.dmg rule below).
 release/*.zip

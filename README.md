@@ -1,4 +1,4 @@
-# Night Mode Controller
+# Moonglow
 
 A macOS menu-bar app for external-display hardware brightness and scheduled colour temperature.
 
@@ -8,22 +8,23 @@ for implementation status and platform details.
 
 ## Download
 
-[Download the macOS installer (Apple Silicon)](https://github.com/prompt-smithy/Night_Mode_Controller-MacOS/releases/download/v2/Night-Mode-Controller-macOS-arm64.dmg.zip)
+[Download from GitHub Releases](https://github.com/prompt-smithy/Night_Mode_Controller-MacOS/releases).
 
-The current download is for Apple Silicon and requires macOS 14 or later. The packaging script
-builds a universal app for macOS 12 or later. This test build is ad-hoc signed and not
-notarized; on first launch, Control-click the app and choose **Open** if macOS blocks it.
+The packaging script produces `Moonglow-macOS-universal.dmg` and `Moonglow-macOS-universal.zip`:
+a universal (`arm64` and `x86_64`) build for macOS 12 or later. Published test builds are
+ad-hoc signed and not notarized; on first launch, Control-click the app and choose **Open** if
+macOS blocks it.
 
 ## Layout
 
 | Path | Purpose |
 | --- | --- |
-| `Package.swift` | SwiftPM manifest. Two targets: `AmberKit` and `Amber`. |
-| `Sources/AmberKit/` | Platform logic: models, settings, schedule math, light/dark appearance colors, view model, service protocols. No UI framework dependency. |
-| `Sources/Amber/` | macOS app shell: entry point, status item, popover, settings window, SwiftUI views, native bridges. |
-| `Tests/AmberKitTests/` | Swift Testing suite for everything in `AmberKit`. |
+| `Package.swift` | SwiftPM manifest. Two targets: `MoonglowKit` and `Moonglow`. |
+| `Sources/MoonglowKit/` | Platform logic: models, settings, schedule math, light/dark appearance colors, view model, service protocols. No UI framework dependency. |
+| `Sources/Moonglow/` | macOS app shell: entry point, status item, popover, settings window, SwiftUI views, native bridges. |
+| `Tests/MoonglowKitTests/` | Swift Testing suite for everything in `MoonglowKit`. |
 | `Packaging/` | `Info.plist` and `build-app.sh` (app bundle, DMG, ZIP). |
-| `Resources/` | App icon source (`Amber.png`) used to generate the app bundle icon. |
+| `Resources/` | App icon source (`Moonglow.png`) used to generate the app bundle icon. |
 
 ## Requirements
 
@@ -34,23 +35,33 @@ notarized; on first launch, Control-click the app and choose **Open** if macOS b
 ## Commands
 
 ```bash
-swift build                  # build the app and AmberKit
+swift build                  # build the app and MoonglowKit
 swift test                   # run the complete test suite
 swift run                    # run from the SwiftPM build (login-item registration requires a packaged app)
 bash Packaging/build-app.sh  # build the app bundle, DMG, and ZIP
 ```
 
+If plain `swift build` hangs, a stuck SwiftPM plugin process (observed from the VS Code
+Swift extension) is holding the `.build` lock. Build and test with a scratch path instead:
+
+```bash
+swift build --scratch-path .build-run
+swift test  --scratch-path .build-run
+```
+
 The packaging script creates:
 
-- `artifacts/Night Mode Controller.app`
-- `release/Night-Mode-Controller-macOS-universal.dmg`
-- `release/Night-Mode-Controller-macOS-universal.zip`
+- `artifacts/Moonglow.app`
+- `release/Moonglow-macOS-universal.dmg`
+- `release/Moonglow-macOS-universal.zip`
 
-It builds a universal (`arm64` and `x86_64`) app for macOS 12 or later. On Intel, the app probes
-the primary external display for DDC/CI brightness and falls back to software gamma dimming when
-DDC/CI is unavailable. Software dimming changes image output, not the display's backlight, and
-requires CoreGraphics gamma support. Login-item management requires macOS 13 or later. The app
-bundle is ad-hoc signed for local testing; it is not
+It builds a universal (`arm64` and `x86_64`) app for macOS 12 or later. Hardware DDC/CI
+brightness targets the main display, and only when it is an external panel: on a MacBook whose
+main display is the built-in panel, or for any display that is not main, the brightness slider
+is unavailable and the Displays section says why. When DDC/CI cannot be used at all, brightness
+falls back to software gamma dimming. Software dimming changes image output, not the display's
+backlight, and requires CoreGraphics gamma support. Login-item management requires macOS 13 or
+later. The app bundle is ad-hoc signed for local testing; it is not
 Developer ID signed or notarized. Users may need to Control-click the app and choose **Open** on
 first launch.
 
@@ -58,14 +69,20 @@ To preserve the normal outputs when making a separate verification build, set al
 directories:
 
 ```bash
-AMBER_ARTIFACTS_DIR="$PWD/artifacts/test-build" \
-AMBER_RELEASE_DIR="$PWD/release/test-build" \
+MOONGLOW_ARTIFACTS_DIR="$PWD/artifacts/test-build" \
+MOONGLOW_RELEASE_DIR="$PWD/release/test-build" \
 bash Packaging/build-app.sh
 ```
 
 If every `swift` command fails with a `dyld` symbol error, an "SDK is not supported by the
 compiler" error, or a Swift Testing `__SourceBounds` mismatch, the active developer directory
 is broken. Check `xcode-select -p` and install or repair Xcode rather than working around it.
+
+## Diagnostics
+
+Brightness routing, DDC probe outcomes, and display enumeration are logged to
+`~/Library/Logs/Moonglow/Moonglow.log` (rotated at 512 KB, three backups kept).
+The Displays section in Settings shows the path and reveals it in Finder.
 
 ## Architecture
 
@@ -75,22 +92,26 @@ container, matching the original design.
 - A single `MainViewModel` instance backs both the popup and the settings window, so slider
   and automatic-mode state stay in sync without a second settings path.
 - Platform behaviour is behind `DisplayService`, `BrightnessService`, and
-  `ColorTemperatureService`. `AmberKit` never imports SwiftUI; the app target supplies
-  automatic appearance handling and `LoginItemService`.
+  `ColorTemperatureService`. `MoonglowKit` never imports SwiftUI; the app target supplies
+  automatic appearance handling, `LoginItemService`, and `HotKeyService`.
+- Global hot keys adjust brightness (±5) and colour temperature (±100 K) from anywhere:
+  Ctrl+Option with ↑/↓/←/→ by default, re-recordable or clearable per action in Settings.
+  A temperature key leaves automatic mode so the change sticks. Registration uses Carbon,
+  so no Accessibility permission is needed.
 - View state uses Combine's `ObservableObject` and `@Published`, keeping the deployment target at
   macOS 12 while supporting both Intel and Apple Silicon.
 - Colour temperature and software brightness share CoreGraphics gamma transfer tables. Hardware
   brightness uses the private CoreDisplay `IOAVService*` API on Apple Silicon and IOKit framebuffer
   I2C on Intel, with gamma dimming as the fallback when DDC/CI is unavailable.
 
-The private API is isolated in `Sources/AmberKit/Services/NativeBridge.swift`. The app is
+The private API is isolated in `Sources/MoonglowKit/Services/NativeBridge.swift`. The app is
 distributed directly rather than through the Mac App Store because of that dependency. The current
 packaging script applies only an ad-hoc signature; public distribution still requires Developer ID
 signing and notarization.
 
 Startup is a login item registered through `SMAppService.mainApp`, which registers *the running
-bundle*: the toggle in the settings window does nothing when Night Mode Controller is launched
-straight from `.build` rather than from `Night Mode Controller.app`. The stored setting is only
+bundle*: the toggle in the settings window does nothing when Moonglow is launched
+straight from `.build` rather than from `Moonglow.app`. The stored setting is only
 the user's intent — the real registration lives in the system and can be changed outside the
 app — so a change the system
 refuses is not recorded, and a login item added by hand in System Settings is adopted rather than
@@ -113,4 +134,4 @@ switched off.
   and Displays.
 - A display capability is never reported unless the backend can actually apply it.
 - ColourSync gamma state is restored on quit.
-- Settings remain at `~/Library/Application Support/Amber/settings.json` for compatibility with existing installs.
+- Settings live at `~/Library/Application Support/Moonglow/settings.json`.

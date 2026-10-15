@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDisplayName</key>
-    <string>Night Mode Controller</string>
+    <string>Moonglow</string>
     <key>CFBundleExecutable</key>
-    <string>Amber</string>
+    <string>Moonglow</string>
     <key>CFBundleIdentifier</key>
-    <string>com.amber.macos</string>
+    <string>com.prompt-smithy.Moonglow</string>
     <key>CFBundleIconFile</key>
-    <string>NightModeController.icns</string>
+    <string>Moonglow.icns</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Night Mode Controller</string>
+    <string>Moonglow</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -22,6 +22,8 @@
     <string>2</string>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
+    <key>LSMultipleInstancesProhibited</key>
+    <true/>
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>
