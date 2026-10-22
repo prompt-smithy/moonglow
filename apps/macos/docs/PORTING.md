@@ -37,7 +37,7 @@ corrections to the rows above — are tracked there as an implementation backlog
 | Hex-to-colour conversion | `Sources/Moonglow/Theme/Color+Hex.swift` | Avalonia brushes |
 | Twelve-hour clock conversion and formatting | `Sources/MoonglowKit/Models/TwelveHourTime.swift` | `ClockIdentifier` mapping in `MainViewModel.cs` |
 | Colour temperature window as one value | `Sources/MoonglowKit/Models/TemperatureRange.swift` | day/night target clamping in `AppSettings.cs` |
-| Settings window, custom time pickers, two-handle range bar, automatic light/dark appearance | `Sources/Moonglow/Views/SettingsView.swift`, `Sources/Moonglow/Views/TimeOfDayPicker.swift`, `Sources/Moonglow/Views/ThemedDropDown.swift`, `Sources/Moonglow/Views/TemperatureRangeSlider.swift` | `Views/MainWindow.axaml` |
+| Settings window, custom time pickers, two-handle range bar, automatic light/dark appearance | `Sources/Moonglow/Views/SettingsView.swift`, `Sources/Moonglow/Views/TimeOfDayPicker.swift`, `Sources/Moonglow/Views/ThemedDropDown.swift`, `Sources/Moonglow/Views/TemperatureRangeSlider.swift`, `Sources/Moonglow/Views/SliderThumb.swift` | `Views/MainWindow.axaml` |
 | Native backends: display enumeration, gamma colour temperature, DDC/CI brightness | `Sources/MoonglowKit/Services/NativeBridge.swift` | `MacDisplayService.cs`, `MacColorTemperatureService.cs`, `MacDdcBrightnessService.cs`, `MacNative.cs` |
 | Native menu-bar controls: brightness, colour temperature, automatic toggle | `Sources/Moonglow/Shell/AppDelegate.swift`, `Sources/Moonglow/Shell/MenuSliderRow.swift` | `Views/QuickControlsWindow.axaml` |
 | Unit tests | `Tests/MoonglowKitTests/` | `Amber MacOS.Tests/` |
@@ -83,8 +83,9 @@ register and every call fails. Test through `artifacts/Moonglow.app`, not the ba
 ### Native menu-bar controls
 
 The popup is an AppKit `NSMenu`, following the native menu presentation used by Display Source
-Switch. It follows system appearance automatically. Brightness uses a standard AppKit slider and
-colour temperature uses the warm-to-cool gradient control embedded in a menu row. Software
+Switch. It follows system appearance automatically. Brightness and colour temperature both use
+the drawn triangle slider embedded in a menu row — the same head as the .NET thumbs — with the
+temperature row adding the warm-to-cool gradient track. Software
 brightness and colour temperature share the same gamma ramp, so adjusting one does not overwrite
 the other.
 
@@ -161,6 +162,10 @@ Divergences from the .NET original:
   instead of two sliders. `Models/TemperatureRange.swift` owns ordering and snapping, and
   `MainViewModel.setTemperatureRange` writes both endpoints in a single pass, so a drag cannot
   persist settings or re-evaluate the schedule twice per update.
+- Every drawn slider head is the .NET triangle (`Views/SliderThumb.swift`): 16 × 15 pt, apex up,
+  centred 3 pt above the track centre — 10.5 pt of rise and 4.5 pt of drop — the shape the WPF
+  `Thumb` template uses. The travel inset stays at the old circle's 18 pt, so the value-to-pixel
+  mapping, and every remembered temperature, lands where it did before.
 
 - The settings window is sized to the sheet's *measured* content height plus 8 pt of slack, rather
   than a fixed `680 × 780` like the .NET window, and it is 480 pt wide instead of 680. Width is set

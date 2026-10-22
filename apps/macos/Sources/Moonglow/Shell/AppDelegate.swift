@@ -21,7 +21,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var statusItem: NSStatusItem?
     private var quickControlsMenu: NSMenu?
-    private var brightnessMenuRow: MenuSliderRow?
     private var temperatureMenuRow: MenuTemperatureSliderRow?
     private var automaticMenuRow: MenuToggleRow?
     private var menuStatusItem: NSMenuItem?
@@ -234,18 +233,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(titleItem)
         menu.addItem(.separator())
 
-        let brightnessRow = MenuSliderRow(
-            title: "Brightness",
-            value: viewModel.brightness,
-            minimum: 1,
-            maximum: 100,
-            target: self,
-            action: #selector(brightnessChanged(_:))
-        )
+        let brightnessRow = MenuBrightnessSliderRow(viewModel: viewModel)
         let brightnessItem = NSMenuItem()
         brightnessItem.view = brightnessRow
         menu.addItem(brightnessItem)
-        self.brightnessMenuRow = brightnessRow
 
         let temperatureRow = MenuTemperatureSliderRow(viewModel: viewModel)
         let temperatureItem = NSMenuItem()
@@ -304,11 +295,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
-    @objc private func brightnessChanged(_ sender: NSSlider) {
-        viewModel?.brightness = sender.integerValue
-        if let viewModel { updateQuickControlsMenu(viewModel: viewModel) }
-    }
-
     @objc private func automaticColorTemperatureChanged(_ sender: NSButton) {
         guard let viewModel else { return }
         viewModel.autoColorTemperature = sender.state == .on
@@ -329,8 +315,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateQuickControlsMenu(viewModel: MainViewModel) {
-        brightnessMenuRow?.update(value: viewModel.brightness)
-        brightnessMenuRow?.slider.isEnabled = viewModel.hasBrightnessSupport
         automaticMenuRow?.button.state = viewModel.autoColorTemperature ? .on : .off
         menuStatusItem?.title = viewModel.hasNoDisplays
             ? "No active displays found"

@@ -25,6 +25,8 @@ struct TemperatureRangeSlider: View {
         case day
     }
 
+    /// Width the heads travel within. Kept at the old circle's diameter so the value-to-pixel
+    /// mapping — and therefore every remembered range — lands in the same place.
     private let handleDiameter: CGFloat = 18
     private let trackHeight: CGFloat = 6
 
@@ -47,11 +49,11 @@ struct TemperatureRangeSlider: View {
                 adjustableHandle(at: nightX, label: "Night target", value: range.night, move: moveNight)
                 adjustableHandle(at: dayX, label: "Day target", value: range.day, move: moveDay)
             }
-            .frame(height: handleDiameter)
+            .frame(height: SliderThumb.requiredHeight)
             .contentShape(Rectangle())
             .gesture(dragGesture(width: width))
         }
-        .frame(height: handleDiameter)
+        .frame(height: SliderThumb.requiredHeight)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Color temperature range")
     }
@@ -94,15 +96,11 @@ struct TemperatureRangeSlider: View {
     // MARK: - Drawing
 
     private func handle(at x: CGFloat) -> some View {
-        Circle()
-            .fill(Color(nsColor: .systemGray))
-            .overlay {
-                Circle()
-                    .strokeBorder(theme.cardBackgroundColor, lineWidth: 2)
-            }
-            .frame(width: handleDiameter, height: handleDiameter)
-            .shadow(color: .black.opacity(0.18), radius: 1.5, y: 0.5)
-            .offset(x: x - (handleDiameter / 2))
+        SliderThumb(
+            fill: Color(nsColor: .systemGray),
+            border: theme.cardBackgroundColor
+        )
+        .offset(x: x - (SliderThumb.width / 2))
     }
 
     private func position(of value: Int, width: CGFloat) -> CGFloat {

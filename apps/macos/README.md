@@ -127,9 +127,9 @@ switched off.
   time.
 - Day and night targets are edited as one two-handle bar, never as two independent values:
   the range keeps `night <= day` and snaps to the 100 K step.
-- The popup is a native AppKit menu with system styling. Brightness uses a system slider and color
-  temperature uses the warm-to-cool gradient slider. The Settings window switches automatically
-  between neutral light and dark appearances with macOS.
+- The popup is a native AppKit menu with system styling. Brightness and color temperature use the
+  same triangle-headed slider, and the temperature track shows the warm-to-cool gradient. The
+  Settings window switches automatically between neutral light and dark appearances with macOS.
 - Displays are always available in the settings window; schedule controls are followed by Startup
   and Displays.
 - A display capability is never reported unless the backend can actually apply it.

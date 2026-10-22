@@ -15,6 +15,8 @@ struct TemperatureSlider: View {
     /// colour temperature is driving the display instead of the user.
     var isEnabled: Bool = true
 
+    /// Width the head travels within. Kept at the old circle's diameter so the value-to-pixel
+    /// mapping — and therefore every remembered temperature — lands in the same place.
     private let handleDiameter: CGFloat = 18
     private let trackHeight: CGFloat = 6
 
@@ -36,11 +38,11 @@ struct TemperatureSlider: View {
 
                 handle(at: x)
             }
-            .frame(height: handleDiameter)
+            .frame(height: SliderThumb.requiredHeight)
             .contentShape(Rectangle())
             .gesture(dragGesture(width: width))
         }
-        .frame(height: handleDiameter)
+        .frame(height: SliderThumb.requiredHeight)
         // Lighter than the usual disabled dimming. Automatic colour is on by default, so this is
         // the state the popup is normally seen in, and dimming harder washed the warm-to-cool ramp
         // out to the point of being unreadable.
@@ -65,14 +67,11 @@ struct TemperatureSlider: View {
     // MARK: - Drawing
 
     private func handle(at x: CGFloat) -> some View {
-        Circle()
-            .fill(Color(nsColor: .systemGray))
-            .overlay {
-                Circle().strokeBorder(Color(nsColor: .controlBackgroundColor), lineWidth: 2)
-            }
-            .frame(width: handleDiameter, height: handleDiameter)
-            .shadow(color: .black.opacity(0.18), radius: 1.5, y: 0.5)
-            .offset(x: x - (handleDiameter / 2))
+        SliderThumb(
+            fill: Color(nsColor: .systemGray),
+            border: Color(nsColor: .controlBackgroundColor)
+        )
+        .offset(x: x - (SliderThumb.width / 2))
     }
 
     // MARK: - Geometry

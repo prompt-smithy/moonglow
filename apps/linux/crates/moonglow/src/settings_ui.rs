@@ -244,11 +244,9 @@ impl<S: SettingsPersistence + 'static> eframe::App for SettingsApp<S> {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // NOTE: no global slider_width here. egui sizes every Slider to
-            // exactly spacing.slider_width with no shrink-to-fit, so a width
-            // measured at the outer panel overruns nested content (frame +
-            // card + scrollbar gutter) and clips on the right. Each card sets
-            // it from its own local width instead (see card()).
+            // No slider_width tweak here: the sliders are drawn by hand
+            // rather than by egui::Slider, so each measures its own width and
+            // cannot overrun the nested card.
             ui.spacing_mut().scroll = settings_scroll_style();
             egui::Frame::new().inner_margin(12.0).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
@@ -269,19 +267,6 @@ impl<S: SettingsPersistence + 'static> eframe::App for SettingsApp<S> {
     }
 }
 
-/// Handle overhang allowance for sliders. The slider handle is centred on
-/// the value position, so at an extreme it extends ~half a handle past the
-/// widget edge; without this the handle clips on the right at maximum.
-const SLIDER_HANDLE_ALLOWANCE: f32 = 8.0;
-
-/// Slider width for card content: the local width minus handle room.
-/// Measured HERE (not at the outer panel) because egui renders sliders at
-/// exactly `slider_width` with no shrink-to-fit — an outer measurement
-/// overruns the nested card and clips on the right.
-fn card_slider_width(content_width: f32) -> f32 {
-    (content_width - SLIDER_HANDLE_ALLOWANCE).max(0.0)
-}
-
 /// Collapsible settings section, collapsed at launch. Expansion lasts the
 /// session (egui memory); relaunching collapses again.
 fn collapsed_card(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
@@ -289,7 +274,6 @@ fn collapsed_card(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui
         .inner_margin(egui::Margin::symmetric(14, 10))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.spacing_mut().slider_width = card_slider_width(ui.available_width());
             egui::CollapsingHeader::new(egui::RichText::new(title).strong().size(14.0))
                 .default_open(false)
                 .show(ui, content);
@@ -428,7 +412,6 @@ fn card(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
         .inner_margin(egui::Margin::symmetric(14, 10))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.spacing_mut().slider_width = card_slider_width(ui.available_width());
             ui.label(egui::RichText::new(title).strong().size(14.0));
             ui.separator();
             content(ui);
@@ -527,10 +510,7 @@ impl<S: SettingsPersistence> SettingsApp<S> {
         card(ui, "Brightness", |ui| {
             if supported {
                 labeled_value(ui, "Display brightness", &format!("{}%", self.brightness));
-                if ui
-                    .add(egui::Slider::new(&mut self.brightness, 1..=100).show_value(false))
-                    .changed()
-                {
+                if triangle_slider(ui, &mut self.brightness, 1..=100, 1) {
                     if let Ok(mut state) = self.state.lock() {
                         state.set_brightness(self.brightness);
                     }
@@ -581,10 +561,7 @@ impl<S: SettingsPersistence> SettingsApp<S> {
                 return;
             }
             labeled_value(ui, "Manual temperature", &format!("{} K", self.temperature));
-            let slider = egui::Slider::new(&mut self.temperature, 900..=6600)
-                .step_by(100.0)
-                .show_value(false);
-            if ui.add(slider).changed() {
+            if triangle_slider(ui, &mut self.temperature, 900..=6600, 100) {
                 // Snap to the 100 K step like the macOS slider.
                 self.temperature = TemperatureRange::snap(self.temperature);
                 if let Ok(mut state) = self.state.lock() {
@@ -791,11 +768,149 @@ impl<S: SettingsPersistence> SettingsApp<S> {
     }
 }
 
-/// Range-bar handle radius. Handles are centred on their value position, so
-/// the value mapping must inset both ends by this radius — otherwise the
-/// night handle bleeds into the left padding and the day handle clips on the
-/// right at maximum.
+/// Handle travel inset. Handles are centred on their value position, so the
+/// value mapping must inset both ends by this much — otherwise the night
+/// handle bleeds into the left padding and the day handle clips on the right
+/// at maximum. It is wider than the head itself (16 pt across), which leaves
+/// the head a little air at both ends.
 const RANGE_HANDLE_RADIUS: f32 = 10.0;
+
+/// Half-width of the triangle head, ported from the Windows `Thumb`
+/// (`M 8,0 L 16,15 L 0,15 Z`).
+const HANDLE_HALF_WIDTH: f32 = 8.0;
+
+/// How far the apex rises above the handle centre. Windows lifts the head 3 pt above the
+/// track centre, and the apex is another half-height (7.5 pt) above the head's centre.
+const HANDLE_APEX_RISE: f32 = 10.5;
+
+/// How far the base drops below the handle centre (7.5 − 3).
+const HANDLE_BASE_DROP: f32 = 4.5;
+
+/// Paints one upward-pointing triangle head centred on `center`, the same
+/// shape the Windows build uses for every slider handle.
+fn paint_triangle_handle(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    fill: egui::Color32,
+    stroke: egui::Stroke,
+) {
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            egui::pos2(center.x, center.y - HANDLE_APEX_RISE),
+            egui::pos2(center.x + HANDLE_HALF_WIDTH, center.y + HANDLE_BASE_DROP),
+            egui::pos2(center.x - HANDLE_HALF_WIDTH, center.y + HANDLE_BASE_DROP),
+        ],
+        fill,
+        stroke,
+    ));
+}
+
+/// Value at an X inside `track`, snapped to `step` and clamped to `lo..=hi`.
+fn triangle_slider_value_at(x: f32, track: egui::Rect, lo: i32, hi: i32, step: i32) -> i32 {
+    if track.width() <= 0.0 || hi <= lo {
+        return lo;
+    }
+    let fraction = ((x - track.left()) / track.width()).clamp(0.0, 1.0) as f64;
+    let raw = lo as f64 + fraction * (hi - lo) as f64;
+    let step = step.max(1) as f64;
+    (((raw / step).round() * step) as i32).clamp(lo, hi)
+}
+
+/// A single-handle slider drawn with the same triangle head as the range bar.
+///
+/// egui's own `Slider` always paints a circular handle and gives no way to
+/// replace it, so the track, the head and the interaction are drawn here.
+/// Pointer behaviour follows `egui::Slider` — click or drag anywhere on the
+/// track — and the arrow keys step by one `step` while focused.
+fn triangle_slider(
+    ui: &mut egui::Ui,
+    value: &mut i32,
+    range: std::ops::RangeInclusive<i32>,
+    step: i32,
+) -> bool {
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), 34.0),
+        egui::Sense::click_and_drag(),
+    );
+    let track_height = 10.0;
+    let track = egui::Rect::from_min_max(
+        egui::pos2(
+            rect.left() + RANGE_HANDLE_RADIUS,
+            rect.center().y - track_height / 2.0,
+        ),
+        egui::pos2(
+            rect.right() - RANGE_HANDLE_RADIUS,
+            rect.center().y + track_height / 2.0,
+        ),
+    );
+    let (lo, hi) = (*range.start(), *range.end());
+
+    let mut next = *value;
+    if response.clicked() || response.dragged() {
+        response.request_focus();
+        if let Some(pos) = response.interact_pointer_pos() {
+            next = triangle_slider_value_at(pos.x, track, lo, hi, step);
+        }
+    }
+    if response.has_focus() {
+        // Claim the arrow keys while focused, as `egui::Slider` does, so they
+        // step the value instead of moving focus to the next widget.
+        ui.memory_mut(|memory| {
+            memory.set_focus_lock_filter(
+                response.id,
+                egui::EventFilter {
+                    horizontal_arrows: true,
+                    vertical_arrows: true,
+                    ..Default::default()
+                },
+            );
+        });
+        let (back, forward) = ui.input(|i| {
+            (
+                i.key_pressed(egui::Key::ArrowLeft) || i.key_pressed(egui::Key::ArrowDown),
+                i.key_pressed(egui::Key::ArrowRight) || i.key_pressed(egui::Key::ArrowUp),
+            )
+        });
+        if back {
+            next -= step;
+        }
+        if forward {
+            next += step;
+        }
+        next = next.clamp(lo, hi);
+    }
+
+    let changed = next != *value;
+    *value = next;
+
+    let fraction = if hi > lo {
+        ((*value - lo) as f32 / (hi - lo) as f32).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let x = track.left() + fraction * track.width();
+
+    let painter = ui.painter();
+    let visuals = ui.visuals();
+    painter.rect_filled(track, track_height / 2.0, visuals.extreme_bg_color);
+    painter.rect_filled(
+        egui::Rect::from_min_max(track.left_top(), egui::pos2(x, track.bottom())),
+        track_height / 2.0,
+        visuals.selection.bg_fill,
+    );
+    paint_triangle_handle(
+        painter,
+        egui::pos2(x, rect.center().y),
+        egui::Color32::WHITE,
+        egui::Stroke::new(2.0_f32, visuals.window_stroke.color),
+    );
+
+    if response.hovered() || response.dragged() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+
+    changed
+}
 
 /// Handle travel width within a bar of `rect_width`: the bar minus one
 /// handle radius at each end.
@@ -883,12 +998,11 @@ fn temperature_range_bar(ui: &mut egui::Ui, range: &mut TemperatureRange) -> boo
     );
 
     for value in [range.night(), range.day()] {
-        let center = egui::pos2(x_of(value), rect.center().y);
-        painter.circle_filled(center, RANGE_HANDLE_RADIUS, egui::Color32::WHITE);
-        painter.circle_stroke(
-            center,
-            RANGE_HANDLE_RADIUS,
-            (2.0, ui.visuals().window_stroke.color),
+        paint_triangle_handle(
+            painter,
+            egui::pos2(x_of(value), rect.center().y),
+            egui::Color32::WHITE,
+            egui::Stroke::new(2.0_f32, ui.visuals().window_stroke.color),
         );
     }
     if response.hovered() || response.dragged() {
@@ -1036,13 +1150,28 @@ mod tests {
     }
 
     #[test]
-    fn card_slider_stays_inside_content() {
-        // Sliders render at exactly this width (no shrink-to-fit), so it must
-        // be the LOCAL card width minus handle room — never an outer-panel
-        // measurement, which overruns the nested card and clips on the right.
-        assert_eq!(super::card_slider_width(400.0), 392.0);
-        assert_eq!(super::card_slider_width(8.0), 0.0);
-        assert_eq!(super::card_slider_width(0.0), 0.0);
+    fn triangle_slider_maps_pixels_to_values() {
+        // The hand-drawn slider must clamp at both ends and snap to its step.
+        let track = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(100.0, 10.0));
+        assert_eq!(super::triangle_slider_value_at(-5.0, track, 1, 100, 1), 1);
+        assert_eq!(super::triangle_slider_value_at(0.0, track, 1, 100, 1), 1);
+        assert_eq!(
+            super::triangle_slider_value_at(100.0, track, 1, 100, 1),
+            100
+        );
+        assert_eq!(
+            super::triangle_slider_value_at(150.0, track, 1, 100, 1),
+            100
+        );
+        assert_eq!(
+            // 50 % across 900..=6600 is 3750 K, which rounds up to the nearest 100 K step.
+            super::triangle_slider_value_at(50.0, track, 900, 6600, 100),
+            3800
+        );
+        assert_eq!(
+            super::triangle_slider_value_at(100.0, track, 900, 6600, 100),
+            6600
+        );
     }
 
     #[test]

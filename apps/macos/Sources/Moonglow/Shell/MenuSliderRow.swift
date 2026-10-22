@@ -50,71 +50,54 @@ final class MenuActionRow: MenuHoverableRow {
     }
 }
 
-/// A compact native slider embedded in the status item's standard menu.
-final class MenuSliderRow: MenuHoverableRow {
+/// The brightness row hosts the shared triangle slider inside the status-item menu.
+final class MenuBrightnessSliderRow: MenuHoverableRow {
 
-    let slider: NSSlider
+    init(viewModel: MainViewModel) {
+        super.init(frame: NSRect(x: 0, y: 0, width: 252, height: 52))
 
-    private let title: String
-    private let unit: String
-    private let valueLabel: NSTextField
-
-    init(
-        title: String,
-        unit: String = "%",
-        value: Int,
-        minimum: Int,
-        maximum: Int,
-        target: AnyObject,
-        action: Selector
-    ) {
-        self.title = title
-        self.unit = unit
-        self.valueLabel = NSTextField(labelWithString: "")
-        self.slider = NSSlider(
-            value: Double(value),
-            minValue: Double(minimum),
-            maxValue: Double(maximum),
-            target: target,
-            action: action
-        )
-
-        super.init(frame: NSRect(x: 0, y: 0, width: 252, height: 48))
-
-        valueLabel.font = .menuFont(ofSize: NSFont.systemFontSize)
-        valueLabel.textColor = .labelColor
-        slider.controlSize = .small
-        slider.trackFillColor = .systemGray
-        slider.isContinuous = true
-        slider.setAccessibilityLabel(title)
-
-        let stack = NSStackView(views: [valueLabel, slider])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 2
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 12, bottom: 4, right: 12)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
+        let hostingView = NSHostingView(rootView: MenuBrightnessSliderContent(viewModel: viewModel))
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(hostingView)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            slider.widthAnchor.constraint(equalToConstant: 228),
+            hostingView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-
-        update(value: value)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
-        fatalError("MenuSliderRow is created in code only")
+        fatalError("MenuBrightnessSliderRow is created in code only")
     }
+}
 
-    func update(value: Int) {
-        slider.integerValue = value
-        valueLabel.stringValue = "\(title)  \(value)\(unit)"
+private struct MenuBrightnessSliderContent: View {
+
+    @ObservedObject var viewModel: MainViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text("Brightness")
+                Spacer()
+                Text("\(viewModel.brightness)%")
+                    .monospacedDigit()
+            }
+            .font(.system(size: NSFont.systemFontSize))
+            .foregroundStyle(.primary)
+
+            TriangleSlider(
+                value: $viewModel.brightness,
+                isEnabled: viewModel.hasBrightnessSupport,
+                label: "Brightness",
+                valueDescription: { "\($0) percent" }
+            )
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
     }
 }
 
@@ -122,7 +105,9 @@ final class MenuSliderRow: MenuHoverableRow {
 final class MenuTemperatureSliderRow: MenuHoverableRow {
 
     init(viewModel: MainViewModel) {
-        super.init(frame: NSRect(x: 0, y: 0, width: 252, height: 48))
+        // Taller than the native 48 pt rows: the drawn triangle head needs 24 pt of
+        // vertical room under the title.
+        super.init(frame: NSRect(x: 0, y: 0, width: 252, height: 52))
 
         let hostingView = NSHostingView(rootView: MenuTemperatureSliderContent(viewModel: viewModel))
         hostingView.translatesAutoresizingMaskIntoConstraints = false
