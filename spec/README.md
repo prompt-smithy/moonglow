@@ -22,19 +22,19 @@ Each port claims to be derived from another:
 - `apps/macos/Sources/MoonglowKit/Models/AppSettings.swift` — "Ported from `Models/AppSettings.cs`"
 - `apps/linux/crates/moonglow-core/src/settings.rs` — "Ported from `Models/AppSettings.swift`"
 
-That provenance is circular, and the constants have already drifted. Until the defaults are
-reconciled, the schema defaults below are the target and the drift is listed as known
-divergence.
+That provenance is circular, so the schema below is the target rather than whichever port
+happened to be read first. The defaults are now reconciled across all three implementations.
 
-| Setting | Canonical (schema) | Windows today | Linux today |
+| Setting | Canonical (schema) | Windows | Linux |
 | --- | --- | --- | --- |
-| `nightColorTempK` | 1200 | 3500 | 1200 |
-| `manualBrightness` | 80 | 60 | 80 |
-| `morningStart` / `morningEnd` | 06:00 / 07:00 | 07:00 / 09:00 | 06:00 / 07:00 |
-| `eveningStart` / `eveningEnd` | 17:30 / 18:30 | 18:00 / 22:00 | 17:30 / 18:30 |
-| `launchAtLogin` key | present | not persisted (read from registry) | present |
+| `nightColorTempK` | 1200 | 1200 | 1200 |
+| `manualBrightness` | 80 | 80 | 80 |
+| `morningStart` / `morningEnd` | 06:00 / 07:00 | 06:00 / 07:00 | 06:00 / 07:00 |
+| `eveningStart` / `eveningEnd` | 17:30 / 18:30 | 17:30 / 18:30 | 17:30 / 18:30 |
+| `launchAtLogin` key | present | present | present |
 
-Ranges, the 100 K step, and the five-state schedule model already agree everywhere.
+Ranges, the 100 K step, the five-state schedule model, lenient decoding, and the
+schedule-ordering clamp also agree everywhere.
 
 ## Conformance
 

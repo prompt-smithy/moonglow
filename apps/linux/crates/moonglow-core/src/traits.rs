@@ -69,12 +69,19 @@ impl BrightnessService for BrightnessFallbackService {
     }
 
     fn set_brightness(&self, percent: i32) {
-        if self
+        let hardware_supported = self
             .hardware
             .lock()
             .map(|h| h.is_supported())
-            .unwrap_or(false)
-        {
+            .unwrap_or(false);
+        if hardware_supported {
+            // Exactly one mechanism owns brightness: a fallback episode may have
+            // left the gamma ramps dimmed, so reset them before the hardware
+            // write or the two would compound. Nearly free on the steady path —
+            // gamma backends skip the rewrite when already at 100%.
+            if let Ok(software) = self.software.lock() {
+                software.set_brightness(100);
+            }
             if let Ok(h) = self.hardware.lock() {
                 h.set_brightness(percent);
             }
@@ -100,11 +107,10 @@ impl BrightnessService for BrightnessFallbackService {
     }
 
     fn reprobe(&mut self) {
+        // Software support is derived live from the displays; only hardware can be
+        // late, so only that backend is re-probed.
         if let Ok(mut h) = self.hardware.lock() {
             h.reprobe();
-        }
-        if let Ok(mut s) = self.software.lock() {
-            s.reprobe();
         }
     }
 
@@ -135,6 +141,11 @@ pub trait ColorTemperatureService: Send {
     fn apply(&self, kelvin: i32) -> bool;
     /// Restores the pre-launch state, undoing every ramp this service applied.
     fn reset(&self);
+    /// Drops any "already applied" cache. Gamma tables are global state that
+    /// the desktop, a daemon, or a display change can replace or clear, so the
+    /// last write is never assumed to still be on screen. Callers invalidate on
+    /// every display change; the next apply writes again.
+    fn invalidate(&self) {}
 }
 
 /// Registers the app to start at login.

@@ -26,7 +26,7 @@ mod xembed;
 
 use clap::Parser;
 use moonglow_core::schedule::TICK_INTERVAL_SECS;
-use moonglow_core::state::{ScheduleTime, StateManager};
+use moonglow_core::state::{ScheduleTime, ScheduleWindow, StateManager};
 use moonglow_core::time_of_day::TimeOfDay;
 use moonglow_core::traits::{
     BrightnessFallbackService, BrightnessService, ColorTemperatureService, DisplayService,
@@ -433,18 +433,24 @@ fn direct_command(cli: &Cli) -> i32 {
             Ok(times) => times,
             Err(code) => return code,
         };
-        state.set_schedule_time(ScheduleTime::MorningStart, from);
-        state.set_schedule_time(ScheduleTime::MorningEnd, to);
-        println!("morning: {from} - {to}");
+        state.set_schedule_window(ScheduleWindow::Morning, from, to);
+        println!(
+            "morning: {} - {}",
+            state.schedule_time(ScheduleTime::MorningStart),
+            state.schedule_time(ScheduleTime::MorningEnd)
+        );
     }
     if let Some(pair) = &cli.evening {
         let (from, to) = match parse_window("--evening", pair) {
             Ok(times) => times,
             Err(code) => return code,
         };
-        state.set_schedule_time(ScheduleTime::EveningStart, from);
-        state.set_schedule_time(ScheduleTime::EveningEnd, to);
-        println!("evening: {from} - {to}");
+        state.set_schedule_window(ScheduleWindow::Evening, from, to);
+        println!(
+            "evening: {} - {}",
+            state.schedule_time(ScheduleTime::EveningStart),
+            state.schedule_time(ScheduleTime::EveningEnd)
+        );
     }
     if let Some(login) = &cli.login {
         match login.as_str() {

@@ -19,11 +19,19 @@ public sealed class BrightnessService
 
     public bool InternalPanelAvailable { get; private set; }
 
+    /// <summary>Whether any attached display can take a hardware brightness write.</summary>
+    public bool IsSupported
+        => InternalPanelAvailable || _monitors.Monitors.Any(m => m.SupportsDdcBrightness);
+
     public BrightnessService(MonitorService monitors)
     {
         _monitors = monitors;
         DetectInternalPanel();
     }
+
+    /// <summary>Re-detects support, e.g. after a display or dock change. Monitors are
+    /// re-enumerated separately by <see cref="MonitorService.Refresh"/>.</summary>
+    public void RefreshSupport() => DetectInternalPanel();
 
     private void DetectInternalPanel()
     {

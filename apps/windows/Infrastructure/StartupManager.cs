@@ -50,24 +50,27 @@ internal static class StartupManager
         return false;
     }
 
-    public static void Set(bool enabled)
+    /// <summary>Registers or removes the entry. Returns false when Windows refused the change
+    /// (locked-down policy, unusable process path), so the caller never records intent that did
+    /// not take effect.</summary>
+    public static bool Set(bool enabled)
     {
         try
         {
             using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
             if (key is null)
-                return;
+                return false;
 
             if (enabled)
             {
                 Process process = Process.GetCurrentProcess();
                 string? exe = process.MainModule == null ? null : process.MainModule.FileName;
-                if (!string.IsNullOrEmpty(exe))
-                {
-                    key.SetValue(ValueName, $"\"{exe}\"");
-                    foreach (string legacyName in LegacyValueNames)
-                        key.DeleteValue(legacyName, throwOnMissingValue: false);
-                }
+                if (string.IsNullOrEmpty(exe))
+                    return false;
+
+                key.SetValue(ValueName, $"\"{exe}\"");
+                foreach (string legacyName in LegacyValueNames)
+                    key.DeleteValue(legacyName, throwOnMissingValue: false);
             }
             else
             {
@@ -75,10 +78,13 @@ internal static class StartupManager
                 foreach (string legacyName in LegacyValueNames)
                     key.DeleteValue(legacyName, throwOnMissingValue: false);
             }
+
+            return true;
         }
         catch
         {
-            // Registry access can fail under locked-down policies; ignore.
+            // Registry access can fail under locked-down policies; report the refusal.
+            return false;
         }
     }
 

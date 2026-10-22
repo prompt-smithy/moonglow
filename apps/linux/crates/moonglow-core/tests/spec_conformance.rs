@@ -208,10 +208,18 @@ fn range_ordering_vectors_match_exactly() {
     for row in document.range {
         let range = TemperatureRange::new(row.night, row.day);
         assert_eq!(
-            range.night(), row.night_out,
+            range.night(),
+            row.night_out,
             "night for {}/{}",
-            row.night, row.day
+            row.night,
+            row.day
         );
-        assert_eq!(range.day(), row.day_out, "day for {}/{}", row.night, row.day);
+        assert_eq!(
+            range.day(),
+            row.day_out,
+            "day for {}/{}",
+            row.night,
+            row.day
+        );
     }
 }

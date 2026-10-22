@@ -31,17 +31,32 @@ impl SettingsStore {
     pub fn default_path() -> Self {
         Self::new(default_file_path())
     }
+
+    /// Moves an unparseable settings file aside, replacing any previous
+    /// preservation. Best effort, like everything else here.
+    fn preserve_corrupt_file(&self) {
+        let corrupt = self.file_path.with_extension("json.corrupt");
+        let _ = std::fs::remove_file(&corrupt);
+        let _ = std::fs::rename(&self.file_path, &corrupt);
+    }
 }
 
 impl SettingsPersistence for SettingsStore {
     /// Reads settings from disk and normalizes them. A missing, unreadable, or
-    /// corrupt file falls back to defaults.
+    /// corrupt file falls back to defaults; a corrupt one is first moved aside
+    /// to `settings.json.corrupt` so the next save does not destroy it.
     fn load(&self) -> AppSettings {
-        std::fs::read(&self.file_path)
-            .ok()
-            .and_then(|data| serde_json::from_slice(&data).ok())
-            .map(|s: AppSettings| s.normalized())
-            .unwrap_or_default()
+        let data = match std::fs::read(&self.file_path) {
+            Ok(data) => data,
+            Err(_) => return AppSettings::default(),
+        };
+        match serde_json::from_slice::<AppSettings>(&data) {
+            Ok(settings) => settings.normalized(),
+            Err(_) => {
+                self.preserve_corrupt_file();
+                AppSettings::default()
+            }
+        }
     }
 
     /// Persists settings, normalizing them first so out-of-range values never
@@ -96,12 +111,27 @@ mod tests {
     }
 
     #[test]
+    fn corrupt_file_is_preserved_before_falling_back() {
+        let (store, dir) = temp_store("corrupt-preserve");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&store.file_path, "{ not json").unwrap();
+        assert_eq!(store.load(), AppSettings::default());
+        let preserved = store.file_path.with_extension("json.corrupt");
+        assert!(preserved.exists());
+        assert_eq!(std::fs::read_to_string(&preserved).unwrap(), "{ not json");
+        assert!(!store.file_path.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn round_trips_and_normalizes() {
         let (store, dir) = temp_store("roundtrip");
-        let mut settings = AppSettings::default();
-        settings.manual_brightness = 42;
-        settings.morning_start = TimeOfDay::new(5, 15);
-        settings.manual_color_temp_k = 99999; // normalized on save
+        let settings = AppSettings {
+            manual_brightness: 42,
+            morning_start: TimeOfDay::new(5, 15),
+            manual_color_temp_k: 99999, // normalized on save
+            ..AppSettings::default()
+        };
         store.save(&settings);
         let loaded = store.load();
         assert_eq!(loaded.manual_brightness, 42);

@@ -78,15 +78,27 @@ public partial class App : Application
         _viewModel.OpenSettingsRequested += (_, _) => OpenSettings();
         _viewModel.ExitRequested += (_, _) => Shutdown();
 
+        var popup = new TrayPopup { DataContext = _viewModel };
+        // Opening the popup is the moment before a brightness change: re-probe while
+        // hardware is down so a recovered panel is back before the slider moves.
+        popup.IsVisibleChanged += (_, args) =>
+        {
+            // Only probe while hardware is down: a probe that is already supported would
+            // just stall the popup opening (WMI and DDC transactions are synchronous here).
+            if (args.NewValue is true && !_viewModel.HasBrightnessSupport)
+                _viewModel.RefreshDisplays();
+        };
+
         _tray = new TaskbarIcon
         {
             Icon = IconFactory.CreateTrayIcon(),
             ToolTipText = "Moonglow",
             DataContext = _viewModel,
-            TrayPopup = new TrayPopup { DataContext = _viewModel },
+            TrayPopup = popup,
             ContextMenu = BuildContextMenu(),
         };
 
+        _viewModel.ApplyStartupState();
         _viewModel.ApplyInitialState();
         _schedule.Start();
 
@@ -145,6 +157,10 @@ public partial class App : Application
         Dispatcher.Invoke(() =>
         {
             _lastResumeUtc = DateTime.UtcNow;
+            // Resume re-initialises the display hardware: handles may be stale and the
+            // panel set may have changed while the machine slept.
+            _color.Invalidate();
+            _viewModel.RefreshDisplays();
             _viewModel.ReapplyColorTemperature();
         });
 
@@ -215,8 +231,11 @@ public partial class App : Application
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
     {
-        _monitors.Refresh();
-        _schedule.Tick();
+        // The display set changed under us, so ramps captured for a panel that is no
+        // longer attached must not be restored onto one that reuses its name.
+        _color.Invalidate();
+        _viewModel.RefreshDisplays();
+        _viewModel.ReapplyColorTemperature();
     }
 
     protected override void OnExit(ExitEventArgs e)

@@ -62,6 +62,21 @@ public sealed class ColorTemperatureService : IDisposable
         RestoreOriginalGammaRamps();
     }
 
+    /// <summary>Drops captured ramps for displays that are no longer attached.
+    ///
+    /// A reattached panel can reuse a device name, and restoring the previous panel's ramp
+    /// onto it would tint the new display on exit. Called whenever the display set changes.
+    /// </summary>
+    public void Invalidate()
+    {
+        var present = new HashSet<string>(
+            _monitors.Monitors.Select(m => m.DeviceName),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (string missing in _savedGammaRamps.Keys.Where(k => !present.Contains(k)).ToList())
+            _savedGammaRamps.Remove(missing);
+    }
+
     public void Dispose()
     {
         RestoreOriginalGammaRamps();

@@ -14,6 +14,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly MonitorService _monitors;
 
     private bool _applyingFromSchedule;
+    private bool _startupRegistrationFailed;
 
     private int _brightnessValue;
     private int _colorTemp;
@@ -41,9 +42,9 @@ public sealed class MainViewModel : ObservableObject
         _settingsService = settingsService;
         _monitors = monitors;
 
-        _brightnessValue = MathUtil.Clamp(Settings.ManualBrightness, BrightnessService.MinBrightnessPercent, 100);
+        _brightnessValue = AppSettings.ClampBrightness(Settings.ManualBrightness);
         _auto = Settings.AutoColorTemperature;
-        _colorTemp = _auto ? _schedule.CurrentTargetTemperature() : Settings.ManualColorTempK;
+        _colorTemp = _auto ? _schedule.CurrentTargetTemperature() : AppSettings.ClampKelvin(Settings.ManualColorTempK);
 
         OpenSettingsCommand = new RelayCommand(_ => OpenSettingsRequested?.Invoke(this, EventArgs.Empty));
         ExitCommand = new RelayCommand(_ => ExitRequested?.Invoke(this, EventArgs.Empty));
@@ -59,7 +60,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Applies the persisted brightness and (manual) color temperature at launch.</summary>
     public void ApplyInitialState()
     {
-        _brightness.SetBrightness(_brightnessValue);
+        if (HasBrightnessSupport)
+            _brightness.SetBrightness(_brightnessValue);
+
         ReapplyColorTemperature();
     }
 
@@ -67,21 +70,30 @@ public sealed class MainViewModel : ObservableObject
     {
         if (_auto)
             _schedule.Tick();
-        else
+        else if (HasColorSupport)
             _color.Apply(_colorTemp);
     }
+
+    public bool HasBrightnessSupport => _brightness.IsSupported;
+
+    public bool HasColorSupport => _monitors.Monitors.Count > 0;
+
+    public bool HasNoDisplays => !_brightness.InternalPanelAvailable && _monitors.Monitors.Count == 0;
 
     public int Brightness
     {
         get => _brightnessValue;
         set
         {
-            if (!SetProperty(ref _brightnessValue, MathUtil.Clamp(value, BrightnessService.MinBrightnessPercent, 100)))
+            if (!SetProperty(ref _brightnessValue, AppSettings.ClampBrightness(value)))
                 return;
 
-            _brightness.SetBrightness(_brightnessValue);
             Settings.ManualBrightness = _brightnessValue;
             _settingsService.Save();
+
+            // The setting persists regardless; hardware only moves with a capable display.
+            if (HasBrightnessSupport)
+                _brightness.SetBrightness(_brightnessValue);
         }
     }
 
@@ -90,15 +102,19 @@ public sealed class MainViewModel : ObservableObject
         get => _colorTemp;
         set
         {
-            if (!SetProperty(ref _colorTemp, value))
+            if (!SetProperty(ref _colorTemp, AppSettings.ClampKelvin(value)))
                 return;
 
+            // In automatic mode the slider shows the schedule's value, which is never
+            // persisted as a manual override or applied over the schedule.
             if (_applyingFromSchedule || _auto)
                 return;
 
-            _color.Apply(_colorTemp);
             Settings.ManualColorTempK = _colorTemp;
             _settingsService.Save();
+
+            if (HasColorSupport)
+                _color.Apply(_colorTemp);
         }
     }
 
@@ -118,25 +134,27 @@ public sealed class MainViewModel : ObservableObject
             {
                 _schedule.Tick();
             }
-            else
+            else if (HasColorSupport)
             {
-                Settings.ManualColorTempK = _colorTemp;
+                // Keep showing the temperature that was on screen. The manual preference is
+                // left untouched, so turning automatic mode back on does not forget it.
                 _color.Apply(_colorTemp);
             }
         }
     }
 
-    public bool ManualColorEnabled => !_auto;
+    public bool ManualColorEnabled => !_auto && HasColorSupport;
 
     public int DayColorTemp
     {
         get => Settings.DayColorTempK;
         set
         {
-            if (Settings.DayColorTempK == value)
+            int clamped = AppSettings.ClampKelvin(value);
+            if (Settings.DayColorTempK == clamped)
                 return;
 
-            Settings.DayColorTempK = value;
+            Settings.DayColorTempK = clamped;
             _settingsService.Save();
             OnPropertyChanged();
             RetickIfAuto();
@@ -148,10 +166,11 @@ public sealed class MainViewModel : ObservableObject
         get => Settings.NightColorTempK;
         set
         {
-            if (Settings.NightColorTempK == value)
+            int clamped = AppSettings.ClampKelvin(value);
+            if (Settings.NightColorTempK == clamped)
                 return;
 
-            Settings.NightColorTempK = value;
+            Settings.NightColorTempK = clamped;
             _settingsService.Save();
             OnPropertyChanged();
             RetickIfAuto();
@@ -185,28 +204,128 @@ public sealed class MainViewModel : ObservableObject
     // Times are stored and edited as canonical 24-hour "HH:mm"; the TimePicker handles display.
     private void SetTime(string value, string current, Action<string> assign, string propertyName)
     {
-        if (string.IsNullOrWhiteSpace(value) || current == value)
+        string clamped = ClampScheduleTime(value, propertyName, current);
+        if (current == clamped)
             return;
 
-        assign(value);
+        assign(clamped);
         _settingsService.Save();
         RetickIfAuto();
         OnPropertyChanged(propertyName);
     }
 
+    /// <summary>
+    /// Keeps <c>morningStart &lt; morningEnd &lt;= eveningStart &lt; eveningEnd</c> by clamping
+    /// an edit against its neighbours, leaving the other three untouched. Without this an
+    /// inverted window collapses the day to night plus one abrupt flash at the boundary.
+    /// </summary>
+    private string ClampScheduleTime(string value, string propertyName, string current)
+    {
+        if (!AppSettings.TryParseTime(value, out TimeSpan time))
+            return current;
+
+        TimeSpan oneMinute = TimeSpan.FromMinutes(1);
+        var settings = Settings;
+        TimeSpan lower;
+        TimeSpan upper;
+
+        if (propertyName == nameof(MorningStart))
+        {
+            lower = TimeSpan.Zero;
+            upper = settings.MorningEndTime - oneMinute;
+        }
+        else if (propertyName == nameof(MorningEnd))
+        {
+            lower = settings.MorningStartTime + oneMinute;
+            upper = settings.EveningStartTime;
+        }
+        else if (propertyName == nameof(EveningStart))
+        {
+            lower = settings.MorningEndTime;
+            upper = settings.EveningEndTime - oneMinute;
+        }
+        else if (propertyName == nameof(EveningEnd))
+        {
+            lower = settings.EveningStartTime + oneMinute;
+            upper = TimeSpan.FromDays(1) - oneMinute;
+        }
+        else
+        {
+            return value;
+        }
+
+        // No valid value exists (the neighbours already touch): refuse the edit rather
+        // than invent a time.
+        if (lower > upper)
+            return current;
+
+        if (time < lower)
+            time = lower;
+        else if (time > upper)
+            time = upper;
+
+        return AppSettings.FormatTime(time);
+    }
+
     public bool RunAtStartup
     {
-        get => Settings.RunAtStartup;
+        get => Settings.LaunchAtLogin;
         set
         {
-            if (Settings.RunAtStartup == value)
+            if (Settings.LaunchAtLogin == value)
                 return;
 
-            Settings.RunAtStartup = value;
+            // A change Windows refuses is deliberately not recorded, so the toggle falls back
+            // to the truth instead of claiming a registration that was never made.
+            if (!StartupManager.Set(value))
+            {
+                _startupRegistrationFailed = true;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(RunAtStartupStatus));
+                return;
+            }
+
+            _startupRegistrationFailed = false;
+            Settings.LaunchAtLogin = value;
             _settingsService.Save();
             OnPropertyChanged();
-            StartupManager.Set(value);
+            OnPropertyChanged(nameof(RunAtStartupStatus));
         }
+    }
+
+    /// <summary>Describes the startup state for the settings window.</summary>
+    public string RunAtStartupStatus
+    {
+        get
+        {
+            if (_startupRegistrationFailed)
+                return "Windows did not accept this startup entry. Check the registry permissions, then try again.";
+            if (StartupManager.IsEnabled())
+                return "Moonglow opens automatically when you sign in.";
+            if (Settings.LaunchAtLogin)
+                return "Could not register Moonglow as a startup app on this system.";
+            return "Moonglow opens only when you launch it.";
+        }
+    }
+
+    /// <summary>
+    /// Re-asserts the stored preference on Windows at launch, and adopts an entry the app did
+    /// not create instead of switching it off behind the user's back.
+    /// </summary>
+    public void ApplyStartupState()
+    {
+        if (Settings.LaunchAtLogin)
+        {
+            _startupRegistrationFailed = !StartupManager.Set(true);
+        }
+        else if (StartupManager.IsEnabled())
+        {
+            Settings.LaunchAtLogin = true;
+            _settingsService.Save();
+        }
+
+        OnPropertyChanged(nameof(RunAtStartup));
+        OnPropertyChanged(nameof(RunAtStartupStatus));
     }
 
     private void OnScheduleTemperatureApplied(int kelvin)
@@ -222,9 +341,14 @@ public sealed class MainViewModel : ObservableObject
             _schedule.Tick();
     }
 
-    private void RefreshDisplays()
+    /// <summary>Re-enumerates displays and re-probes hardware support.</summary>
+    public void RefreshDisplays()
     {
+        bool hadBrightnessSupport = HasBrightnessSupport;
+
+        _brightness.RefreshSupport();
         _monitors.Refresh();
+
         Displays.Clear();
 
         foreach (var monitor in _monitors.Monitors)
@@ -241,5 +365,14 @@ public sealed class MainViewModel : ObservableObject
 
         if (Displays.Count == 0)
             Displays.Add("No displays detected.");
+
+        // Hardware that answered late can take the persisted values now.
+        if (!hadBrightnessSupport && HasBrightnessSupport)
+            _brightness.SetBrightness(_brightnessValue);
+
+        OnPropertyChanged(nameof(HasBrightnessSupport));
+        OnPropertyChanged(nameof(HasColorSupport));
+        OnPropertyChanged(nameof(HasNoDisplays));
+        OnPropertyChanged(nameof(ManualColorEnabled));
     }
 }

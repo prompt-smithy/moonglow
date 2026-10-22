@@ -11,7 +11,7 @@
 use crate::schedule::ScheduleCalculator;
 use crate::settings::AppSettings;
 use crate::temperature_range::TemperatureRange;
-use crate::time_of_day::TimeOfDay;
+use crate::time_of_day::{TimeOfDay, MINUTES_PER_DAY};
 use crate::traits::{
     BrightnessService, ColorTemperatureService, DisplayService, LoginItemService,
     SettingsPersistence,
@@ -26,6 +26,13 @@ pub enum ScheduleTime {
     MorningEnd,
     EveningStart,
     EveningEnd,
+}
+
+/// Which transition a pair setter targets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScheduleWindow {
+    Morning,
+    Evening,
 }
 
 /// Single shared UI state. See the module docs.
@@ -148,6 +155,12 @@ impl<S: SettingsPersistence> StateManager<S> {
             return false;
         }
         self.displays = fresh;
+        // The display set changed under us, so anything the colour backend thinks
+        // is still on screen is no longer known to be — a panel unplugged and
+        // replugged can reuse an id. The next tick writes it again.
+        if let Ok(color) = self.color.lock() {
+            color.invalidate();
+        }
         if let Ok(mut brightness) = self.brightness.lock() {
             brightness.reprobe();
             if brightness.is_supported() {
@@ -275,19 +288,103 @@ impl<S: SettingsPersistence> StateManager<S> {
     }
 
     /// Sets a schedule time. Invalid values are ignored, never persisted.
+    ///
+    /// The edited time is clamped against its neighbours so the four times always
+    /// satisfy `morning_start < morning_end <= evening_start < evening_end`.
+    /// Without this an inverted window collapses the day to night plus one
+    /// abrupt flash at the boundary. When the neighbours already touch there is
+    /// no valid value, so the edit is refused rather than inventing a time.
     pub fn set_schedule_time(&mut self, which: ScheduleTime, value: TimeOfDay) {
-        if !value.valid() || self.schedule_time(which) == value {
+        if !value.valid() {
+            return;
+        }
+        let clamped = self.clamp_schedule_time(which, value);
+        if self.schedule_time(which) == clamped {
             return;
         }
         self.mutate_settings(|s| match which {
-            ScheduleTime::MorningStart => s.morning_start = value,
-            ScheduleTime::MorningEnd => s.morning_end = value,
-            ScheduleTime::EveningStart => s.evening_start = value,
-            ScheduleTime::EveningEnd => s.evening_end = value,
+            ScheduleTime::MorningStart => s.morning_start = clamped,
+            ScheduleTime::MorningEnd => s.morning_end = clamped,
+            ScheduleTime::EveningStart => s.evening_start = clamped,
+            ScheduleTime::EveningEnd => s.evening_end = clamped,
         });
         if self.settings.auto_color_temperature {
             self.tick_schedule();
         }
+    }
+
+    /// Sets both ends of one transition at once.
+    ///
+    /// The CLI edits a pair in a single command; applying the ends one at a time
+    /// would clamp the first against the window it is about to replace, so a
+    /// window that moves earlier could never be shortened.
+    pub fn set_schedule_window(&mut self, window: ScheduleWindow, from: TimeOfDay, to: TimeOfDay) {
+        if !from.valid() || !to.valid() || to <= from {
+            return;
+        }
+
+        let mut start = from.minutes_since_midnight();
+        let mut end = to.minutes_since_midnight();
+        match window {
+            // The morning window must finish by the evening start.
+            ScheduleWindow::Morning => {
+                end = end.min(self.settings.evening_start.minutes_since_midnight());
+                start = start.min(end - 1);
+            }
+            // The evening window must start after the morning end.
+            ScheduleWindow::Evening => {
+                start = start.max(self.settings.morning_end.minutes_since_midnight());
+                end = end.max(start + 1).min(MINUTES_PER_DAY - 1);
+            }
+        }
+        if start >= end {
+            return;
+        }
+
+        let start = TimeOfDay::from_minutes(start);
+        let end = TimeOfDay::from_minutes(end);
+        self.mutate_settings(|s| match window {
+            ScheduleWindow::Morning => {
+                s.morning_start = start;
+                s.morning_end = end;
+            }
+            ScheduleWindow::Evening => {
+                s.evening_start = start;
+                s.evening_end = end;
+            }
+        });
+        if self.settings.auto_color_temperature {
+            self.tick_schedule();
+        }
+    }
+
+    /// Keeps the schedule ordered by clamping an edit against its neighbours,
+    /// leaving the other three times untouched.
+    fn clamp_schedule_time(&self, which: ScheduleTime, value: TimeOfDay) -> TimeOfDay {
+        let settings = &self.settings;
+        let bounds = match which {
+            ScheduleTime::MorningStart => (0, settings.morning_end.minutes_since_midnight() - 1),
+            ScheduleTime::MorningEnd => (
+                settings.morning_start.minutes_since_midnight() + 1,
+                settings.evening_start.minutes_since_midnight(),
+            ),
+            ScheduleTime::EveningStart => (
+                settings.morning_end.minutes_since_midnight(),
+                settings.evening_end.minutes_since_midnight() - 1,
+            ),
+            ScheduleTime::EveningEnd => (
+                settings.evening_start.minutes_since_midnight() + 1,
+                MINUTES_PER_DAY - 1,
+            ),
+        };
+
+        // No valid value exists (the neighbours already touch): refuse the edit
+        // rather than invent a time.
+        if bounds.0 > bounds.1 {
+            return self.schedule_time(which);
+        }
+
+        TimeOfDay::from_minutes(value.minutes_since_midnight().clamp(bounds.0, bounds.1))
     }
 
     // MARK: - Startup
@@ -342,8 +439,7 @@ impl<S: SettingsPersistence> StateManager<S> {
             return "Moonglow opens automatically when you log in.".to_string();
         }
         if self.settings.launch_at_login {
-            return "Could not register Moonglow as a login item on this system."
-                .to_string();
+            return "Could not register Moonglow as a login item on this system.".to_string();
         }
         "Moonglow opens only when you launch it.".to_string()
     }
@@ -370,9 +466,11 @@ impl<S: SettingsPersistence> StateManager<S> {
                 // Keep the stored intent so the status can say the registration
                 // did not take; the toggle would otherwise silently forget what
                 // the user asked for.
+                self.login_registration_failed = true;
                 self.login_requires_approval = self.login.requires_approval();
                 return;
             }
+            self.login_registration_failed = false;
         } else if self.login.is_enabled() {
             // Registered, but the app never recorded it — almost certainly added
             // by hand before this setting existed. Adopt it rather than
@@ -1051,10 +1149,127 @@ mod tests {
         let mut h = make_harness(settings, true, true, None, false, false, false);
         h.state.apply_login_item_state(false);
         assert!(h.state.launch_at_login());
-        assert!(h
-            .state
-            .launch_at_login_status()
-            .contains("Could not register"));
+        assert!(h.state.login_registration_failed());
+        assert!(h.state.launch_at_login_status().contains("did not accept"));
+    }
+
+    #[test]
+    fn schedule_windows_cannot_be_inverted() {
+        // Morning end before its start is pinned to one minute after the start.
+        let mut h = default_harness();
+        h.state
+            .set_schedule_time(ScheduleTime::MorningEnd, TimeOfDay::new(5, 0));
+        assert_eq!(
+            h.state.schedule_time(ScheduleTime::MorningEnd),
+            TimeOfDay::new(6, 1)
+        );
+
+        // The morning start cannot move past the morning end.
+        let mut h = default_harness();
+        h.state
+            .set_schedule_time(ScheduleTime::MorningStart, TimeOfDay::new(23, 0));
+        assert_eq!(
+            h.state.schedule_time(ScheduleTime::MorningStart),
+            TimeOfDay::new(6, 59)
+        );
+
+        // Evening end before its start is pinned to one minute after the start.
+        let mut h = default_harness();
+        h.state
+            .set_schedule_time(ScheduleTime::EveningEnd, TimeOfDay::new(17, 0));
+        assert_eq!(
+            h.state.schedule_time(ScheduleTime::EveningEnd),
+            TimeOfDay::new(17, 31)
+        );
+
+        // The evening start cannot move past the evening end.
+        let mut h = default_harness();
+        h.state
+            .set_schedule_time(ScheduleTime::EveningStart, TimeOfDay::new(23, 0));
+        assert_eq!(
+            h.state.schedule_time(ScheduleTime::EveningStart),
+            TimeOfDay::new(18, 29)
+        );
+    }
+
+    #[test]
+    fn schedule_window_pair_applies_atomically() {
+        let mut h = default_harness();
+        // Moving the window earlier would clamp a one-at-a-time edit of the start
+        // against the old end, so the pair is applied in a single write.
+        h.state.set_schedule_window(
+            ScheduleWindow::Morning,
+            TimeOfDay::new(5, 0),
+            TimeOfDay::new(6, 0),
+        );
+        assert_eq!(
+            h.state.schedule_time(ScheduleTime::MorningStart),
+            TimeOfDay::new(5, 0)
+        );
+        assert_eq!(
+            h.state.schedule_time(ScheduleTime::MorningEnd),
+            TimeOfDay::new(6, 0)
+        );
+
+        h.state.set_schedule_window(
+            ScheduleWindow::Evening,
+            TimeOfDay::new(18, 0),
+            TimeOfDay::new(19, 0),
+        );
+        assert_eq!(
+            h.state.schedule_time(ScheduleTime::EveningStart),
+            TimeOfDay::new(18, 0)
+        );
+        assert_eq!(
+            h.state.schedule_time(ScheduleTime::EveningEnd),
+            TimeOfDay::new(19, 0)
+        );
+    }
+
+    #[test]
+    fn schedule_window_pair_rejects_inverted_pairs() {
+        let mut h = default_harness();
+        h.state.set_schedule_window(
+            ScheduleWindow::Morning,
+            TimeOfDay::new(7, 0),
+            TimeOfDay::new(6, 0),
+        );
+        assert_eq!(
+            h.state.schedule_time(ScheduleTime::MorningStart),
+            TimeOfDay::new(6, 0)
+        );
+        assert_eq!(
+            h.state.schedule_time(ScheduleTime::MorningEnd),
+            TimeOfDay::new(7, 0)
+        );
+    }
+
+    #[test]
+    fn touching_transitions_are_allowed() {
+        let mut h = default_harness();
+        // The evening window may start exactly when the morning one ends.
+        h.state
+            .set_schedule_time(ScheduleTime::EveningStart, TimeOfDay::new(7, 0));
+        assert_eq!(
+            h.state.schedule_time(ScheduleTime::EveningStart),
+            TimeOfDay::new(7, 0)
+        );
+    }
+
+    #[test]
+    fn schedule_edit_with_no_room_is_refused() {
+        let settings = AppSettings {
+            morning_start: TimeOfDay::new(6, 0),
+            morning_end: TimeOfDay::new(10, 0),
+            evening_start: TimeOfDay::new(9, 0),
+            evening_end: TimeOfDay::new(8, 0),
+            ..Default::default()
+        };
+        let mut h = make_harness(settings, true, true, None, true, false, false);
+        let original = h.state.schedule_time(ScheduleTime::EveningStart);
+        h.state
+            .set_schedule_time(ScheduleTime::EveningStart, TimeOfDay::new(12, 0));
+        assert_eq!(h.state.schedule_time(ScheduleTime::EveningStart), original);
     }
 
     #[test]
@@ -1132,7 +1347,55 @@ mod tests {
         service.set_brightness(40);
         assert!(service.is_supported());
         assert_eq!(*hw_applied.lock().unwrap(), [40]);
-        assert!(sw_applied.lock().unwrap().is_empty());
+        // The software reset, not a dim: exactly one mechanism owns brightness.
+        assert_eq!(*sw_applied.lock().unwrap(), [100]);
+    }
+
+    #[test]
+    fn hardware_routing_resets_software_dimming() {
+        use crate::traits::BrightnessFallbackService;
+        let hw_applied = Arc::new(StdMutex::new(Vec::new()));
+        let sw_applied = Arc::new(StdMutex::new(Vec::new()));
+        let hw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
+            supported: true,
+            applied: hw_applied.clone(),
+            detail: None,
+            reprobes: Arc::new(StdMutex::new(0usize)),
+        }));
+        let sw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
+            supported: true,
+            applied: sw_applied.clone(),
+            detail: None,
+            reprobes: Arc::new(StdMutex::new(0usize)),
+        }));
+        let service = BrightnessFallbackService::new(hw, sw);
+        service.set_brightness(40);
+        service.set_brightness(70);
+        assert_eq!(*hw_applied.lock().unwrap(), [40, 70]);
+        assert_eq!(*sw_applied.lock().unwrap(), [100, 100]);
+    }
+
+    #[test]
+    fn refreshing_reprobes_hardware_not_software_dimming() {
+        use crate::traits::BrightnessFallbackService;
+        let hw_reprobes = Arc::new(StdMutex::new(0usize));
+        let sw_reprobes = Arc::new(StdMutex::new(0usize));
+        let hw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
+            supported: false,
+            applied: Arc::new(StdMutex::new(Vec::new())),
+            detail: None,
+            reprobes: hw_reprobes.clone(),
+        }));
+        let sw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
+            supported: true,
+            applied: Arc::new(StdMutex::new(Vec::new())),
+            detail: None,
+            reprobes: sw_reprobes.clone(),
+        }));
+        let mut service = BrightnessFallbackService::new(hw, sw);
+        service.reprobe();
+        assert_eq!(*hw_reprobes.lock().unwrap(), 1);
+        assert_eq!(*sw_reprobes.lock().unwrap(), 0);
     }
 
     #[test]

@@ -124,6 +124,8 @@
             <TextBlock Text="Startup" Style="{StaticResource SectionHeader}" />
             <CheckBox Content="Run Moonglow when I sign in"
                       IsChecked="{Binding RunAtStartup, Mode=TwoWay}" />
+            <TextBlock Text="{Binding RunAtStartupStatus}"
+                       Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,6,0,0" TextWrapping="Wrap" />
 
             <Expander Margin="0,8,0,0" IsExpanded="False">
                 <Expander.Header>

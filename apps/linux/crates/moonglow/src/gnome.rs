@@ -188,6 +188,12 @@ impl ColorTemperatureService for GnomeNightLightService {
             &original.schedule_temperature.to_string(),
         );
     }
+
+    fn invalidate(&self) {
+        if let Ok(mut original) = self.original.lock() {
+            original.last_applied = None;
+        }
+    }
 }
 
 fn gsettings_get(key: &str) -> std::io::Result<String> {
