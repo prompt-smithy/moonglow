@@ -18,7 +18,21 @@ struct MainViewModelTests {
 
         #expect(service.isSupported)
         #expect(hardware.applied == [40])
-        #expect(software.applied.isEmpty)
+        // The software reset, not a dim: exactly one mechanism owns brightness.
+        #expect(software.applied == [100])
+    }
+
+    @Test("Routing to hardware resets software dimming so the two never compound")
+    func hardwareRoutingResetsSoftwareDimming() {
+        let hardware = FakeBrightnessService(isSupported: true)
+        let software = FakeBrightnessService(isSupported: true)
+        let service = BrightnessFallbackService(hardware: hardware, software: software)
+
+        service.setBrightness(percent: 40)
+        service.setBrightness(percent: 70)
+
+        #expect(hardware.applied == [40, 70])
+        #expect(software.applied == [100, 100])
     }
 
     @Test("Software brightness is used when hardware DDC is unavailable")

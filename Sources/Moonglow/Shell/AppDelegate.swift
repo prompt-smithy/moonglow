@@ -338,7 +338,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
-        if let viewModel { updateQuickControlsMenu(viewModel: viewModel) }
+        if let viewModel {
+            // Opening the popup is the moment before a brightness change: re-probe while
+            // hardware is down so a recovered panel is back before the slider moves.
+            // When hardware is up this is a no-op probe plus a fast re-enumeration.
+            viewModel.refreshDisplays()
+            updateQuickControlsMenu(viewModel: viewModel)
+        }
     }
 
     func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {

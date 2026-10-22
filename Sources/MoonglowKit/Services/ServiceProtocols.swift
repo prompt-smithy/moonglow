@@ -61,6 +61,11 @@ public final class BrightnessFallbackService: BrightnessService {
 
     public func setBrightness(percent: Int) {
         if hardware.isSupported {
+            // Exactly one mechanism owns brightness: a fallback episode may have left
+            // the gamma dimmed, so reset it before the hardware write or the two would
+            // compound. Nearly free on the steady path — the gamma cache skips the
+            // rewrite when already at 100%.
+            software.setBrightness(percent: 100)
             AppLog.shared.log(.brightness, "brightness \(percent)% → hardware DDC")
             hardware.setBrightness(percent: percent)
         } else if software.isSupported {

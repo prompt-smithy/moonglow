@@ -323,6 +323,69 @@ public final class CoreGraphicsBrightnessService: BrightnessService {
 
 // MARK: - Hardware brightness
 
+/// DDC/CI transaction transport behind ``AppleSiliconBrightnessService``.
+///
+/// Production talks to the panel through the private CoreDisplay entry points; tests
+/// inject a fake, which is the only way to exercise the recovery path — a handle gone
+/// stale after a display reconfiguration, or a panel that stops answering — without
+/// hardware.
+protocol DDCTransport: AnyObject {
+    /// False when the backend itself is missing (symbols gone), as opposed to silent hardware.
+    var isAvailable: Bool { get }
+    func createService() -> UnsafeMutableRawPointer?
+    func releaseService(_ service: UnsafeMutableRawPointer)
+    func write(_ bytes: [UInt8], to service: UnsafeMutableRawPointer) -> Bool
+    func read(byteCount: Int, from service: UnsafeMutableRawPointer) -> [UInt8]?
+}
+
+/// Production ``DDCTransport`` over the private CoreDisplay `IOAVService*` API.
+final class CoreDisplayDDCTransport: DDCTransport {
+
+    var isAvailable: Bool { CoreDisplayBridge.isAvailable }
+
+    func createService() -> UnsafeMutableRawPointer? {
+        CoreDisplayBridge.create?(nil)
+    }
+
+    func releaseService(_ service: UnsafeMutableRawPointer) {
+        CoreDisplayBridge.release(service)
+    }
+
+    func write(_ bytes: [UInt8], to service: UnsafeMutableRawPointer) -> Bool {
+        guard let writeI2C = CoreDisplayBridge.writeI2C else { return false }
+
+        var payload = bytes
+        let result = payload.withUnsafeMutableBufferPointer { buffer in
+            writeI2C(
+                service,
+                DDCPacket.chipAddress,
+                DDCPacket.dataAddress,
+                buffer.baseAddress,
+                UInt32(buffer.count)
+            )
+        }
+
+        return result == 0
+    }
+
+    func read(byteCount: Int, from service: UnsafeMutableRawPointer) -> [UInt8]? {
+        guard let readI2C = CoreDisplayBridge.readI2C else { return nil }
+
+        var reply = [UInt8](repeating: 0, count: byteCount)
+        let result = reply.withUnsafeMutableBufferPointer { buffer in
+            readI2C(
+                service,
+                DDCPacket.chipAddress,
+                DDCPacket.dataAddress,
+                buffer.baseAddress,
+                UInt32(buffer.count)
+            )
+        }
+
+        return result == 0 ? reply : nil
+    }
+}
+
 /// DDC/CI brightness for Apple Silicon, over the private CoreDisplay `IOAVService*` API.
 public final class AppleSiliconBrightnessService: BrightnessService {
 
@@ -333,15 +396,23 @@ public final class AppleSiliconBrightnessService: BrightnessService {
     /// Guards `service`, `pendingBrightness`, and `isDisposed`.
     private let lock = NSLock()
 
+    private let transport: DDCTransport
+
     private var service: UnsafeMutableRawPointer?
     private var pendingBrightness = AppSettings.defaultManualBrightness
     private var pendingWrite: DispatchWorkItem?
     private var isDisposed = false
 
     public init() {
+        self.transport = CoreDisplayDDCTransport()
         // The first probe runs through refreshSupportAsync from the view model, off the
         // main thread: probing here would freeze launch for up to ~0.45 s on a silent
         // panel, and a second probe from the first display refresh would double it.
+    }
+
+    /// Test seam: drives the probe/write/recovery logic against a fake transport.
+    init(transport: DDCTransport) {
+        self.transport = transport
     }
 
     public var isSupported: Bool {
@@ -404,7 +475,7 @@ public final class AppleSiliconBrightnessService: BrightnessService {
         lock.lock()
         defer { lock.unlock() }
         if let service {
-            CoreDisplayBridge.release(service)
+            transport.releaseService(service)
             self.service = nil
         }
     }
@@ -426,11 +497,11 @@ public final class AppleSiliconBrightnessService: BrightnessService {
         }
         lock.unlock()
 
-        guard CoreDisplayBridge.isAvailable else {
+        guard transport.isAvailable else {
             AppLog.shared.log(.brightness, "DDC probe skipped: CoreDisplay symbols unavailable")
             return false
         }
-        guard let created = CoreDisplayBridge.create?(nil) else {
+        guard let created = transport.createService() else {
             AppLog.shared.log(.brightness, "DDC probe failed: could not create IOAVService")
             return false
         }
@@ -438,7 +509,7 @@ public final class AppleSiliconBrightnessService: BrightnessService {
         lock.lock()
         guard service == nil, !isDisposed else {
             lock.unlock()
-            CoreDisplayBridge.release(created)
+            transport.releaseService(created)
             return false
         }
         service = created
@@ -456,7 +527,7 @@ public final class AppleSiliconBrightnessService: BrightnessService {
             lock.unlock()
             // A dispose mid-probe already released this service; only release what is still ours.
             if stillOurs {
-                CoreDisplayBridge.release(created)
+                transport.releaseService(created)
             }
             return false
         }
@@ -513,65 +584,90 @@ public final class AppleSiliconBrightnessService: BrightnessService {
 
         guard let target, !isDisposed else { return }
 
-        // Two attempts: DDC/CI is lossy and a single dropped transaction should not leave the
-        // panel at the old brightness.
-        let packet = DDCPacket.buildWritePacket(percent: percent)
-        for _ in 0..<DDCPacket.maxAttempts {
-            Thread.sleep(forTimeInterval: DDCPacket.writeDelay)
-            if write(packet, to: target) {
-                return
-            }
+        if writeWithRetries(DDCPacket.buildWritePacket(percent: percent), to: target) {
+            return
         }
         AppLog.shared.log(
             .brightness,
             "DDC write failed for \(percent)% after \(DDCPacket.maxAttempts) attempts"
         )
+        recoverAndRetry(percent: percent)
+    }
+
+    /// Recovers from a handle that likely went stale: a display reconfiguration
+    /// invalidates the service while the panel itself keeps answering, which only a
+    /// fresh handle proves. The stale handle is dropped, the panel is probed again from
+    /// scratch, and the write is retried once. When the panel does not answer either,
+    /// hardware stays down (`service == nil`) so the fallback routes to gamma instead
+    /// of writing to a dead handle; the next display refresh re-probes and can bring
+    /// hardware back.
+    private func recoverAndRetry(percent: Int) {
+        releaseService()
+        guard tryOpenAndProbe() else {
+            AppLog.shared.log(
+                .brightness,
+                "DDC recovery failed; hardware brightness down until next refresh"
+            )
+            return
+        }
+
+        lock.lock()
+        let target = service
+        let disposed = isDisposed
+        lock.unlock()
+
+        guard let target, !disposed else { return }
+        if writeWithRetries(DDCPacket.buildWritePacket(percent: percent), to: target) {
+            AppLog.shared.log(.brightness, "DDC recovered with a fresh handle")
+            return
+        }
+        AppLog.shared.log(
+            .brightness,
+            "DDC retry on fresh handle failed; hardware brightness down until next refresh"
+        )
+        releaseService()
+    }
+
+    /// Drops the service and reports hardware down, so the fallback routes to gamma.
+    private func releaseService() {
+        lock.lock()
+        let old = service
+        service = nil
+        lock.unlock()
+        if let old {
+            transport.releaseService(old)
+        }
+    }
+
+    /// One luminance write with the standard pre-transaction delay and retry budget:
+    /// DDC/CI is lossy and a single dropped transaction should not leave the panel
+    /// at the old brightness.
+    private func writeWithRetries(_ packet: [UInt8], to target: UnsafeMutableRawPointer) -> Bool {
+        for _ in 0..<DDCPacket.maxAttempts {
+            Thread.sleep(forTimeInterval: DDCPacket.writeDelay)
+            if write(packet, to: target) {
+                return true
+            }
+        }
+        return false
     }
 
     private func write(_ bytes: [UInt8], to target: UnsafeMutableRawPointer? = nil) -> Bool {
-        guard let writeI2C = CoreDisplayBridge.writeI2C else { return false }
-
         lock.lock()
         let service = target ?? self.service
         lock.unlock()
 
         guard let service else { return false }
-
-        var payload = bytes
-        let result = payload.withUnsafeMutableBufferPointer { buffer in
-            writeI2C(
-                service,
-                DDCPacket.chipAddress,
-                DDCPacket.dataAddress,
-                buffer.baseAddress,
-                UInt32(buffer.count)
-            )
-        }
-
-        return result == 0
+        return transport.write(bytes, to: service)
     }
 
     private func read(byteCount: Int) -> [UInt8]? {
-        guard let readI2C = CoreDisplayBridge.readI2C else { return nil }
-
         lock.lock()
         let service = self.service
         lock.unlock()
 
         guard let service else { return nil }
-
-        var reply = [UInt8](repeating: 0, count: byteCount)
-        let result = reply.withUnsafeMutableBufferPointer { buffer in
-            readI2C(
-                service,
-                DDCPacket.chipAddress,
-                DDCPacket.dataAddress,
-                buffer.baseAddress,
-                UInt32(buffer.count)
-            )
-        }
-
-        return result == 0 ? reply : nil
+        return transport.read(byteCount: byteCount, from: service)
     }
 }
 
