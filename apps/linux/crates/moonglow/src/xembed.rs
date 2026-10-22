@@ -86,7 +86,7 @@ fn intern(conn: &RustConnection, name: &[u8]) -> Result<xproto::Atom, String> {
 #[allow(clippy::too_many_arguments)]
 fn serve(
     conn: RustConnection,
-    screen: usize,
+    _screen: usize,
     screen_info: xproto::Screen,
     tray_owner: Window,
     cmd_tx: mpsc::Sender<TrayCommand>,

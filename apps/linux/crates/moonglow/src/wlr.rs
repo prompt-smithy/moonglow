@@ -26,6 +26,7 @@ struct ControlledOutput {
     failed: bool,
 }
 
+#[derive(Default)]
 struct WlrState {
     manager: Option<zwlr_gamma_control_manager_v1::ZwlrGammaControlManagerV1>,
     outputs: Vec<wl_output::WlOutput>,
@@ -261,16 +262,6 @@ fn ramps_fd(ramp: &moonglow_core::kelvin::GammaRamp) -> WlrResult<std::os::fd::O
     let raw = rustix::fd::IntoRawFd::into_raw_fd(owned);
     // SAFETY: `raw` is a live memfd we own; `from_raw_fd` takes that ownership.
     Ok(unsafe { std::os::fd::OwnedFd::from_raw_fd(raw) })
-}
-
-impl Default for WlrState {
-    fn default() -> Self {
-        Self {
-            manager: None,
-            outputs: Vec::new(),
-            controls: Vec::new(),
-        }
-    }
 }
 
 impl ColorTemperatureService for WlrGammaService {
