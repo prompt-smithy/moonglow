@@ -4,7 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
-namespace Amber.Views;
+namespace Moonglow.Views;
 
 /// <summary>12-hour / minute / AM-PM selectors for a canonical "HH:mm" time.</summary>
 public partial class TimePicker : UserControl

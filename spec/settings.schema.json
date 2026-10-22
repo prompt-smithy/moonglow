@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/prompt-smithy/moonglow/spec/settings.schema.json",
+  "title": "Moonglow persisted settings",
+  "description": "Canonical on-disk settings shape shared by every platform. Keys are camelCase. Decoding is lenient: a missing or malformed value falls back to its default instead of failing the whole load, so every property is optional here even though writers emit all of them.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "dayColorTempK": {
+      "type": "integer",
+      "default": 6500,
+      "minimum": 900,
+      "maximum": 6600,
+      "multipleOf": 100,
+      "description": "Cooler end of the schedule window: the daytime target."
+    },
+    "nightColorTempK": {
+      "type": "integer",
+      "default": 1200,
+      "minimum": 900,
+      "maximum": 6600,
+      "multipleOf": 100,
+      "description": "Warmer end of the schedule window: the night target."
+    },
+    "morningStart": {
+      "$ref": "#/$defs/timeOfDay",
+      "default": "06:00",
+      "description": "Start of the morning warm-to-cool transition."
+    },
+    "morningEnd": {
+      "$ref": "#/$defs/timeOfDay",
+      "default": "07:00",
+      "description": "End of the morning transition; the day target takes over here."
+    },
+    "eveningStart": {
+      "$ref": "#/$defs/timeOfDay",
+      "default": "17:30",
+      "description": "Start of the evening cool-to-warm transition."
+    },
+    "eveningEnd": {
+      "$ref": "#/$defs/timeOfDay",
+      "default": "18:30",
+      "description": "End of the evening transition; the night target takes over here."
+    },
+    "autoColorTemperature": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the schedule drives colour temperature. When false the manual target is used."
+    },
+    "manualBrightness": {
+      "type": "integer",
+      "default": 80,
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Hardware brightness in percent."
+    },
+    "manualColorTempK": {
+      "type": "integer",
+      "default": 6500,
+      "minimum": 900,
+      "maximum": 6600,
+      "multipleOf": 100,
+      "description": "Colour temperature used while automatic scheduling is off."
+    },
+    "launchAtLogin": {
+      "type": "boolean",
+      "default": false,
+      "description": "User intent only. The real registration lives in the OS and is re-asserted at launch rather than trusted."
+    },
+    "increaseBrightnessShortcut": {
+      "$ref": "#/$defs/hotKey",
+      "description": "macOS only. Absent on platforms without global hot keys."
+    },
+    "decreaseBrightnessShortcut": {
+      "$ref": "#/$defs/hotKey",
+      "description": "macOS only. Absent on platforms without global hot keys."
+    },
+    "increaseTemperatureShortcut": {
+      "$ref": "#/$defs/hotKey",
+      "description": "macOS only. Absent on platforms without global hot keys."
+    },
+    "decreaseTemperatureShortcut": {
+      "$ref": "#/$defs/hotKey",
+      "description": "macOS only. Absent on platforms without global hot keys."
+    }
+  },
+  "$defs": {
+    "timeOfDay": {
+      "type": "string",
+      "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+      "description": "Zero-padded 24-hour wall-clock time, independent of date and time zone."
+    },
+    "hotKey": {
+      "type": ["object", "null"],
+      "required": ["keyCode", "modifiers"],
+      "additionalProperties": false,
+      "properties": {
+        "keyCode": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "macOS virtual key code."
+        },
+        "modifiers": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Carbon modifier bits: command 0x100, shift 0x200, option 0x800, control 0x1000. Zero is invalid and is dropped on load."
+        }
+      }
+    }
+  }
+}

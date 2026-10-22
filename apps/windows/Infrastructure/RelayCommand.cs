@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace Amber.Infrastructure;
+namespace Moonglow.Infrastructure;
 
 public sealed class RelayCommand : ICommand
 {

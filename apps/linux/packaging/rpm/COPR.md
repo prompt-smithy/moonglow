@@ -8,7 +8,7 @@ building in COPR (which also publishes the repo users install from).
 1. Install the CLI: `sudo dnf install copr-cli` and run
    `copr-cli whoami` (authorizes against your Fedora account).
 2. Create the project (once):
-   `copr-cli create nightmodecontroller-linux --chroot fedora-42-x86_64 --chroot fedora-42-aarch64`
+   `copr-cli create moonglow --chroot fedora-42-x86_64 --chroot fedora-42-aarch64`
    (adjust the Fedora release to current; add `opensuse-leap-*` chroots
    if wanted — the spec avoids Fedora-only macros).
 
@@ -17,10 +17,10 @@ building in COPR (which also publishes the repo users install from).
 Build directly from git — COPR fetches the tag tarball itself:
 
 ```bash
-copr-cli buildscm nightmodecontroller-linux \
-    --clone-url https://github.com/prompt-smithy/nightModeController_Linux.git \
+copr-cli buildscm moonglow \
+    --clone-url https://github.com/prompt-smithy/moonglow.git \
     --commit linux-v1.0.0 \
-    --spec packaging/rpm/nightmodecontroller-linux.spec
+    --spec packaging/rpm/moonglow.spec
 ```
 
 Watch the build page it prints. First builds take a while (full cargo
@@ -32,10 +32,10 @@ expect ~10 min per arch.
 On a Fedora VM/container with the COPR enabled:
 
 ```bash
-sudo dnf copr enable <you>/nightmodecontroller-linux
-sudo dnf install nightmodecontroller-linux
-rpm -ql nightmodecontroller-linux
-nightmodecontroller-linux --version
+sudo dnf copr enable <you>/moonglow
+sudo dnf install moonglow
+rpm -ql moonglow
+moonglow --version
 ```
 
 ## Notes

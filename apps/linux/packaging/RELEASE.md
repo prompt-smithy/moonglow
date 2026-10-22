@@ -8,8 +8,8 @@ prefix keeps Linux releases distinct from macOS tags in this repo).
 
 1. Bump `version` in `Cargo.toml`.
 2. Add a `<release>` entry to
-   `packaging/nightmodecontroller-linux.metainfo.xml`.
-3. Add a `%changelog` entry to `packaging/rpm/nightmodecontroller-linux.spec`.
+   `packaging/moonglow.metainfo.xml`.
+3. Add a `%changelog` entry to `packaging/rpm/moonglow.spec`.
 4. `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
    `cargo fmt --all --check` — all green.
 5. Commit: `Release Linux vX.Y.Z`.
@@ -27,17 +27,17 @@ step 3 (users on Mint/Pop/Zorin install the same file).
 ## 3. Debian / Ubuntu (.deb)
 
 ```bash
-bash packaging/build-deb.sh   # → dist/nightmodecontroller-linux_*_amd64.deb
+bash packaging/build-deb.sh   # → dist/moonglow_*_amd64.deb
 ```
 
 Smoke-test in a container or VM (never `--force` anything):
 
 ```bash
-sudo dpkg -i dist/nightmodecontroller-linux_*_amd64.deb
+sudo dpkg -i dist/moonglow_*_amd64.deb
 sudo apt-get install -f          # pulls Recommends if wanted
-nightmodecontroller-linux --version
-man nightmodecontroller-linux        # renders
-ls /usr/lib/udev/rules.d/51-nightmodecontroller-linux-i2c.rules
+moonglow --version
+man moonglow        # renders
+ls /usr/lib/udev/rules.d/51-moonglow-i2c.rules
 ```
 
 Then: `sudo usermod -aG i2c $USER`, log out/in, launch the app, check
@@ -55,8 +55,8 @@ makepkg --printsrcinfo > .SRCINFO
 makepkg -si           # local build + install test
 ```
 
-Push `PKGBUILD`, `.SRCINFO`, `nightmodecontroller-linux.install` to the
-AUR `nightmodecontroller-linux` repo (a separate checkout owned by the
+Push `PKGBUILD`, `.SRCINFO`, `moonglow.install` to the
+AUR `moonglow` repo (a separate checkout owned by the
 maintainer account).
 
 ## 5. Fedora / openSUSE (COPR)

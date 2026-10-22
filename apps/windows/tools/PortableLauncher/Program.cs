@@ -3,11 +3,11 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-namespace Amber.PortableLauncher;
+namespace Moonglow.PortableLauncher;
 
 internal static class Program
 {
-    private const string PayloadPrefix = "AmberPortable.Payload.";
+    private const string PayloadPrefix = "MoonglowPortable.Payload.";
     private const uint MessageBoxError = 0x10;
 
     [STAThread]
@@ -15,27 +15,27 @@ internal static class Program
     {
         string extractionDirectory = Path.Combine(
             Path.GetTempPath(),
-            "AmberPortable-" + Guid.NewGuid().ToString("N"));
+            "MoonglowPortable-" + Guid.NewGuid().ToString("N"));
 
         try
         {
             ExtractPayload(extractionDirectory);
 
-            var startInfo = new ProcessStartInfo(Path.Combine(extractionDirectory, "NightModeController.exe"))
+            var startInfo = new ProcessStartInfo(Path.Combine(extractionDirectory, "Moonglow.exe"))
             {
                 WorkingDirectory = extractionDirectory,
                 UseShellExecute = true,
             };
 
             using Process app = Process.Start(startInfo)
-                ?? throw new InvalidOperationException("Windows could not start Night Mode Controller.");
+                ?? throw new InvalidOperationException("Windows could not start Moonglow.");
             app.WaitForExit();
             return app.ExitCode;
         }
         catch (Exception exception)
         {
-            ShowMessage(IntPtr.Zero, "Night Mode Controller Portable could not start.\r\n\r\n" + exception.Message,
-                "Night Mode Controller Portable", MessageBoxError);
+            ShowMessage(IntPtr.Zero, "Moonglow Portable could not start.\r\n\r\n" + exception.Message,
+                "Moonglow Portable", MessageBoxError);
             return 1;
         }
         finally
@@ -73,7 +73,7 @@ internal static class Program
             resource.CopyTo(output);
         }
 
-        if (!File.Exists(Path.Combine(destination, "NightModeController.exe")))
+        if (!File.Exists(Path.Combine(destination, "Moonglow.exe")))
             throw new InvalidOperationException("The embedded application executable is missing.");
     }
 

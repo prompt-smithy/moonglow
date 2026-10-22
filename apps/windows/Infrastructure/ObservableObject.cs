@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace Amber.Infrastructure;
+namespace Moonglow.Infrastructure;
 
 public abstract class ObservableObject : INotifyPropertyChanged
 {

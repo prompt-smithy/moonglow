@@ -1,10 +1,10 @@
 # Generated with `makepkg --printsrcinfo` after filling in sha256sums.
-pkgbase = nightmodecontroller-linux
+pkgbase = moonglow
 	pkgdesc = Tray app for external-display DDC/CI brightness and scheduled colour temperature
 	pkgver = 1.0.0
 	pkgrel = 1
-	url = https://github.com/prompt-smithy/nightModeController_Linux
-	install = nightmodecontroller-linux.install
+	url = https://github.com/prompt-smithy/moonglow
+	install = moonglow.install
 	arch = x86_64
 	arch = aarch64
 	license = MIT
@@ -12,7 +12,7 @@ pkgbase = nightmodecontroller-linux
 	makedepends = cargo
 	depends = gcc-libs
 	optdepends = i2c-tools: DDC/CI brightness debugging (i2cdetect)
-	source = nightmodecontroller-linux-1.0.0.tar.gz::https://github.com/prompt-smithy/nightModeController_Linux/archive/refs/tags/linux-v1.0.0.tar.gz
+	source = moonglow-1.0.0.tar.gz::https://github.com/prompt-smithy/moonglow/archive/refs/tags/linux-v1.0.0.tar.gz
 	sha256sums = REPLACE_AFTER_TAG
 
-pkgname = nightmodecontroller-linux
+pkgname = moonglow

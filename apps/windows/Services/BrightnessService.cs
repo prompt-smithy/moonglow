@@ -1,9 +1,9 @@
 using System.Management;
 using System.Threading.Tasks;
-using Amber.Infrastructure;
-using static Amber.Native.NativeMethods;
+using Moonglow.Infrastructure;
+using static Moonglow.Native.NativeMethods;
 
-namespace Amber.Services;
+namespace Moonglow.Services;
 
 /// <summary>Controls brightness: WMI for the internal panel, DDC/CI for external monitors.</summary>
 public sealed class BrightnessService

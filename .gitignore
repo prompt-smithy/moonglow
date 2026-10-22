@@ -1,0 +1,32 @@
+# Root-level ignores. Each app also carries its own .gitignore for
+# language-specific output; this file only covers things that leak upward.
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# .NET
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+
+# Rust
+target/
+
+# Swift
+.build/
+.build-run/
+.swiftpm/
+*.dSYM
+
+# Local build products
+release/
+artifacts/

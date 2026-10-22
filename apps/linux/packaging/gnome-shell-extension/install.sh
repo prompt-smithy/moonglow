@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Installs and enables the Night Mode Controller GNOME Shell indicator.
-# Requires `nightmodecontroller-linux` on PATH and a running GNOME Shell.
+# Installs and enables the Moonglow GNOME Shell indicator.
+# Requires `moonglow` on PATH and a running GNOME Shell.
 set -euo pipefail
 
-SRC="$(dirname "$0")/nightmodecontroller-linux@amber.local"
+SRC="$(dirname "$0")/moonglow@moonglow.local"
 
-if ! command -v nightmodecontroller-linux >/dev/null; then
-    echo "error: nightmodecontroller-linux is not on PATH (install the .deb or cargo install first)" >&2
+if ! command -v moonglow >/dev/null; then
+    echo "error: moonglow is not on PATH (install the .deb or cargo install first)" >&2
     exit 1
 fi
 
@@ -24,5 +24,5 @@ EOF
 )
 
 gnome-extensions install --force "$ZIP"
-gnome-extensions enable nightmodecontroller-linux@amber.local
+gnome-extensions enable moonglow@moonglow.local
 echo "Enabled. Look for the moon icon in the top bar."

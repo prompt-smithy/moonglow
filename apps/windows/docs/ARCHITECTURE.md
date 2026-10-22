@@ -1,6 +1,6 @@
 # Architecture
 
-Technical reference for **Amber** (`Amber`). For a user-facing overview see the [README](../README.md).
+Technical reference for **Moonglow** (`Moonglow`). For a user-facing overview see the [README](../README.md).
 
 ## Contents
 - [Tech stack](#tech-stack)
@@ -20,7 +20,7 @@ Technical reference for **Amber** (`Amber`). For a user-facing overview see the 
 ## Tech stack
 
 - **.NET Framework 4.8**, **WPF** (`net48`, `OutputType=WinExe`). Targeting the in-box framework
-  keeps Amber runnable on older Windows versions: 4.8 is included with Windows 10 1903+ and
+  keeps Moonglow runnable on older Windows versions: 4.8 is included with Windows 10 1903+ and
   Windows 11, and can be installed on Windows 7 SP1 through 8.1.
 - **[Hardcodet.NotifyIcon.Wpf]** – system-tray icon, popup, and context menu.
 - **System.Management** – WMI access for internal-panel brightness (a framework assembly on
@@ -41,7 +41,7 @@ for things it lacks: `MathUtil.Clamp` (instead of `Math.Clamp`, which needs .NET
 
 `App.OnStartup` ([App.xaml.cs](../App.xaml.cs)) is the composition root:
 
-1. **Single-instance guard** – a named `Mutex` (`Local\Amber.SingleInstance`); if it already exists, the second process shuts down immediately.
+1. **Single-instance guard** – a named `Mutex` (`Local\Moonglow.SingleInstance`); if it already exists, the second process shuts down immediately.
 2. `ShutdownMode = OnExplicitShutdown` (the app has no main window; it lives in the tray).
 3. Services are constructed in dependency order: `SettingsService` → `ThemeService` → `MonitorService` → `BrightnessService` → `ColorTemperatureService` → `ScheduleService` → `MainViewModel`.
 4. A `TaskbarIcon` is created with the view model as `DataContext`, a `TrayPopup`, and a context menu.
@@ -120,9 +120,9 @@ Implemented in [`MonitorService`](../Services/MonitorService.cs).
 
 ## Settings & startup
 
-- [`SettingsService`](../Services/SettingsService.cs) serializes [`AppSettings`](../Models/AppSettings.cs) to `%APPDATA%\Amber\settings.json` (indented JSON). Load and save are best-effort and swallow I/O errors.
+- [`SettingsService`](../Services/SettingsService.cs) serializes [`AppSettings`](../Models/AppSettings.cs) to `%APPDATA%\Moonglow\settings.json` (indented JSON). Load and save are best-effort and swallow I/O errors.
 - Times are stored as 24-hour `HH:mm`; `AppSettings` exposes parsed `TimeSpan` helpers for the scheduler.
-- [`StartupManager`](../Infrastructure/StartupManager.cs) adds/removes the current executable path under `HKCU\...\CurrentVersion\Run` (value `Amber`).
+- [`StartupManager`](../Infrastructure/StartupManager.cs) adds/removes the current executable path under `HKCU\...\CurrentVersion\Run` (value `Moonglow`).
 
 ---
 

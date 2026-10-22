@@ -1,4 +1,4 @@
-﻿namespace Amber.Models;
+namespace Moonglow.Models;
 
 public sealed class AppSettings
 {

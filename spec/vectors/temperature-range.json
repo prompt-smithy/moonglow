@@ -1,0 +1,98 @@
+{
+  "description": "Golden vectors for temperature-range snapping and clamping.",
+  "kelvinRange": {
+    "min": 900,
+    "max": 6600
+  },
+  "step": 100,
+  "snap": [
+    {
+      "input": -500,
+      "output": 900
+    },
+    {
+      "input": 0,
+      "output": 900
+    },
+    {
+      "input": 850,
+      "output": 900
+    },
+    {
+      "input": 899,
+      "output": 900
+    },
+    {
+      "input": 900,
+      "output": 900
+    },
+    {
+      "input": 949,
+      "output": 900
+    },
+    {
+      "input": 950,
+      "output": 1000
+    },
+    {
+      "input": 1000,
+      "output": 1000
+    },
+    {
+      "input": 1049,
+      "output": 1000
+    },
+    {
+      "input": 1050,
+      "output": 1100
+    },
+    {
+      "input": 1249,
+      "output": 1200
+    },
+    {
+      "input": 1250,
+      "output": 1300
+    },
+    {
+      "input": 6549,
+      "output": 6500
+    },
+    {
+      "input": 6550,
+      "output": 6600
+    },
+    {
+      "input": 6600,
+      "output": 6600
+    },
+    {
+      "input": 6601,
+      "output": 6600
+    },
+    {
+      "input": 99999,
+      "output": 6600
+    }
+  ],
+  "range": [
+    {
+      "night": 1200,
+      "day": 6500,
+      "nightOut": 1200,
+      "dayOut": 6500
+    },
+    {
+      "night": 6500,
+      "day": 1200,
+      "nightOut": 1200,
+      "dayOut": 6500
+    },
+    {
+      "night": 500,
+      "day": 9000,
+      "nightOut": 900,
+      "dayOut": 6600
+    }
+  ]
+}

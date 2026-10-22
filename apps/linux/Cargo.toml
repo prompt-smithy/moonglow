@@ -1,9 +1,9 @@
 [workspace]
-members = ["crates/nmc-core", "crates/nightmodecontroller-linux"]
+members = ["crates/moonglow-core", "crates/moonglow"]
 resolver = "2"
 
 [workspace.package]
 version = "1.0.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/prompt-smithy/nightModeController_Linux"
+repository = "https://github.com/prompt-smithy/moonglow"

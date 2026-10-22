@@ -2,9 +2,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using Amber.Infrastructure;
+using Moonglow.Infrastructure;
 
-namespace Amber.Views;
+namespace Moonglow.Views;
 
 public partial class TemperatureRangeSlider : UserControl
 {

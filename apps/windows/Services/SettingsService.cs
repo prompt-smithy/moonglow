@@ -1,17 +1,21 @@
-﻿using System.IO;
+using System.IO;
 using System.Text.Json;
-using Amber.Infrastructure;
-using Amber.Models;
+using Moonglow.Infrastructure;
+using Moonglow.Models;
 
-namespace Amber.Services;
+namespace Moonglow.Services;
 
-/// <summary>Loads and saves <see cref="AppSettings"/> as JSON under %AppData%\Amber.</summary>
+/// <summary>Loads and saves <see cref="AppSettings"/> as JSON under %AppData%\Moonglow.</summary>
 public sealed class SettingsService
 {
     private static readonly string Dir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Amber");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Moonglow");
 
     private static readonly string FilePath = Path.Combine(Dir, "settings.json");
+
+    /// <summary>Location used before the app was renamed from Amber.</summary>
+    private static readonly string LegacyFilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Amber", "settings.json");
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
@@ -21,8 +25,9 @@ public sealed class SettingsService
     {
         try
         {
-            if (File.Exists(FilePath))
-                Settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath)) ?? new AppSettings();
+            string source = File.Exists(FilePath) ? FilePath : LegacyFilePath;
+            if (File.Exists(source))
+                Settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(source)) ?? new AppSettings();
 
             Settings.RunAtStartup = StartupManager.IsEnabled();
         }

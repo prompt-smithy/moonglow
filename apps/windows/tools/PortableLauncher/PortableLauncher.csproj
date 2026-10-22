@@ -5,15 +5,15 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>Amber_Portable</AssemblyName>
-    <RootNamespace>Amber.PortableLauncher</RootNamespace>
-    <ApplicationIcon>..\..\Assets\Amber.ico</ApplicationIcon>
+    <AssemblyName>Moonglow_Portable</AssemblyName>
+    <RootNamespace>Moonglow.PortableLauncher</RootNamespace>
+    <ApplicationIcon>..\..\Assets\Moonglow.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
     <EmbeddedResource Include="$(PayloadDir)\**\*">
-      <LogicalName>AmberPortable.Payload.%(Filename)%(Extension)</LogicalName>
+      <LogicalName>MoonglowPortable.Payload.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 </Project>

@@ -1,16 +1,16 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
 using Microsoft.Win32;
 
-namespace Amber.Infrastructure;
+namespace Moonglow.Infrastructure;
 
 /// <summary>Adds or removes the app from the per-user "run at sign-in" registry key.</summary>
 internal static class StartupManager
 {
     private const string RunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "Night Mode Controller";
-    private static readonly string[] LegacyValueNames = { "Amber", "Amber.exe" };
+    private const string ValueName = "Moonglow";
+    private static readonly string[] LegacyValueNames = { "Amber", "Amber.exe", "Night Mode Controller" };
 
     public static bool IsEnabled()
     {

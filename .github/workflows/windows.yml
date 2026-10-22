@@ -1,0 +1,48 @@
+name: Windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/windows/**'
+      - '.github/workflows/windows.yml'
+  pull_request:
+    paths:
+      - 'apps/windows/**'
+      - '.github/workflows/windows.yml'
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('apps/windows/**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Build
+        run: dotnet build Moonglow.csproj -c Release
+
+      # There is no test project yet - see spec/README.md for the conformance gap.
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: moonglow-windows
+          path: apps/windows/bin/Release/
+          if-no-files-found: warn

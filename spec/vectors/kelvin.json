@@ -1,0 +1,105 @@
+{
+  "description": "Golden vectors for kelvin -> normalized RGB channel scale. Each platform must match every row within 1e-6.",
+  "clamp": {
+    "minKelvin": 900,
+    "maxKelvin": 40000
+  },
+  "vectors": [
+    {
+      "kelvin": 900,
+      "red": 1.0,
+      "green": 0.225255,
+      "blue": 0.0
+    },
+    {
+      "kelvin": 1000,
+      "red": 1.0,
+      "green": 0.266355,
+      "blue": 0.0
+    },
+    {
+      "kelvin": 1200,
+      "red": 1.0,
+      "green": 0.337475,
+      "blue": 0.0
+    },
+    {
+      "kelvin": 1500,
+      "red": 1.0,
+      "green": 0.424519,
+      "blue": 0.0
+    },
+    {
+      "kelvin": 1900,
+      "red": 1.0,
+      "green": 0.51673,
+      "blue": 0.0
+    },
+    {
+      "kelvin": 2000,
+      "red": 1.0,
+      "green": 0.536739,
+      "blue": 0.054526
+    },
+    {
+      "kelvin": 2700,
+      "red": 1.0,
+      "green": 0.653804,
+      "blue": 0.342767
+    },
+    {
+      "kelvin": 3000,
+      "red": 1.0,
+      "green": 0.694903,
+      "blue": 0.431048
+    },
+    {
+      "kelvin": 3500,
+      "red": 1.0,
+      "green": 0.755034,
+      "blue": 0.552261
+    },
+    {
+      "kelvin": 4000,
+      "red": 1.0,
+      "green": 0.807122,
+      "blue": 0.651299
+    },
+    {
+      "kelvin": 4500,
+      "red": 1.0,
+      "green": 0.853067,
+      "blue": 0.735035
+    },
+    {
+      "kelvin": 5000,
+      "red": 1.0,
+      "green": 0.894167,
+      "blue": 0.80757
+    },
+    {
+      "kelvin": 5500,
+      "red": 1.0,
+      "green": 0.931345,
+      "blue": 0.871551
+    },
+    {
+      "kelvin": 6000,
+      "red": 1.0,
+      "green": 0.965287,
+      "blue": 0.928783
+    },
+    {
+      "kelvin": 6500,
+      "red": 1.0,
+      "green": 0.99651,
+      "blue": 0.980557
+    },
+    {
+      "kelvin": 6600,
+      "red": 1.0,
+      "green": 1.0,
+      "blue": 1.0
+    }
+  ]
+}

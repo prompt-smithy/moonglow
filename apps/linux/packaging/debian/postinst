@@ -1,5 +1,5 @@
 #!/bin/sh
-# Night Mode Controller postinst: udev rule activation + desktop refreshes.
+# Moonglow postinst: udev rule activation + desktop refreshes.
 set -e
 
 if [ "$1" = configure ]; then
@@ -14,7 +14,7 @@ if [ "$1" = configure ]; then
     fi
     cat <<'EOF'
 
-Night Mode Controller: for DDC/CI brightness, join the i2c group and re-login:
+Moonglow: for DDC/CI brightness, join the i2c group and re-login:
   sudo usermod -aG i2c $USER
 (log out and back in afterwards; i2c-tools is recommended for debugging.)
 EOF

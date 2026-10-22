@@ -1,0 +1,29 @@
+[package]
+name = "moonglow"
+version.workspace = true
+description = "Linux menu-bar/tray app for external-display hardware brightness and scheduled colour temperature."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "moonglow"
+path = "src/main.rs"
+
+[dependencies]
+moonglow-core = { path = "../moonglow-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
+dirs = "6"
+chrono = "0.4"
+x11rb = { version = "0.13", features = ["randr"] }
+i2cdev = "0.6"
+tokio = { version = "1", features = ["full"] }
+zbus = { version = "4", default-features = false, features = ["tokio"] }
+wayland-client = "0.31"
+wayland-protocols-wlr = "0.3"
+rustix = { version = "1", features = ["fs", "shm", "process", "stdio"] }
+eframe = { version = "0.33", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui = "0.33"

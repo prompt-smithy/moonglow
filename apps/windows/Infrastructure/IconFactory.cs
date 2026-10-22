@@ -1,8 +1,8 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using Amber.Native;
+using Moonglow.Native;
 
-namespace Amber.Infrastructure;
+namespace Moonglow.Infrastructure;
 
 /// <summary>Draws the system-tray icon at runtime so no binary asset is required.</summary>
 internal static class IconFactory

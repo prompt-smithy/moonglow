@@ -1,0 +1,32 @@
+name: Spec
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'spec/**'
+      - '.github/workflows/spec.yml'
+  pull_request:
+    paths:
+      - 'spec/**'
+      - '.github/workflows/spec.yml'
+
+concurrency:
+  group: spec-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install validator dependencies
+        run: pip install jsonschema
+
+      - name: Validate schema and golden vectors
+        run: python3 spec/validate.py

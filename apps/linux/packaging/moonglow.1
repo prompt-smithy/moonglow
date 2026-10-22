@@ -1,0 +1,81 @@
+.TH MOONGLOW 1 "October 2026" "moonglow 1.0.0" "User Commands"
+.SH NAME
+moonglow \- external-display brightness and scheduled colour temperature
+.SH SYNOPSIS
+.B moonglow
+.RI [ OPTION ]...
+.SH DESCRIPTION
+Moonglow drives external-monitor brightness over DDC/CI and
+follows a morning/evening colour-temperature schedule. The first invocation
+starts the tray app (two icons: brightness and colour temperature, each with
+a popup menu); later invocations forward commands to the running instance.
+With no daemon running, the setter flags drive the hardware directly and exit,
+which suits headless use and scripts.
+.PP
+Scroll on a tray icon to adjust its channel; a bubble shows the new value.
+.SH OPTIONS
+.TP
+.BR \-\-show\-settings
+Show the settings window.
+.TP
+.BR \-\-quit
+Quit the running instance.
+.TP
+.BR \-\-set\-brightness " " \fIPERCENT\fP
+Set brightness 1\-100.
+.TP
+.BR \-\-brighter ", " \-\-dimmer
+Step brightness by 5%.
+.TP
+.BR \-\-set\-temp " " \fIKELVIN\fP
+Set colour temperature (manual mode).
+.TP
+.BR \-\-warmer ", " \-\-cooler
+Step temperature by 250 K (manual mode).
+.TP
+.BR \-\-auto " " \fIon\fP|\fIoff\fP
+Turn automatic temperature on or off.
+.TP
+.BR \-\-day\-temp ", " \-\-night\-temp " " \fIKELVIN\fP
+Set the daytime / nighttime schedule target.
+.TP
+.BR \-\-morning ", " \-\-evening " " \fIFROM TO\fP
+Set a transition window; times are 24h "HH:MM".
+.TP
+.BR \-\-login " " \fIon\fP|\fIoff\fP
+Turn start-at-login on or off.
+.TP
+.BR \-\-status
+Print brightness, temperature, schedule, and displays.
+.TP
+.BR \-\-status " " \-\-json
+Machine-readable status.
+.TP
+.BR \-\-no\-tray
+Run without a tray icon.
+.TP
+.BR \-\-headless
+Run schedule plus tray with no settings window.
+.SH FILES
+.TP
+.I ~/.local/state/moonglow/moonglow.log
+Diagnostics log (XDG state dir).
+.TP
+.I ~/.config/moonglow/settings.json
+Persisted settings.
+.TP
+.I $XDG_RUNTIME_DIR/moonglow.sock
+Single-instance IPC socket.
+.TP
+.I ~/.config/autostart/moonglow.desktop
+Start-at-login entry, managed by the app.
+.TP
+.I /usr/lib/udev/rules.d/51-moonglow-i2c.rules
+Gives the i2c group access to DDC/CI buses.
+.SH DDC/CI ACCESS
+Brightness needs i2c access: install i2c-tools, run
+.B sudo usermod \-aG i2c $USER\fP,
+then log out and back in.
+.SH SEE ALSO
+.BR ddcutil (1),
+.BR udev (7)

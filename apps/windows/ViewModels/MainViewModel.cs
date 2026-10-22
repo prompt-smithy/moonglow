@@ -1,9 +1,9 @@
 using System.Collections.ObjectModel;
-using Amber.Infrastructure;
-using Amber.Models;
-using Amber.Services;
+using Moonglow.Infrastructure;
+using Moonglow.Models;
+using Moonglow.Services;
 
-namespace Amber.ViewModels;
+namespace Moonglow.ViewModels;
 
 public sealed class MainViewModel : ObservableObject
 {

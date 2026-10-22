@@ -1,8 +1,8 @@
 using System.Runtime.InteropServices;
-using Amber.Models;
-using static Amber.Native.NativeMethods;
+using Moonglow.Models;
+using static Moonglow.Native.NativeMethods;
 
-namespace Amber.Services;
+namespace Moonglow.Services;
 
 /// <summary>Enumerates physical displays and holds their DDC/CI handles.</summary>
 public sealed class MonitorService : IDisposable

@@ -1,4 +1,4 @@
-namespace Amber.Infrastructure;
+namespace Moonglow.Infrastructure;
 
 /// <summary>
 /// Helpers that exist on modern .NET but not on .NET Framework 4.8.

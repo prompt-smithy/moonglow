@@ -1,14 +1,14 @@
-using Amber.Infrastructure;
-using static Amber.Native.NativeMethods;
+using Moonglow.Infrastructure;
+using static Moonglow.Native.NativeMethods;
 
-namespace Amber.Services;
+namespace Moonglow.Services;
 
 /// <summary>
 /// Applies a color temperature to every display through its per-channel GPU gamma LUT.
 /// </summary>
 /// <remarks>
 /// Gamma-LUT support varies by display driver. The original ramp is captured before the first
-/// change and restored when Amber exits or when the session unlocks.
+/// change and restored when Moonglow exits or when the session unlocks.
 /// </remarks>
 public sealed class ColorTemperatureService : IDisposable
 {
@@ -28,7 +28,7 @@ public sealed class ColorTemperatureService : IDisposable
         ApplyViaGamma(r, g, b);
     }
 
-    /// <summary>Restores the gamma ramps captured before Amber changed them.</summary>
+    /// <summary>Restores the gamma ramps captured before Moonglow changed them.</summary>
     public void RestoreOriginalGammaRamps()
     {
         foreach (var entry in _savedGammaRamps.ToArray())

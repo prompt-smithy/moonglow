@@ -1,9 +1,9 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
-using Amber.ViewModels;
+using Moonglow.ViewModels;
 
-namespace Amber.Views;
+namespace Moonglow.Views;
 
 public partial class TrayPopup : UserControl
 {

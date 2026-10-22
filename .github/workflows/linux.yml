@@ -1,0 +1,62 @@
+name: Linux
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/linux/**'
+      - 'spec/**'
+      - '.github/workflows/linux.yml'
+  pull_request:
+    paths:
+      - 'apps/linux/**'
+      - 'spec/**'
+      - '.github/workflows/linux.yml'
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/linux
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/linux/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('apps/linux/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      # The GUI crate links only libc, but eframe/winit still need a C toolchain
+      # and the usual X11/Wayland headers at build time.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libxkbcommon-dev libwayland-dev \
+            libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev \
+            libgl1-mesa-dev
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Format
+        run: cargo fmt --all --check

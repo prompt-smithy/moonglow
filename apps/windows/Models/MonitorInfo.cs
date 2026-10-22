@@ -1,4 +1,4 @@
-namespace Amber.Models;
+namespace Moonglow.Models;
 
 /// <summary>Describes a single physical display and its control capabilities.</summary>
 public sealed class MonitorInfo

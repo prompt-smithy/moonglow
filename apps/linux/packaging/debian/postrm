@@ -1,5 +1,5 @@
 #!/bin/sh
-# Night Mode Controller postrm: desktop refreshes on remove/purge.
+# Moonglow postrm: desktop refreshes on remove/purge.
 set -e
 
 if command -v gtk-update-icon-cache >/dev/null; then

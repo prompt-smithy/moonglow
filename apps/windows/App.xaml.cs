@@ -1,19 +1,19 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using Amber.Infrastructure;
-using Amber.Models;
-using Amber.Services;
-using Amber.ViewModels;
-using Amber.Views;
+using Moonglow.Infrastructure;
+using Moonglow.Models;
+using Moonglow.Services;
+using Moonglow.ViewModels;
+using Moonglow.Views;
 using Hardcodet.Wpf.TaskbarNotification;
 using Microsoft.Win32;
 
-namespace Amber;
+namespace Moonglow;
 
 public partial class App : Application
 {
@@ -45,7 +45,7 @@ public partial class App : Application
         }
 
         // Only allow one instance per user session (RunAtStartup + a manual launch would otherwise duplicate).
-        _instanceMutex = new Mutex(true, @"Local\Amber.SingleInstance", out bool createdNew);
+        _instanceMutex = new Mutex(true, @"Local\Moonglow.SingleInstance", out bool createdNew);
         if (!createdNew)
         {
             Shutdown();
@@ -81,7 +81,7 @@ public partial class App : Application
         _tray = new TaskbarIcon
         {
             Icon = IconFactory.CreateTrayIcon(),
-            ToolTipText = "Night Mode Controller",
+            ToolTipText = "Moonglow",
             DataContext = _viewModel,
             TrayPopup = new TrayPopup { DataContext = _viewModel },
             ContextMenu = BuildContextMenu(),
@@ -257,7 +257,7 @@ public partial class App : Application
             ?? AppDomain.CurrentDomain.BaseDirectory;
         using SHA256 sha256 = SHA256.Create();
         byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(processPath.ToUpperInvariant()));
-        return @"Local\Amber.Shutdown." + BitConverter.ToString(hash).Replace("-", string.Empty);
+        return @"Local\Moonglow.Shutdown." + BitConverter.ToString(hash).Replace("-", string.Empty);
     }
 }
 

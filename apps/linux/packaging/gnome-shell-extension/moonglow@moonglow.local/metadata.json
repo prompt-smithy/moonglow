@@ -1,0 +1,7 @@
+{
+    "uuid": "moonglow@moonglow.local",
+    "name": "Moonglow",
+    "description": "External-display brightness and scheduled colour temperature",
+    "shell-version": ["48", "49", "50"],
+    "url": "https://github.com/prompt-smithy/moonglow"
+}

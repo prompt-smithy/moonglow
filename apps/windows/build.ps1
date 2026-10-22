@@ -1,20 +1,20 @@
-﻿<#
+<#
 .SYNOPSIS
-    Builds the distributable artifacts of Night Mode Controller with a single command.
+    Builds the distributable artifacts of Moonglow with a single command.
 
 .DESCRIPTION
-    Night Mode Controller targets .NET Framework 4.8. The runtime is a Windows component rather than
+    Moonglow targets .NET Framework 4.8. The runtime is a Windows component rather than
     something we ship - it is preinstalled on Windows 10 1903+ and Windows 11, and can be
     installed on Windows 7 SP1 and later. The portable launcher is one file, but it still
     requires the .NET Framework runtime on the target PC.
 
     Produces two distributable artifacts under bin\:
 
-        bin\NightModeController_Portable.exe      (1) single-file self-extracting portable launcher
-        bin\Installer\NightModeController.exe    (2) single setup executable produced by Inno Setup
+        bin\Moonglow_Portable.exe      (1) single-file self-extracting portable launcher
+        bin\Installer\Moonglow.exe    (2) single setup executable produced by Inno Setup
 
     The portable launcher embeds the published app, extracts it to a temporary directory,
-    runs Night Mode Controller, and removes the extracted files when Night Mode Controller exits.
+    runs Moonglow, and removes the extracted files when Moonglow exits.
     The installer is compiled by Inno Setup (ISCC.exe); if Inno Setup is not found the script
     attempts to install it via winget, and if that fails the portable build still succeeds and
     the installer step is skipped with a warning.
@@ -29,14 +29,14 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $root      = $PSScriptRoot
-$project   = Join-Path $root 'Amber.csproj'
-$issScript = Join-Path $root 'installer\Amber.iss'
+$project   = Join-Path $root 'Moonglow.csproj'
+$issScript = Join-Path $root 'installer\Moonglow.iss'
 $binDir    = Join-Path $root 'bin'
-$appExe    = 'NightModeController.exe'
+$appExe    = 'Moonglow.exe'
 
 # Output folders.
 $portableDir  = Join-Path $binDir 'Portable'
-$portableExe  = Join-Path $binDir 'NightModeController_Portable.exe'
+$portableExe  = Join-Path $binDir 'Moonglow_Portable.exe'
 $installerDir = Join-Path $binDir 'Installer'
 $stagingDir   = Join-Path $binDir '_staging'
 $launcherProject = Join-Path $root 'tools\PortableLauncher\PortableLauncher.csproj'
@@ -98,7 +98,7 @@ function Resolve-Iscc {
 }
 
 $version = Get-AppVersion
-Write-Host "Night Mode Controller packaging - version $version (.NET Framework 4.8)" -ForegroundColor Green
+Write-Host "Moonglow packaging - version $version (.NET Framework 4.8)" -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
 # Clean previous artifacts.
@@ -108,9 +108,9 @@ foreach ($dir in @($portableDir, $installerDir) + $legacyDirs) {
     if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
 }
 foreach ($legacyFile in @(
-    (Join-Path $binDir 'Amber_Portable.exe'),
-    (Join-Path $binDir 'Amber.exe'),
-    (Join-Path $installerDir 'Amber.exe')
+    (Join-Path $binDir 'Moonglow_Portable.exe'),
+    (Join-Path $binDir 'Moonglow.exe'),
+    (Join-Path $installerDir 'Moonglow.exe')
 )) {
     if (Test-Path $legacyFile) { Remove-Item $legacyFile -Force }
 }
@@ -138,7 +138,7 @@ Invoke-Checked 'dotnet' @(
     "-p:PayloadDir=$payloadPath",
     "-p:OutputPath=$launcherOutput"
 )
-$builtLauncher = Join-Path $launcherOutput 'Amber_Portable.exe'
+$builtLauncher = Join-Path $launcherOutput 'Moonglow_Portable.exe'
 if (-not (Test-Path $builtLauncher)) { throw "Portable launcher was not produced at $builtLauncher" }
 Copy-Item $builtLauncher $portableExe -Force
 

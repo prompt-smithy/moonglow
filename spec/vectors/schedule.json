@@ -1,0 +1,211 @@
+{
+  "description": "Golden vectors for schedule evaluation. Times are local wall-clock HH:mm. Results are snapped to the 100 K step.",
+  "step": 100,
+  "settings": {
+    "default": {
+      "dayColorTempK": 6500,
+      "nightColorTempK": 1200,
+      "morningStart": [
+        6,
+        0
+      ],
+      "morningEnd": [
+        7,
+        0
+      ],
+      "eveningStart": [
+        17,
+        30
+      ],
+      "eveningEnd": [
+        18,
+        30
+      ],
+      "autoColorTemperature": true,
+      "manualBrightness": 80,
+      "manualColorTempK": 6500,
+      "launchAtLogin": false
+    },
+    "custom": {
+      "dayColorTempK": 5000,
+      "nightColorTempK": 2000,
+      "morningStart": [
+        8,
+        0
+      ],
+      "morningEnd": [
+        9,
+        0
+      ],
+      "eveningStart": [
+        20,
+        0
+      ],
+      "eveningEnd": [
+        21,
+        0
+      ],
+      "autoColorTemperature": true,
+      "manualBrightness": 60,
+      "manualColorTempK": 4000,
+      "launchAtLogin": false
+    }
+  },
+  "cases": [
+    {
+      "settings": "default",
+      "time": "05:59",
+      "kelvin": 1200
+    },
+    {
+      "settings": "default",
+      "time": "06:00",
+      "kelvin": 1200
+    },
+    {
+      "settings": "default",
+      "time": "06:01",
+      "kelvin": 1300
+    },
+    {
+      "settings": "default",
+      "time": "06:30",
+      "kelvin": 3900
+    },
+    {
+      "settings": "default",
+      "time": "07:00",
+      "kelvin": 6500
+    },
+    {
+      "settings": "default",
+      "time": "12:00",
+      "kelvin": 6500
+    },
+    {
+      "settings": "default",
+      "time": "17:29",
+      "kelvin": 6500
+    },
+    {
+      "settings": "default",
+      "time": "17:30",
+      "kelvin": 6500
+    },
+    {
+      "settings": "default",
+      "time": "18:00",
+      "kelvin": 3900
+    },
+    {
+      "settings": "default",
+      "time": "18:30",
+      "kelvin": 1200
+    },
+    {
+      "settings": "default",
+      "time": "23:59",
+      "kelvin": 1200
+    },
+    {
+      "settings": "default",
+      "time": "00:30",
+      "kelvin": 1200
+    },
+    {
+      "settings": "custom",
+      "time": "05:59",
+      "kelvin": 2000
+    },
+    {
+      "settings": "custom",
+      "time": "06:00",
+      "kelvin": 2000
+    },
+    {
+      "settings": "custom",
+      "time": "06:01",
+      "kelvin": 2000
+    },
+    {
+      "settings": "custom",
+      "time": "06:30",
+      "kelvin": 2000
+    },
+    {
+      "settings": "custom",
+      "time": "07:00",
+      "kelvin": 2000
+    },
+    {
+      "settings": "custom",
+      "time": "12:00",
+      "kelvin": 5000
+    },
+    {
+      "settings": "custom",
+      "time": "17:29",
+      "kelvin": 5000
+    },
+    {
+      "settings": "custom",
+      "time": "17:30",
+      "kelvin": 5000
+    },
+    {
+      "settings": "custom",
+      "time": "18:00",
+      "kelvin": 5000
+    },
+    {
+      "settings": "custom",
+      "time": "18:30",
+      "kelvin": 5000
+    },
+    {
+      "settings": "custom",
+      "time": "23:59",
+      "kelvin": 2000
+    },
+    {
+      "settings": "custom",
+      "time": "00:30",
+      "kelvin": 2000
+    },
+    {
+      "settings": "custom",
+      "time": "07:59",
+      "kelvin": 2000
+    },
+    {
+      "settings": "custom",
+      "time": "08:00",
+      "kelvin": 2000
+    },
+    {
+      "settings": "custom",
+      "time": "08:30",
+      "kelvin": 3500
+    },
+    {
+      "settings": "custom",
+      "time": "12:00",
+      "kelvin": 5000
+    },
+    {
+      "settings": "custom",
+      "time": "20:00",
+      "kelvin": 5000
+    },
+    {
+      "settings": "custom",
+      "time": "20:30",
+      "kelvin": 3500
+    },
+    {
+      "settings": "custom",
+      "time": "21:00",
+      "kelvin": 2000
+    }
+  ]
+}

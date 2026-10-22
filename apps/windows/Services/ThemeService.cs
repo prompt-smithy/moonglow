@@ -2,9 +2,9 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Microsoft.Win32;
-using static Amber.Native.NativeMethods;
+using static Moonglow.Native.NativeMethods;
 
-namespace Amber.Services;
+namespace Moonglow.Services;
 
 /// <summary>
 /// Applies the app's greyscale palette (black, white and shades of grey) and follows the

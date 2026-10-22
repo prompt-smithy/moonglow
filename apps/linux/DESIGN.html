@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>nightmodecontroller-linux — Requirements &amp; Design Decisions (v1.0.0)</title>
+<title>moonglow — Requirements &amp; Design Decisions (v1.0.0)</title>
 <style>
   :root { color-scheme: light dark; }
   body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -25,8 +25,8 @@
 </head>
 <body>
 
-<h1>nightmodecontroller-linux — Requirements &amp; Design Decisions</h1>
-<p class="sub">Version 1.0.0 · Rust port of the macOS Night Mode Controller for Linux ·
+<h1>moonglow — Requirements &amp; Design Decisions</h1>
+<p class="sub">Version 1.0.0 · Rust port of the macOS Moonglow for Linux ·
 Covers Ubuntu, Debian, Arch, Fedora, openSUSE and derivatives.</p>
 
 <nav class="toc">
@@ -64,8 +64,8 @@ Covers Ubuntu, Debian, Arch, Fedora, openSUSE and derivatives.</p>
 </ul>
 
 <h2 id="arch">2. Architecture</h2>
-<p>Cargo workspace: <code>nmc-core</code> (pure logic: settings, state machine,
-schedule math, kelvin, traits — no hardware) + <code>nightmodecontroller-linux</code>
+<p>Cargo workspace: <code>moonglow-core</code> (pure logic: settings, state machine,
+schedule math, kelvin, traits — no hardware) + <code>moonglow</code>
 (backends, tray, UI, IPC, CLI). The macOS model layer was ported into the core
 first; Linux backends implement its traits.</p>
 <table>
@@ -129,7 +129,7 @@ tick re-probes displays and DDC.</p>
 <details>
 <summary>Bind-first IPC; forward when live, drive directly when headless</summary>
 <p>Second invocations forward JSON commands over
-<code>$XDG_RUNTIME_DIR/nightmodecontroller-linux.sock</code>. Never unlink
+<code>$XDG_RUNTIME_DIR/moonglow.sock</code>. Never unlink
 before bind (a racing primary can steal a live socket) and never remove on
 shutdown. With no daemon, setter flags drive backends directly — handy for
 scripts and keyboard shortcuts.</p>
@@ -146,7 +146,7 @@ the event loop. ~10 s stop time is joins + restore, by design.</p>
 <details>
 <summary>Logging: XDG state dir, stderr-only capture, rotation</summary>
 <p>The daemon dup2's <strong>stderr only</strong> into
-<code>~/.local/state/nightmodecontroller-linux/*.log</code> (2 MB rotation,
+<code>~/.local/state/moonglow/*.log</code> (2 MB rotation,
 version/timestamp/pid banner). Stdout stays on the terminal and one-shot CLI
 never touches the log.</p>
 </details>
@@ -176,11 +176,11 @@ reload udev, refresh caches, print the group-join notice).</p>
 </details>
 
 <details>
-<summary>Naming: repo <code>nightModeController_Linux</code>, binary/packages lowercase</summary>
+<summary>Naming: repo <code>moonglow</code>, binary/packages lowercase</summary>
 <p>Linux packaging policy forbids uppercase in .deb/.rpm/AUR names, so the
 binary, packages, files, and runtime paths use
-<code>nightmodecontroller-linux</code> while the repo keeps its mixed-case
-name. Human display strings ("Night Mode Controller") are unchanged.</p>
+<code>moonglow</code> while the repo keeps its mixed-case
+name. Human display strings ("Moonglow") are unchanged.</p>
 </details>
 
 <h2 id="limits">4. Limitations &amp; known gaps</h2>
@@ -230,12 +230,12 @@ name. Human display strings ("Night Mode Controller") are unchanged.</p>
 <h2 id="setup">6. Setup &amp; install</h2>
 <h3>Install (per distro)</h3>
 <p>Releases live at
-<code>github.com/prompt-smithy/nightModeController_Linux/releases</code>;
+<code>github.com/prompt-smithy/moonglow/releases</code>;
 each release attaches the <code>.deb</code>
-(<code>nightmodecontroller-linux_&lt;version&gt;_amd64.deb</code>).</p>
+(<code>moonglow_&lt;version&gt;_amd64.deb</code>).</p>
 <details open>
 <summary>Ubuntu, Kubuntu, Mint, Pop!_OS, Zorin (.deb)</summary>
-<pre>sudo apt install ./nightmodecontroller-linux_1.0.0_amd64.deb</pre>
+<pre>sudo apt install ./moonglow_1.0.0_amd64.deb</pre>
 <p>Use <code>apt install ./file.deb</code>, not bare <code>dpkg -i</code>, so
 dependencies resolve. GUI alternative: double-click the file (Software /
 Discover) and install graphically. On Kubuntu the tray icon appears
@@ -245,14 +245,14 @@ support.</p>
 </details>
 <details open>
 <summary>Debian (.deb)</summary>
-<pre>sudo apt install ./nightmodecontroller-linux_1.0.0_amd64.deb</pre>
+<pre>sudo apt install ./moonglow_1.0.0_amd64.deb</pre>
 <p>Same file as Ubuntu. On vanilla Debian GNOME, install an AppIndicator
 shell extension (a package <code>Suggests</code>) or the tray icon has no
 host — the app still runs via its settings window and CLI.</p>
 </details>
 <details open>
 <summary>Arch, Manjaro, EndeavourOS (AUR)</summary>
-<pre>yay -S nightmodecontroller-linux
+<pre>yay -S moonglow
 # or without an AUR helper:
 #   git clone the AUR repo, then makepkg -si</pre>
 <p>The AUR package builds from the release tag tarball. DDC/CI needs the
@@ -262,8 +262,8 @@ join below like every other distro.</p>
 </details>
 <details open>
 <summary>Fedora, RHEL, CentOS (COPR .rpm)</summary>
-<pre>sudo dnf copr enable &lt;you&gt;/nightmodecontroller-linux
-sudo dnf install nightmodecontroller-linux</pre>
+<pre>sudo dnf copr enable &lt;you&gt;/moonglow
+sudo dnf install moonglow</pre>
 <p>Replace <code>&lt;you&gt;</code> with the maintainer's COPR name (see
 <code>packaging/rpm/COPR.md</code>). First COPR build is still pending —
 until it exists, build from source below.</p>
@@ -272,18 +272,18 @@ until it exists, build from source below.</p>
 <summary>openSUSE and everything else (build from source)</summary>
 <p>No published binary yet. The release binary links only
 <code>libc</code>, so building on the machine itself always works:</p>
-<pre>cargo build --release -p nightmodecontroller-linux
-sudo install -Dm755 target/release/nightmodecontroller-linux \
-    /usr/local/bin/nightmodecontroller-linux</pre>
+<pre>cargo build --release -p moonglow
+sudo install -Dm755 target/release/moonglow \
+    /usr/local/bin/moonglow</pre>
 <p>Then install the udev rule by hand and do the group join below:
-<code>sudo install -Dm644 packaging/51-nightmodecontroller-linux-i2c.rules
+<code>sudo install -Dm644 packaging/51-moonglow-i2c.rules
 /usr/lib/udev/rules.d/ && sudo udevadm control --reload</code>.</p>
 </details>
 <h3>DDC/CI access (all distros, still required after install)</h3>
 <pre>sudo modprobe i2c-dev            # load the I2C bus driver
 sudo usermod -aG i2c "$USER"     # grant this user raw bus access
 # log out and back in, then:
-nightmodecontroller-linux --status</pre>
+moonglow --status</pre>
 <p>What each step does: <code>modprobe</code> creates the
 <code>/dev/i2c-*</code> nodes; the installer drops a udev rule assigning those
 nodes to group <code>i2c</code> (creating the group if missing); the usermod
@@ -291,9 +291,9 @@ line puts <em>you</em> in that group — the one step a package can never do.
 <code>/dev/i2c-*</code> ships root-only, so without it every bus open fails
 with permission denied.</p>
 <h3>Build from source</h3>
-<pre>cargo build --release -p nightmodecontroller-linux
-./target/release/nightmodecontroller-linux        # tray app
-./target/release/nightmodecontroller-linux --status</pre>
+<pre>cargo build --release -p moonglow
+./target/release/moonglow        # tray app
+./target/release/moonglow --status</pre>
 <h3>First launch checklist</h3>
 <ul>
   <li>Both tray icons appear; popups open; scroll shows value bubbles.</li>
@@ -319,10 +319,10 @@ with permission denied.</p>
 </ul>
 
 <h2 id="layout">8. Repo layout &amp; release</h2>
-<pre>nightModeController_Linux/
+<pre>moonglow/
 ├── Cargo.toml / Cargo.lock     # workspace (version = single source of truth)
-├── crates/nmc-core/            # pure logic + traits
-├── crates/nightmodecontroller-linux/  # backends, tray, UI, IPC, CLI
+├── crates/moonglow-core/            # pure logic + traits
+├── crates/moonglow/  # backends, tray, UI, IPC, CLI
 ├── packaging/                  # build-deb.sh, debian/, arch/, rpm/, icons/,
 │                               #   desktop, metainfo, man, udev, RELEASE.md
 ├── DESIGN.html                 # this document

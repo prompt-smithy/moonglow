@@ -1,9 +1,9 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
-using Amber.Infrastructure;
+using Moonglow.Infrastructure;
 
-namespace Amber.Views;
+namespace Moonglow.Views;
 
 public partial class MainWindow : Window
 {

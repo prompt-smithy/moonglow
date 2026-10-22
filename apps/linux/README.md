@@ -1,4 +1,4 @@
-# Night Mode Controller for Linux
+# Moonglow for Linux
 
 Rust port of the macOS menu-bar app: a tray app for external-display hardware
 brightness (DDC/CI) and scheduled colour temperature. One static-ish binary,
@@ -7,10 +7,10 @@ Ubuntu, Debian, and Arch.
 
 ## Layout
 
-- `crates/nmc-core/` — platform logic ported from Swift `AmberKit`: settings,
+- `crates/moonglow-core/` — platform logic ported from Swift `MoonglowKit`: settings,
   schedule math, Kelvin conversion, DDC/CI packets, display model, shared state
   manager. No UI or OS dependency.
-- `crates/nightmodecontroller-linux/` — Linux app: session backends, tray,
+- `crates/moonglow/` — Linux app: session backends, tray,
   settings window, CLI, IPC.
 - `packaging/` — `.desktop` launcher, udev rule for DDC/CI, `.deb` build script,
   Arch `PKGBUILD` template.
@@ -50,34 +50,34 @@ Light settings, KWin preview stopped).
 Debian / Ubuntu / Mint / Pop!_OS (from the GitHub release `.deb`):
 
 ```bash
-sudo apt install ./nightmodecontroller-linux_1.0.0_amd64.deb
+sudo apt install ./moonglow_1.0.0_amd64.deb
 ```
 
 Or build it yourself (version comes from `Cargo.toml`):
 
 ```bash
-bash packaging/build-deb.sh        # → dist/nightmodecontroller-linux_*_amd64.deb
-sudo apt install ./dist/nightmodecontroller-linux_*_amd64.deb
+bash packaging/build-deb.sh        # → dist/moonglow_*_amd64.deb
+sudo apt install ./dist/moonglow_*_amd64.deb
 ```
 
 Arch (AUR):
 
 ```bash
-yay -S nightmodecontroller-linux
+yay -S moonglow
 # or: cd packaging/arch && makepkg -si
 ```
 
 Fedora / openSUSE (COPR — see `packaging/rpm/COPR.md` for publishing):
 
 ```bash
-sudo dnf copr enable <you>/nightmodecontroller-linux
-sudo dnf install nightmodecontroller-linux
+sudo dnf copr enable <you>/moonglow
+sudo dnf install moonglow
 ```
 
 Or run from source:
 
 ```bash
-cargo run --release -p nightmodecontroller-linux
+cargo run --release -p moonglow
 ```
 
 DDC/CI permission (all distros — the installers print this too):
@@ -86,7 +86,7 @@ DDC/CI permission (all distros — the installers print this too):
 sudo modprobe i2c-dev
 sudo usermod -aG i2c "$USER"
 # log out and back in, then check:
-nightmodecontroller-linux --status
+moonglow --status
 ```
 
 If brightness reports "permission denied" naming your I2C buses, the step
@@ -98,7 +98,7 @@ is always manual.)
 
 ## Use
 
-Launch `nightmodecontroller-linux` (or the app launcher entry). It starts hidden
+Launch `moonglow` (or the app launcher entry). It starts hidden
 with a tray icon: brightness/temperature steppers, the automatic toggle,
 settings, and quit live there. Scrolling on the icon adjusts in place with a
 small value bubble for feedback. The settings window mirrors macOS — schedule
@@ -108,15 +108,15 @@ and hides instead of closing.
 A second invocation forwards to the running instance:
 
 ```bash
-nightmodecontroller-linux --show-settings
-nightmodecontroller-linux --set-brightness 70
-nightmodecontroller-linux --set-temp 4000
-nightmodecontroller-linux --auto off
-nightmodecontroller-linux --day-temp 6500 --night-temp 1300
-nightmodecontroller-linux --morning 06:00 09:00 --evening 18:00 21:00
-nightmodecontroller-linux --login on
-nightmodecontroller-linux --status
-nightmodecontroller-linux --quit
+moonglow --show-settings
+moonglow --set-brightness 70
+moonglow --set-temp 4000
+moonglow --auto off
+moonglow --day-temp 6500 --night-temp 1300
+moonglow --morning 06:00 09:00 --evening 18:00 21:00
+moonglow --login on
+moonglow --status
+moonglow --quit
 ```
 
 With no daemon running, the one-shot flags drive the backends directly (handy
@@ -125,13 +125,13 @@ Relative steppers suit keyboard shortcuts (Settings › Keyboard › Custom
 Shortcuts):
 
 ```bash
-nightmodecontroller-linux --brighter   # or --dimmer (5%)
-nightmodecontroller-linux --warmer     # or --cooler (250 K, manual mode)
-nightmodecontroller-linux --status --json   # machine-readable, for scripts
+moonglow --brighter   # or --dimmer (5%)
+moonglow --warmer     # or --cooler (250 K, manual mode)
+moonglow --status --json   # machine-readable, for scripts
 ```
 
-Diagnostics go to `~/.local/state/nightmodecontroller-linux/nightmodecontroller-linux.log`
-(`$XDG_STATE_HOME` when set), rotated past 2 MB to `nightmodecontroller-linux.log.1`.
+Diagnostics go to `~/.local/state/moonglow/moonglow.log`
+(`$XDG_STATE_HOME` when set), rotated past 2 MB to `moonglow.log.1`.
 One-shot CLI output stays on the terminal; only the long-running instance logs.
 
 ## Tray on every desktop
@@ -148,7 +148,7 @@ Presence is layered so something always shows:
    within 8 seconds on an X11 session, the app docks a legacy icon into
    `_NET_SYSTEM_TRAY_S0` instead. Click opens settings.
 
-Settings live at `~/.config/nightmodecontroller-linux/settings.json` (same schema as macOS).
+Settings live at `~/.config/moonglow/settings.json` (same schema as macOS).
 Start-at-login is a `~/.config/autostart` entry managed from the settings
 window; a registration the desktop refuses is never recorded.
 
@@ -180,5 +180,5 @@ Needs hardware and real sessions; not automatable.
 - KWin preview held across schedule ticks + `stopPreview` on quit.
 - Tray menu on Plasma and on GNOME + AppIndicator.
 - All five schedule states, including both transitions.
-- Settings round trip through `~/.config/nightmodecontroller-linux/settings.json`.
+- Settings round trip through `~/.config/moonglow/settings.json`.
 - Second invocation forwards; `--quit` stops the daemon; socket removed.

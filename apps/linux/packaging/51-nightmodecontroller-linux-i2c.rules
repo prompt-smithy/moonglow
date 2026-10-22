@@ -1,3 +1,0 @@
-# Night Mode Controller: let the `i2c` group drive DDC/CI brightness.
-# Add yourself with `sudo usermod -aG i2c $USER`, load `i2c-dev`, then log out/in.
-KERNEL=="i2c-[0-9]*", GROUP="i2c", MODE="0660"

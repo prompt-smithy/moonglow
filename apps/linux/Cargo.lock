@@ -1695,6 +1695,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "moonglow"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "ctrlc",
+ "dirs",
+ "eframe",
+ "egui",
+ "i2cdev",
+ "moonglow-core",
+ "rustix 1.1.5",
+ "serde",
+ "serde_json",
+ "tokio",
+ "wayland-client",
+ "wayland-protocols-wlr",
+ "x11rb",
+ "zbus",
+]
+
+[[package]]
+name = "moonglow-core"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1760,28 +1791,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nightmodecontroller-linux"
-version = "1.0.0"
-dependencies = [
- "chrono",
- "clap",
- "ctrlc",
- "dirs",
- "eframe",
- "egui",
- "i2cdev",
- "nmc-core",
- "rustix 1.1.5",
- "serde",
- "serde_json",
- "tokio",
- "wayland-client",
- "wayland-protocols-wlr",
- "x11rb",
- "zbus",
-]
-
-[[package]]
 name = "nix"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1815,15 +1824,6 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
-]
-
-[[package]]
-name = "nmc-core"
-version = "1.0.0"
-dependencies = [
- "chrono",
- "serde",
- "serde_json",
 ]
 
 [[package]]

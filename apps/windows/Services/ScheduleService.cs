@@ -1,8 +1,8 @@
 using System.Windows.Threading;
-using Amber.Infrastructure;
-using Amber.Models;
+using Moonglow.Infrastructure;
+using Moonglow.Models;
 
-namespace Amber.Services;
+namespace Moonglow.Services;
 
 /// <summary>Drives the gradual color-temperature transition based on the time of day.</summary>
 public sealed class ScheduleService
