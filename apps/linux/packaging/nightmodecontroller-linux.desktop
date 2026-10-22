@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Night Mode Controller
+Comment=External-display brightness and scheduled colour temperature
+Exec=nightmodecontroller-linux
+Icon=nightmodecontroller-linux
+Terminal=false
+Categories=Utility;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel

@@ -1,0 +1,7 @@
+{
+    "uuid": "nightmodecontroller-linux@amber.local",
+    "name": "Night Mode Controller",
+    "description": "External-display brightness and scheduled colour temperature",
+    "shell-version": ["48", "49", "50"],
+    "url": "https://github.com/prompt-smithy/nightModeController_Linux"
+}

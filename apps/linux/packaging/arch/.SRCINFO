@@ -1,0 +1,18 @@
+# Generated with `makepkg --printsrcinfo` after filling in sha256sums.
+pkgbase = nightmodecontroller-linux
+	pkgdesc = Tray app for external-display DDC/CI brightness and scheduled colour temperature
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/prompt-smithy/nightModeController_Linux
+	install = nightmodecontroller-linux.install
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	license = Apache-2.0
+	makedepends = cargo
+	depends = gcc-libs
+	optdepends = i2c-tools: DDC/CI brightness debugging (i2cdetect)
+	source = nightmodecontroller-linux-1.0.0.tar.gz::https://github.com/prompt-smithy/nightModeController_Linux/archive/refs/tags/linux-v1.0.0.tar.gz
+	sha256sums = REPLACE_AFTER_TAG
+
+pkgname = nightmodecontroller-linux

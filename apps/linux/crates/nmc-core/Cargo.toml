@@ -1,0 +1,12 @@
+[package]
+name = "nmc-core"
+version.workspace = true
+description = "Platform logic for Night Mode Controller: settings, schedule, color math, DDC packets, state. No UI or OS backend dependency."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
