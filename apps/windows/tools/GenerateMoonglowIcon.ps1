@@ -1,76 +1,113 @@
 [CmdletBinding()]
 param(
+    [string]$SourcePath = (Join-Path $PSScriptRoot '..\Assets\Moonglow.png'),
+    [string]$SmallSourcePath = (Join-Path $PSScriptRoot '..\Assets\Moonglow-small.png'),
     [string]$OutputPath = (Join-Path $PSScriptRoot '..\Assets\Moonglow.ico')
 )
 
+# Rebuilds Assets\Moonglow.ico from the packaged logo art. tools/generate-app-icons.py is the
+# canonical generator for every platform; this script exists so the icon can be rebuilt on
+# Windows without Python. Keep the two in step: frames below 128 px are written as BMP data,
+# which every icon reader can decode, and larger frames as PNG so the file stays small.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
-function New-IconFrame([int]$size) {
+function New-IconBitmap([System.Drawing.Image]$source, [int]$size) {
     $bitmap = [System.Drawing.Bitmap]::new($size, $size)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
         $graphics.Clear([System.Drawing.Color]::Transparent)
         $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
         $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-
-        $scale = $size / 256.0
-        $center = $size / 2.0
-        $brandColor = [System.Drawing.Color]::FromArgb(255, 255, 193, 7)
-        $brandDarkColor = [System.Drawing.Color]::FromArgb(255, 255, 160, 0)
-
-        $pen = [System.Drawing.Pen]::new($brandColor, [Math]::Max(1.5, 14 * $scale))
-        try {
-            $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-            $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-            for ($index = 0; $index -lt 8; $index++) {
-                $angle = $index * [Math]::PI / 4
-                $inner = 82 * $scale
-                $outer = 113 * $scale
-                $graphics.DrawLine(
-                    $pen,
-                    [single]($center + [Math]::Cos($angle) * $inner),
-                    [single]($center + [Math]::Sin($angle) * $inner),
-                    [single]($center + [Math]::Cos($angle) * $outer),
-                    [single]($center + [Math]::Sin($angle) * $outer))
-            }
-        }
-        finally {
-            $pen.Dispose()
-        }
-
-        $sunBounds = [System.Drawing.RectangleF]::new(
-            [single]($center - 62 * $scale),
-            [single]($center - 62 * $scale),
-            [single](124 * $scale),
-            [single](124 * $scale))
-        $brush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-            $sunBounds, $brandColor, $brandDarkColor, 90.0)
-        try {
-            $graphics.FillEllipse($brush, $sunBounds)
-        }
-        finally {
-            $brush.Dispose()
-        }
-
-        $stream = [System.IO.MemoryStream]::new()
-        try {
-            $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
-            $bytes = $stream.ToArray()
-            Write-Output -NoEnumerate $bytes
-        }
-        finally {
-            $stream.Dispose()
-        }
+        $graphics.DrawImage($source, 0, 0, $size, $size)
+        Write-Output -NoEnumerate $bitmap
     }
     finally {
         $graphics.Dispose()
-        $bitmap.Dispose()
+    }
+}
+
+function New-PngFrame([System.Drawing.Bitmap]$bitmap) {
+    $stream = [System.IO.MemoryStream]::new()
+    try {
+        $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
+        Write-Output -NoEnumerate $stream.ToArray()
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+function New-BmpFrame([System.Drawing.Bitmap]$bitmap) {
+    $size = $bitmap.Width
+    $maskStride = [int](([math]::Floor(($size + 31) / 32)) * 4)
+    $pixels = [byte[]]::new($size * $size * 4)
+    $mask = [byte[]]::new($maskStride * $size)
+    $cursor = 0
+    for ($row = 0; $row -lt $size; $row++) {
+        $y = $size - 1 - $row
+        $maskOffset = $row * $maskStride
+        for ($x = 0; $x -lt $size; $x++) {
+            $color = $bitmap.GetPixel($x, $y)
+            $pixels[$cursor++] = $color.B
+            $pixels[$cursor++] = $color.G
+            $pixels[$cursor++] = $color.R
+            $pixels[$cursor++] = $color.A
+            if ($color.A -eq 0) {
+                $index = $maskOffset + [int][math]::Floor($x / 8)
+                $mask[$index] = $mask[$index] -bor (0x80 -shr ($x % 8))
+            }
+        }
+    }
+
+    $frame = [System.IO.MemoryStream]::new()
+    $writer = [System.IO.BinaryWriter]::new($frame)
+    try {
+        $writer.Write([uint32]40)
+        $writer.Write([int32]$size)
+        $writer.Write([int32]($size * 2))
+        $writer.Write([uint16]1)
+        $writer.Write([uint16]32)
+        $writer.Write([uint32]0)
+        $writer.Write([uint32]($pixels.Length + $mask.Length))
+        $writer.Write([int32]0)
+        $writer.Write([int32]0)
+        $writer.Write([uint32]0)
+        $writer.Write([uint32]0)
+        $writer.Write($pixels)
+        $writer.Write($mask)
+        $writer.Flush()
+        Write-Output -NoEnumerate $frame.ToArray()
+    }
+    finally {
+        $writer.Dispose()
     }
 }
 
 $sizes = @(16, 24, 32, 48, 64, 128, 256)
-$frames = @($sizes | ForEach-Object { New-IconFrame $_ })
+$full = [System.Drawing.Image]::FromFile((Resolve-Path $SourcePath))
+$small = [System.Drawing.Image]::FromFile((Resolve-Path $SmallSourcePath))
+try {
+    $frames = @(
+        foreach ($size in $sizes) {
+            # Below 33 px the eight rays fall under a pixel; use the crescent-only art.
+            $source = if ($size -le 32) { $small } else { $full }
+            $bitmap = New-IconBitmap $source $size
+            try {
+                if ($size -ge 128) { New-PngFrame $bitmap } else { New-BmpFrame $bitmap }
+            }
+            finally {
+                $bitmap.Dispose()
+            }
+        }
+    )
+}
+finally {
+    $full.Dispose()
+    $small.Dispose()
+}
+
 $outputDirectory = Split-Path -Parent $OutputPath
 [System.IO.Directory]::CreateDirectory($outputDirectory) | Out-Null
 

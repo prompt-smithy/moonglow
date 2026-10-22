@@ -489,7 +489,7 @@ impl<S: SettingsPersistence + 'static> TrayMenu<S> {
 
 /// Theme icon names served when the packaged icons are installed. Shared
 /// with the OSD bubbles so tray and notifications use the same artwork.
-pub(crate) const COLOR_ICON_NAME: &str = "moonglow";
+pub(crate) const COLOR_ICON_NAME: &str = "moonglow-tray";
 pub(crate) const BRIGHTNESS_ICON_NAME: &str = "moonglow-brightness";
 
 /// Icon theme roots searched for the packaged icon.
@@ -956,15 +956,8 @@ mod tests {
         let root = icon_test_dir("found");
         let nested = root.join("256x256/apps");
         std::fs::create_dir_all(&nested).unwrap();
-        std::fs::write(
-            nested.join("moonglow.png"),
-            [0x89, b'P', b'N', b'G'],
-        )
-        .unwrap();
-        assert!(theme_has_icon(
-            std::slice::from_ref(&root),
-            "moonglow"
-        ));
+        std::fs::write(nested.join("moonglow.png"), [0x89, b'P', b'N', b'G']).unwrap();
+        assert!(theme_has_icon(std::slice::from_ref(&root), "moonglow"));
         // Other names and non-icon extensions do not match.
         assert!(!theme_has_icon(
             std::slice::from_ref(&root),
@@ -972,10 +965,7 @@ mod tests {
         ));
         std::fs::write(nested.join("moonglow.txt"), []).unwrap();
         std::fs::remove_file(nested.join("moonglow.png")).unwrap();
-        assert!(!theme_has_icon(
-            std::slice::from_ref(&root),
-            "moonglow"
-        ));
+        assert!(!theme_has_icon(std::slice::from_ref(&root), "moonglow"));
         std::fs::remove_dir_all(&root).unwrap();
     }
 

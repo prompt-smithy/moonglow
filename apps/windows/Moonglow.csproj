@@ -48,6 +48,12 @@
     <Reference Include="System.Management" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- App logo art, embedded so the tray and window icons match the packaged icon. -->
+    <EmbeddedResource Include="Assets\Moonglow.png" LogicalName="Moonglow.Assets.Moonglow.png" />
+    <EmbeddedResource Include="Assets\Moonglow-small.png" LogicalName="Moonglow.Assets.Moonglow-small.png" />
+  </ItemGroup>
+
   <!-- Single command that builds the portable launcher and installer. Run with:
          dotnet build -t:PackageAll -->
   <Target Name="PackageAll">

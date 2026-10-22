@@ -1,38 +1,31 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
+using System.Windows.Media.Imaging;
 using Moonglow.Native;
 
 namespace Moonglow.Infrastructure;
 
-/// <summary>Draws the system-tray icon at runtime so no binary asset is required.</summary>
+/// <summary>Supplies the app logo for the tray and window from the packaged artwork.</summary>
 internal static class IconFactory
 {
+    private const string FullLogo = "Moonglow.Assets.Moonglow.png";
+    private const string TrayLogo = "Moonglow.Assets.Moonglow-small.png";
+
+    /// <summary>Renders the tray icon. The crescent-only artwork keeps it legible at 16 px.</summary>
     public static Icon CreateTrayIcon()
     {
         const int size = 32;
+        using Stream stream = OpenLogo(TrayLogo);
+        using var logo = new Bitmap(stream);
         using var bitmap = new Bitmap(size, size);
-        using (var g = Graphics.FromImage(bitmap))
+        using (var graphics = Graphics.FromImage(bitmap))
         {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(Color.Transparent);
-
-            float cx = size / 2f;
-            float cy = size / 2f;
-            var color = Color.FromArgb(255, 255, 193, 7);
-
-            using var pen = new Pen(color, 2.4f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-            for (int i = 0; i < 8; i++)
-            {
-                double a = i * Math.PI / 4;
-                float x1 = cx + (float)Math.Cos(a) * 11.5f;
-                float y1 = cy + (float)Math.Sin(a) * 11.5f;
-                float x2 = cx + (float)Math.Cos(a) * 15f;
-                float y2 = cy + (float)Math.Sin(a) * 15f;
-                g.DrawLine(pen, x1, y1, x2, y2);
-            }
-
-            using var brush = new SolidBrush(color);
-            g.FillEllipse(brush, cx - 8, cy - 8, 16, 16);
+            graphics.Clear(Color.Transparent);
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            graphics.DrawImage(logo, new Rectangle(0, 0, size, size));
         }
 
         IntPtr hIcon = bitmap.GetHicon();
@@ -47,15 +40,20 @@ internal static class IconFactory
         }
     }
 
-    /// <summary>Rasterizes the tray icon as a WPF image for use as the window/taskbar icon.</summary>
+    /// <summary>Loads the full-resolution logo for the window and taskbar icon.</summary>
     public static System.Windows.Media.ImageSource CreateImageSource()
     {
-        using Icon icon = CreateTrayIcon();
-        var source = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-            icon.Handle,
-            System.Windows.Int32Rect.Empty,
-            System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
-        source.Freeze();
-        return source;
+        using Stream stream = OpenLogo(FullLogo);
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.StreamSource = stream;
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        image.EndInit();
+        image.Freeze();
+        return image;
     }
+
+    private static Stream OpenLogo(string name)
+        => typeof(IconFactory).Assembly.GetManifestResourceStream(name)
+            ?? throw new InvalidOperationException($"Missing embedded logo resource: {name}");
 }
