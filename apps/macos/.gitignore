@@ -1,0 +1,61 @@
+# Moonglow (macOS) ignore policy
+#
+# Committed on purpose - do NOT add ignore rules for these:
+#   Package.swift, Sources/**, Tests/**, Resources/**, Packaging/**, docs/**,
+#   README.md, LICENSE, .github/**  (shared agent definitions)
+#   .sourcekit-lsp/config.json      (pins the Swift extension to the `swiftbuild` build system,
+#                                    which avoids the SwiftPM `.build` lock deadlock on this
+#                                    machine; see the repo notes)
+#   Package.resolved                (see the note in the SwiftPM section below)
+
+# Swift Package Manager / Swift build tooling
+.build/
+# Scratch dir used by `swiftbuild` and by `swift build --scratch-path .build-run`.
+.build-run/
+.swiftpm/
+Packages/
+index-build/
+.index-build/
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+
+# Package.resolved is deliberately NOT listed here. Moonglow ships as a signed, notarised binary, so
+# a release build should resolve the exact versions that were tested rather than whatever is
+# newest. The package has no dependencies yet, so there is nothing to pin today.
+
+# Xcode
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.xcresult
+
+# Generated build and release output from Packaging/build-app.sh
+# artifacts/ holds "Moonglow.app", its .iconset and the DMG staging folder.
+artifacts/
+# Release archives (release/*.dmg is already covered by the *.dmg rule below).
+release/*.zip
+# Disk images are always build output.
+*.dmg
+# Generated app bundles and icon sets must never be committed.
+*.app/
+*.iconset/
+
+# Local editor / IDE state (machine-specific)
+.vscode/
+.idea/
+.sourcekit-lsp/*
+!.sourcekit-lsp/config.json
+
+# macOS
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
