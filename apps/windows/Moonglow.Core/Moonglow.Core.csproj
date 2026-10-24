@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure, UI-free logic shared by the app and its conformance tests. Keeping it in a
+       net48 class library lets the test project load the golden vectors in
+       spec/vectors without starting WPF or touching display hardware. -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Moonglow.Core</RootNamespace>
+    <AssemblyName>Moonglow.Core</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Build-time only: supplies the .NET Framework 4.8 reference assemblies so the
+         library builds with nothing but the .NET SDK. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
+  </ItemGroup>
+
+</Project>

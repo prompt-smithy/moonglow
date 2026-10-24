@@ -10,7 +10,10 @@
         <SolidColorBrush x:Key="ThemeSecondaryText" Color="#FF6B6B6B" />
         <SolidColorBrush x:Key="ThemeBorder" Color="#FFD6D6D6" />
         <SolidColorBrush x:Key="ThemeAccent" Color="#FF4A4A4A" />
-        <!-- Color temperature keeps its warm-to-cool gradient in both modes. -->
+        <!-- Color temperature keeps its warm-to-cool gradient in both modes.
+             Windows keeps its own four-stop saturated ramp: do NOT replace these with the
+             macOS two-stop pair (#FFA94D/#8FB8FF) — interpolating between those endpoints
+             passes through grey mid-track. See spec/learnings/windows-popup-color-slider.md. -->
         <LinearGradientBrush x:Key="TemperatureRangeGradient" StartPoint="0,0" EndPoint="1,0">
             <GradientStop Color="#E87925" Offset="0" />
             <GradientStop Color="#F0B479" Offset="0.48" />

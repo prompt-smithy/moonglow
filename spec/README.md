@@ -9,10 +9,13 @@ that every platform is tested against.
 spec/
 ├── settings.schema.json          canonical persisted settings shape
 ├── validate.py                   self-check: schema is valid, vectors are consistent
-└── vectors/
-    ├── kelvin.json               kelvin → normalized RGB channel scale
-    ├── schedule.json             schedule evaluation at fixed times
-    └── temperature-range.json    snapping and clamping
+├── vectors/
+│   ├── kelvin.json               kelvin → normalized RGB channel scale
+│   ├── schedule.json             schedule evaluation at fixed times
+│   └── temperature-range.json    snapping and clamping
+└── learnings/
+    └── windows-popup-color-slider.md   post-merge Windows slider bugs and the
+                                        rules that stop them coming back
 ```
 
 ## Why this exists
@@ -36,6 +39,12 @@ happened to be read first. The defaults are now reconciled across all three impl
 Ranges, the 100 K step, the five-state schedule model, lenient decoding, and the
 schedule-ordering clamp also agree everywhere.
 
+Global shortcuts share the four setting keys but not their representation: macOS
+stores `{keyCode, modifiers}`, while Linux stores a readable `"Ctrl+Alt+Up"`
+string. Both are documented by the `hotKey` definition in the schema, are
+platform-specific, and are not portable between operating systems. `null`
+disables one action without disturbing the others.
+
 ## Conformance
 
 Each platform ships a test that loads these files and asserts against them. A change to the
@@ -45,10 +54,18 @@ contract lands here first, then in the three implementations.
 | --- | --- |
 | macOS | `apps/macos/Tests/MoonglowKitTests/SpecConformanceTests.swift` |
 | Linux | `apps/linux/crates/moonglow-core/tests/spec_conformance.rs` |
-| Windows | not yet — the WPF project has no test project (see below) |
+| Windows | `apps/windows/Moonglow.Core.Tests/SpecConformanceTests.cs` |
 
 Tolerances: kelvin channel scales are compared to `1e-6` because `log`/`pow` may differ in
 the last bits between runtimes. Schedule results are integers and must match exactly.
+
+## Learnings
+
+`learnings/` records hard-won, platform-specific lessons that the vectors do
+not cover — e.g. why the Windows slider keeps its own gradient ramp instead of
+copying the macOS one, and why two app copies must never tint one screen.
+Read the relevant note before porting UI values or hardware behaviour between
+platforms; each note names the test that enforces it.
 
 ## Validating
 
@@ -64,10 +81,10 @@ python3 spec/validate.py     # needs the `jsonschema` package for the meta-schem
 CI runs it on any change under `spec/`, and the platform workflows run their own
 conformance suite on the same trigger.
 
-## Windows gap
+## Windows layout
 
-`apps/windows` has no automated test project, so it cannot read the vectors yet. Closing the
-gap means extracting the pure logic (`Models/AppSettings.cs`, `Services/ColorTemperatureService.cs`,
-`Services/ScheduleService.cs`) into a `net48` class library that the WPF app references, then
-adding an xUnit project against it. That is a refactor, not a rename, so it is deliberately
-left as the next step.
+`apps/windows` keeps its pure logic in a `net48` class library, `Moonglow.Core`
+(`AppSettings`, `ScheduleCalculator`, `KelvinConversion`, `TemperatureRange`), which the WPF
+app references. `Moonglow.Core.Tests` is the xUnit project that loads these vectors; the WPF
+layer holds only the native and UI code, so the conformance suite runs without a desktop
+session or display hardware.

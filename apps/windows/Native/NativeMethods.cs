@@ -25,6 +25,9 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern bool DestroyIcon(IntPtr handle);
 
+    [DllImport("user32.dll")]
+    public static extern int GetSystemMetrics(int index);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT
     {
@@ -96,6 +99,60 @@ internal static class NativeMethods
 
     [DllImport("gdi32.dll")]
     public static extern bool DeleteDC(IntPtr hdc);
+
+    // ---------------------------------------------------------------- Colour fallback (Magnification)
+    // The GDI gamma ramp is unavailable when another component owns the display colour
+    // pipeline (Windows Night Light, HDR, some drivers). The Magnification API applies a
+    // colour matrix during composition instead, so the schedule still works there.
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MAGCOLOREFFECT
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 25)]
+        public float[] Transform;
+    }
+
+    [DllImport("Magnification.dll", SetLastError = true)]
+    public static extern bool MagInitialize();
+
+    [DllImport("Magnification.dll", SetLastError = true)]
+    public static extern bool MagUninitialize();
+
+    [DllImport("Magnification.dll", SetLastError = true)]
+    public static extern bool MagSetFullscreenColorEffect(ref MAGCOLOREFFECT pEffect);
+
+    // ---------------------------------------------------------------- Process parent (kernel32)
+    // Lets the app tell its own portable launcher apart from a rival copy: the launcher
+    // is the direct parent, while any other same-named process is a second instance.
+    public const uint TH32CS_SNAPPROCESS = 0x00000002;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    public struct PROCESSENTRY32
+    {
+        public uint dwSize;
+        public uint cntUsage;
+        public uint th32ProcessID;
+        public IntPtr th32DefaultHeapID;
+        public uint th32ModuleID;
+        public uint cntThreads;
+        public uint th32ParentProcessID;
+        public int pcPriClassBase;
+        public uint dwFlags;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string szExeFile;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern bool Process32First(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern bool Process32Next(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool CloseHandle(IntPtr hObject);
 
     // ---------------------------------------------------------------- DWM title bar (dwmapi)
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
