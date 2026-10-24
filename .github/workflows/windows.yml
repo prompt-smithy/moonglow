@@ -5,10 +5,14 @@ on:
     branches: [main]
     paths:
       - 'apps/windows/**'
+      - 'resources/**'
+      - 'spec/**'
       - '.github/workflows/windows.yml'
   pull_request:
     paths:
       - 'apps/windows/**'
+      - 'resources/**'
+      - 'spec/**'
       - '.github/workflows/windows.yml'
 
 concurrency:
@@ -39,7 +43,10 @@ jobs:
       - name: Build
         run: dotnet build Moonglow.csproj -c Release
 
-      # There is no test project yet - see spec/README.md for the conformance gap.
+      # Loads spec/vectors and asserts the shared contract; see spec/README.md.
+      - name: Test
+        run: dotnet test Moonglow.Core.Tests/Moonglow.Core.Tests.csproj -c Release
+
       - name: Upload build output
         uses: actions/upload-artifact@v4
         with:

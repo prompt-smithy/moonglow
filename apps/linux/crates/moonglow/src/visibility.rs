@@ -1,14 +1,14 @@
 //! Settings-window visibility state machine.
 //!
-//! The window hides instead of closing (tray-first, like macOS) and auto-hides
-//! after 10 idle seconds — but the window manager has its own ideas
-//! (minimize, dock restore, taskbar). Sending `Visible` every frame fights the
-//! compositor, and a dock/taskbar restore while we believe we're hidden
-//! leaves the window stuck: mapped by the WM with no content (the black page).
+//! Closing the window hides it instead of quitting, so the schedule and global
+//! shortcuts keep running in the background; the window manager has its own
+//! ideas (minimize, dock restore, taskbar). Sending `Visible` every frame
+//! fights the compositor, and a dock/taskbar restore while we believe we are
+//! hidden leaves the window stuck: mapped by the WM with no content (the black
+//! page).
 //!
-//! This controller owns the reconciliation: commands go out only on change,
-//! any OS-side restore signal (focus, input) while hidden re-shows, and
-//! auto-hide never stacks on top of an OS-minimized window.
+//! This controller owns the reconciliation: commands go out only on change and
+//! any OS-side restore signal (focus, input) while hidden re-shows.
 
 /// Viewport effects, applied by the egui shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,7 +40,7 @@ impl VisibilityController {
         self.visible
     }
 
-    /// Show requested (tray, IPC, launcher): reveal, unminimize, focus.
+    /// Show requested (IPC or launcher): reveal, unminimize, focus.
     pub fn show(&mut self) -> Vec<VisCommand> {
         self.visible = true;
         let mut cmds = self.emit_visible(true);
@@ -56,17 +56,6 @@ impl VisibilityController {
         let mut cmds = vec![VisCommand::CancelClose];
         cmds.extend(self.emit_visible(false));
         cmds
-    }
-
-    /// Idle timeout fired. Never hides an OS-minimized window: it is already
-    /// out of sight, and stacking `Visible(false)` on top would strand the
-    /// taskbar entry the user restores from.
-    pub fn on_idle_timeout(&mut self, os_minimized: bool) -> Vec<VisCommand> {
-        if !self.visible || os_minimized {
-            return Vec::new();
-        }
-        self.visible = false;
-        self.emit_visible(false)
     }
 
     /// The OS restored or focused the window while we believed it hidden
@@ -134,20 +123,6 @@ mod tests {
             vec![VisCommand::CancelClose, VisCommand::SetVisible(false)]
         );
         assert!(!vis.visible());
-    }
-
-    #[test]
-    fn idle_timeout_hides_but_never_when_os_minimized() {
-        let mut vis = VisibilityController::new(true);
-        assert_eq!(
-            vis.on_idle_timeout(false),
-            vec![VisCommand::SetVisible(false)]
-        );
-        assert!(!vis.visible());
-
-        let mut vis = VisibilityController::new(true);
-        assert!(vis.on_idle_timeout(true).is_empty());
-        assert!(vis.visible());
     }
 
     #[test]

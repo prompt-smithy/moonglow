@@ -1,11 +1,12 @@
 [Desktop Entry]
 Type=Application
 Name=Moonglow
-Comment=External-display brightness and scheduled colour temperature
+Comment=External-display brightness, colour temperature, and global shortcuts
 Exec=moonglow
 Icon=moonglow
 Terminal=false
 Categories=Utility;
 StartupNotify=false
+StartupWMClass=moonglow
 X-GNOME-Autostart-enabled=true
 X-KDE-autostart-after=panel

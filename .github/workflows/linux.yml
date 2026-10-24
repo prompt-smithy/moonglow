@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'apps/linux/**'
+      - 'resources/**'
       - 'spec/**'
       - '.github/workflows/linux.yml'
   pull_request:
     paths:
       - 'apps/linux/**'
+      - 'resources/**'
       - 'spec/**'
       - '.github/workflows/linux.yml'
 

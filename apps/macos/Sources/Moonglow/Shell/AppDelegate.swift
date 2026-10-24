@@ -216,12 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func configureStatusItem(viewModel: MainViewModel) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            let image = NSImage(
-                systemSymbolName: "sun.max.fill",
-                accessibilityDescription: "Moonglow"
-            )
-            image?.isTemplate = true
-            button.image = image
+            button.image = StatusIconFactory.trayImage()
         }
 
         let menu = NSMenu()

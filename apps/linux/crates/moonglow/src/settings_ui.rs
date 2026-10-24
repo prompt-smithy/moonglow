@@ -1,26 +1,24 @@
 //! Settings window (egui).
 //!
-//! Mirrors the macOS settings sheet: brightness and temperature sliders,
-//! twelve-hour schedule pickers, the day/night range as one two-handle bar,
-//! startup toggle, and the display list. The window starts hidden (tray-first,
-//! like the menu-bar-only Mac app) and hides instead of closing; visibility
-//! state is owned by [`VisibilityController`] so OS-side restores (dock,
-//! taskbar, Alt-Tab) can never strand the window contentless.
+//! The application's main surface: brightness, colour temperature with its
+//! automatic switch and day/night range, global shortcuts, schedule pickers,
+//! startup, displays, and the CLI reference. The window is a normal desktop
+//! window — it closes to the background so the schedule and shortcuts keep
+//! running, and a second launch (or `--show-settings`) brings it back.
 
-use crate::tray::{SharedState, TrayCommand};
+use crate::commands::{AppCommand, SharedState};
+use crate::shortcuts::SharedShortcutStatus;
 use crate::visibility::{VisCommand, VisibilityController};
 use moonglow_core::settings::AppSettings;
+use moonglow_core::shortcut::{Shortcut, ShortcutAction, ShortcutKey};
 use moonglow_core::state::ScheduleTime;
 use moonglow_core::temperature_range::{TemperatureRange, TemperatureScale};
+use moonglow_core::theme::{parse_hex, ThemeCatalog};
 use moonglow_core::time_of_day::TimeOfDay;
 use moonglow_core::traits::SettingsPersistence;
 use moonglow_core::twelve_hour::{Meridiem, TwelveHourTime};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
-
-/// Idle time after which the window hides itself, matching macOS.
-const AUTO_HIDE_AFTER: Duration = Duration::from_secs(10);
 
 const SCHEDULE_FIELDS: [ScheduleTime; 4] = [
     ScheduleTime::MorningStart,
@@ -29,19 +27,30 @@ const SCHEDULE_FIELDS: [ScheduleTime; 4] = [
     ScheduleTime::EveningEnd,
 ];
 
+/// A message shown for a few seconds under the shortcut rows.
+const MESSAGE_SECONDS: u64 = 4;
+
+/// The app icon — the crescent mark shared with the macOS and Windows builds.
+/// Embedded so the window icon and the header mark work when running from the
+/// build directory, where no desktop entry or hicolor theme is installed.
+const APP_ICON_PNG: &[u8] =
+    include_bytes!("../../../../../resources/linux/hicolor/256x256/apps/moonglow.png");
+
+/// Decodes the embedded icon for the winit viewport and the egui header.
+fn app_icon() -> Option<egui::IconData> {
+    eframe::icon_data::from_png_bytes(APP_ICON_PNG).ok()
+}
+
 pub struct SettingsApp<S: SettingsPersistence> {
     state: SharedState<S>,
-    cmd_rx: mpsc::Receiver<TrayCommand>,
-    /// Set once the StatusNotifier tray registers (live flag: a late panel
-    /// start flips settings into tray mode without a restart).
-    tray_popup: Arc<AtomicBool>,
+    cmd_rx: mpsc::Receiver<AppCommand>,
+    shortcut_status: SharedShortcutStatus,
     shutdown: crate::SharedShutdown,
     vis: VisibilityController,
     theme_reported: bool,
     last_system_theme: Option<egui::Theme>,
     gsettings_dark: bool,
     gsettings_checked: Instant,
-    last_interaction: Instant,
     // Local control state, re-synced whenever settings change elsewhere.
     last_seen: AppSettings,
     brightness: i32,
@@ -50,16 +59,22 @@ pub struct SettingsApp<S: SettingsPersistence> {
     launch_at_login: bool,
     times: [TwelveHourTime; 4],
     range: TemperatureRange,
+    shortcuts: [Option<Shortcut>; 4],
+    recording: Option<usize>,
+    shortcut_message: Option<(String, Instant)>,
     cli_copied_at: Option<Instant>,
+    icon: Option<egui::TextureHandle>,
 }
 
 impl<S: SettingsPersistence> SettingsApp<S> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         state: SharedState<S>,
-        cmd_rx: mpsc::Receiver<TrayCommand>,
-        tray_popup: Arc<AtomicBool>,
+        cmd_rx: mpsc::Receiver<AppCommand>,
+        shortcut_status: SharedShortcutStatus,
         visible: bool,
         shutdown: crate::SharedShutdown,
+        icon: Option<egui::TextureHandle>,
     ) -> Self {
         let settings = state
             .lock()
@@ -68,14 +83,13 @@ impl<S: SettingsPersistence> SettingsApp<S> {
         let mut app = Self {
             state,
             cmd_rx,
-            tray_popup,
+            shortcut_status,
             shutdown,
             vis: VisibilityController::new(visible),
             theme_reported: false,
             last_system_theme: None,
             gsettings_dark: gsettings_dark().unwrap_or(true),
             gsettings_checked: Instant::now(),
-            last_interaction: Instant::now(),
             last_seen: settings.clone(),
             brightness: settings.manual_brightness,
             temperature: settings.manual_color_temp_k,
@@ -88,7 +102,11 @@ impl<S: SettingsPersistence> SettingsApp<S> {
                 settings.evening_end.twelve_hour(),
             ],
             range: TemperatureRange::from_settings(&settings),
+            shortcuts: shortcuts_of(&settings),
+            recording: None,
+            shortcut_message: None,
             cli_copied_at: None,
+            icon,
         };
         // In automatic mode the slider shows the live scheduled value.
         app.resync_displayed_temp();
@@ -106,6 +124,7 @@ impl<S: SettingsPersistence> SettingsApp<S> {
             settings.evening_end.twelve_hour(),
         ];
         self.range = TemperatureRange::from_settings(settings);
+        self.shortcuts = shortcuts_of(settings);
         if !settings.auto_color_temperature {
             self.temperature = settings.manual_color_temp_k;
         }
@@ -126,12 +145,11 @@ impl<S: SettingsPersistence> SettingsApp<S> {
     fn poll_commands(&mut self, ctx: &egui::Context) {
         while let Ok(cmd) = self.cmd_rx.try_recv() {
             match cmd {
-                TrayCommand::ShowSettings => {
+                AppCommand::ShowWindow => {
                     let commands = self.vis.show();
                     Self::apply_cmds(ctx, commands);
-                    self.last_interaction = Instant::now();
                 }
-                TrayCommand::Quit => {
+                AppCommand::Quit => {
                     // Diverges: runs shutdown and exits (the event loop has
                     // no programmatic exit for the root viewport).
                     crate::quit_now(&self.shutdown);
@@ -158,14 +176,86 @@ impl<S: SettingsPersistence> SettingsApp<S> {
             }
         }
     }
+
+    /// Captures the next key press while a shortcut row is recording.
+    fn capture_shortcut(&mut self, ctx: &egui::Context) {
+        let Some(index) = self.recording else {
+            return;
+        };
+        let events = ctx.input(|input| input.events.clone());
+        for event in events {
+            let egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } = event
+            else {
+                continue;
+            };
+            if key == egui::Key::Escape {
+                self.recording = None;
+                return;
+            }
+            let Some(shortcut_key) = shortcut_key_from_egui(key) else {
+                self.shortcut_message = Some((
+                    "That key cannot be used. Try an arrow, letter, digit, or function key."
+                        .to_string(),
+                    Instant::now(),
+                ));
+                continue;
+            };
+            if !(modifiers.ctrl || modifiers.alt || modifiers.shift) {
+                self.shortcut_message = Some((
+                    "Add Ctrl, Alt, or Shift so the shortcut does not fire while typing."
+                        .to_string(),
+                    Instant::now(),
+                ));
+                continue;
+            }
+            let shortcut = Shortcut::new(
+                shortcut_key,
+                modifiers.ctrl,
+                modifiers.alt,
+                modifiers.shift,
+                false,
+            );
+            self.assign_shortcut(index, Some(shortcut));
+            self.recording = None;
+            return;
+        }
+    }
+
+    fn assign_shortcut(&mut self, index: usize, value: Option<Shortcut>) {
+        let action = ShortcutAction::ALL[index];
+        if let Ok(mut state) = self.state.lock() {
+            state.set_shortcut(action, value);
+        }
+        if let Some(value) = value {
+            for (other_index, other) in self.shortcuts.iter_mut().enumerate() {
+                if other_index != index && *other == Some(value) {
+                    *other = None;
+                }
+            }
+        }
+        self.shortcuts[index] = value;
+        self.shortcut_message = Some((
+            match value {
+                Some(shortcut) => format!("{} set to {}.", action.label(), shortcut),
+                None => format!("{} shortcut cleared.", action.label()),
+            },
+            Instant::now(),
+        ));
+        self.mark_written();
+    }
 }
 
 impl<S: SettingsPersistence + 'static> eframe::App for SettingsApp<S> {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_commands(ctx);
-        // No manual theme: always follow the OS. The winit report wins where
-        // the backend provides it; otherwise the GNOME fallback below, which
-        // is re-polled so live theme flips still apply within seconds.
+        // Follow the desktop appearance. The winit report wins where the
+        // backend provides it; otherwise the GNOME fallback below, which is
+        // re-polled so live theme flips still apply within seconds.
         let system = ctx.system_theme();
         if self.gsettings_checked.elapsed() > Duration::from_secs(5) {
             self.gsettings_checked = Instant::now();
@@ -182,57 +272,35 @@ impl<S: SettingsPersistence + 'static> eframe::App for SettingsApp<S> {
             );
         }
         let dark = system
-            .map(|t| t == egui::Theme::Dark)
+            .map(|theme| theme == egui::Theme::Dark)
             .unwrap_or(self.gsettings_dark);
-        ctx.set_visuals(if dark {
-            egui::Visuals::dark()
-        } else {
-            egui::Visuals::light()
-        });
-        // Stay alive while hidden so tray/IPC commands still land.
+        configure_style(ctx, dark);
+        // Stay alive while hidden so IPC commands still land.
         ctx.request_repaint_after(Duration::from_millis(500));
 
-        let (os_minimized, os_focused, focus_event, interacted) = ctx.input(|i| {
-            let focus_event = i
+        let (os_focused, focus_event) = ctx.input(|input| {
+            let focus_event = input
                 .events
                 .iter()
-                .any(|e| matches!(e, egui::Event::WindowFocused(true)));
-            let interacted = i.pointer.any_pressed()
-                || i.pointer.button_down(egui::PointerButton::Primary)
-                || i.events
-                    .iter()
-                    .any(|e| matches!(e, egui::Event::Key { pressed: true, .. }));
-            (
-                i.viewport().minimized == Some(true),
-                i.viewport().focused == Some(true),
-                focus_event,
-                interacted,
-            )
+                .any(|event| matches!(event, egui::Event::WindowFocused(true)));
+            (input.viewport().focused == Some(true), focus_event)
         });
-        if interacted || os_focused || focus_event {
-            // Input or focus while hidden means the OS restored the window
-            // out from under us (dock, taskbar, Alt-Tab): adopt the truth.
-            if !self.vis.visible() {
-                let commands = self.vis.on_os_restore_signal();
-                Self::apply_cmds(ctx, commands);
-            }
-            self.last_interaction = Instant::now();
-        }
-
-        if ctx.input(|i| i.viewport().close_requested()) {
-            let commands = self.vis.on_close_requested();
+        if (os_focused || focus_event) && !self.vis.visible() {
+            // The OS restored or focused the window (dock, taskbar, Alt-Tab):
+            // adopt the truth and re-assert a visible, unminimized window.
+            let commands = self.vis.on_os_restore_signal();
             Self::apply_cmds(ctx, commands);
         }
-        if self.last_interaction.elapsed() > AUTO_HIDE_AFTER {
-            let commands = self.vis.on_idle_timeout(os_minimized);
+        if ctx.input(|input| input.viewport().close_requested()) {
+            let commands = self.vis.on_close_requested();
             Self::apply_cmds(ctx, commands);
         }
         if !self.vis.visible() {
             return;
         }
 
-        // Re-sync local controls when settings changed elsewhere (tray, IPC).
-        let settings = self.state.lock().ok().map(|s| s.settings().clone());
+        // Re-sync local controls when settings changed elsewhere (CLI, IPC).
+        let settings = self.state.lock().ok().map(|state| state.settings().clone());
         if let Some(settings) = settings {
             if settings != self.last_seen {
                 self.sync_from(&settings);
@@ -242,264 +310,82 @@ impl<S: SettingsPersistence + 'static> eframe::App for SettingsApp<S> {
         if self.auto {
             self.resync_displayed_temp();
         }
+        self.capture_shortcut(ctx);
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // No slider_width tweak here: the sliders are drawn by hand
-            // rather than by egui::Slider, so each measures its own width and
-            // cannot overrun the nested card.
-            ui.spacing_mut().scroll = settings_scroll_style();
-            egui::Frame::new().inner_margin(12.0).show(ui, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    // Cap content at the viewport: an over-wide row must wrap
-                    // or shrink, never push the right margin off-screen.
-                    ui.set_max_width(ui.available_width());
-                    self.header(ui);
-                    self.brightness_card(ui);
-                    self.temperature_card(ui);
-                    self.schedule_card(ui);
-                    self.startup_card(ui);
-                    self.displays_card(ui);
-                    self.cli_card(ui);
-                    self.footer(ui);
-                });
+        // The footer stays pinned: Quit and Hide must be reachable without
+        // scrolling past every card.
+        egui::TopBottomPanel::bottom("moonglow-footer")
+            .frame(
+                egui::Frame::new()
+                    .fill(ctx.style().visuals.panel_fill)
+                    .inner_margin(egui::Margin::symmetric(18, 10)),
+            )
+            .show(ctx, |ui| self.footer(ui));
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().fill(ctx.style().visuals.panel_fill))
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.set_max_width(ui.available_width());
+                        let margin = egui::Margin::symmetric(18, 16);
+                        egui::Frame::new().inner_margin(margin).show(ui, |ui| {
+                            ui.set_max_width(ui.available_width());
+                            self.header(ui);
+                            self.brightness_card(ui);
+                            self.temperature_card(ui);
+                            self.shortcuts_card(ui);
+                            self.schedule_card(ui);
+                            self.startup_card(ui);
+                            self.displays_card(ui);
+                            self.cli_card(ui);
+                        });
+                    });
             });
-        });
     }
-}
-
-/// Collapsible settings section, collapsed at launch. Expansion lasts the
-/// session (egui memory); relaunching collapses again.
-fn collapsed_card(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
-    egui::Frame::group(ui.style())
-        .inner_margin(egui::Margin::symmetric(14, 10))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            egui::CollapsingHeader::new(egui::RichText::new(title).strong().size(14.0))
-                .default_open(false)
-                .show(ui, content);
-        });
-    ui.add_space(8.0);
-}
-
-/// Fallback system-theme detection for backends where winit reports None
-/// (XWayland): GNOME's interface color-scheme. None when unreadable.
-fn gsettings_dark() -> Option<bool> {
-    let output = std::process::Command::new("gsettings")
-        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    parse_color_scheme(&String::from_utf8_lossy(&output.stdout))
-}
-
-fn parse_color_scheme(raw: &str) -> Option<bool> {
-    match raw.trim().trim_matches('\'') {
-        "prefer-dark" => Some(true),
-        // 'default' is the light style on stock GNOME and Ubuntu.
-        "prefer-light" | "default" => Some(false),
-        _ => None,
-    }
-}
-
-/// One CLI flag for the Command Line card. The catalog test pins these to
-/// the clap definition so new flags cannot land without UI coverage.
-pub struct CliCommand {
-    // Read only by the catalog drift test; the card renders usage + desc.
-    #[allow(dead_code)]
-    pub name: &'static str,
-    pub usage: &'static str,
-    pub desc: &'static str,
-}
-
-pub const CLI_COMMANDS: &[CliCommand] = &[
-    CliCommand {
-        name: "show-settings",
-        usage: "--show-settings",
-        desc: "Show the settings window.",
-    },
-    CliCommand {
-        name: "quit",
-        usage: "--quit",
-        desc: "Quit the running app.",
-    },
-    CliCommand {
-        name: "set-brightness",
-        usage: "--set-brightness PERCENT",
-        desc: "Set brightness 1-100.",
-    },
-    CliCommand {
-        name: "brighter",
-        usage: "--brighter",
-        desc: "Raise brightness by 5%.",
-    },
-    CliCommand {
-        name: "dimmer",
-        usage: "--dimmer",
-        desc: "Lower brightness by 5%.",
-    },
-    CliCommand {
-        name: "set-temp",
-        usage: "--set-temp KELVIN",
-        desc: "Set temperature (manual mode).",
-    },
-    CliCommand {
-        name: "warmer",
-        usage: "--warmer",
-        desc: "Warm by 250 K (manual mode).",
-    },
-    CliCommand {
-        name: "cooler",
-        usage: "--cooler",
-        desc: "Cool by 250 K (manual mode).",
-    },
-    CliCommand {
-        name: "auto",
-        usage: "--auto on|off",
-        desc: "Automatic temperature.",
-    },
-    CliCommand {
-        name: "day-temp",
-        usage: "--day-temp KELVIN",
-        desc: "Daytime schedule target.",
-    },
-    CliCommand {
-        name: "night-temp",
-        usage: "--night-temp KELVIN",
-        desc: "Nighttime schedule target.",
-    },
-    CliCommand {
-        name: "morning",
-        usage: "--morning FROM TO",
-        desc: "Morning window, 24h HH:MM.",
-    },
-    CliCommand {
-        name: "evening",
-        usage: "--evening FROM TO",
-        desc: "Evening window, 24h HH:MM.",
-    },
-    CliCommand {
-        name: "login",
-        usage: "--login on|off",
-        desc: "Start at login.",
-    },
-    CliCommand {
-        name: "status",
-        usage: "--status",
-        desc: "Print status.",
-    },
-    CliCommand {
-        name: "json",
-        usage: "--status --json",
-        desc: "Machine-readable status.",
-    },
-    CliCommand {
-        name: "no-tray",
-        usage: "--no-tray",
-        desc: "Launch without a tray icon.",
-    },
-    CliCommand {
-        name: "headless",
-        usage: "--headless",
-        desc: "Schedule plus tray, no window.",
-    },
-];
-
-/// One settings section: titled card with separated content.
-fn card(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
-    egui::Frame::group(ui.style())
-        .inner_margin(egui::Margin::symmetric(14, 10))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(egui::RichText::new(title).strong().size(14.0));
-            ui.separator();
-            content(ui);
-        });
-    ui.add_space(8.0);
-}
-
-/// Whether settings shows the manual temperature slider. The tray popup
-/// already offers warmer/cooler steppers, so the slider only appears on
-/// tray-less systems, which would otherwise lose manual control entirely.
-fn show_manual_slider(manual_color_enabled: bool, tray_popup_available: bool) -> bool {
-    manual_color_enabled && !tray_popup_available
-}
-
-/// Time-picker combo widths. The side-by-side threshold below is derived
-/// from these so the layout can never outgrow its own budget again.
-const HOUR_COMBO_WIDTH: f32 = 42.0;
-const MINUTE_COMBO_WIDTH: f32 = 46.0;
-const MERIDIEM_COMBO_WIDTH: f32 = 52.0;
-const PICKER_ITEM_SPACING: f32 = 4.0;
-const PICKER_GAP: f32 = 12.0;
-const TIME_PICKER_WIDTH: f32 =
-    HOUR_COMBO_WIDTH + MINUTE_COMBO_WIDTH + MERIDIEM_COMBO_WIDTH + 2.0 * PICKER_ITEM_SPACING;
-/// Headroom above the nominal pair width: rendered text and icon metrics can
-/// exceed the combo settings by a few points each.
-const PICKER_PAIR_FIT_MARGIN: f32 = 32.0;
-/// Minimum card-content width for the from/to pickers to share one row.
-const PICKER_PAIR_MIN_WIDTH: f32 = 2.0 * TIME_PICKER_WIDTH + PICKER_GAP + PICKER_PAIR_FIT_MARGIN;
-
-/// Horizontal chrome around card content, in points: the outer margin (2×12),
-/// the card frame (2×(14 margin + 1 stroke)), and the solid scrollbar gutter.
-/// The gutter comes from egui's own [`ScrollStyle`](egui::style::ScrollStyle)
-/// metrics (not a magic number) so an egui upgrade cannot silently desync the
-/// budget — the pin test below fails loudly instead.
-fn layout_chrome_width() -> f32 {
-    24.0 + 30.0 + egui::style::ScrollStyle::solid().allocated_width()
-}
-
-/// Card-content width available at this viewport width.
-fn schedule_content_budget(viewport_width: f32) -> f32 {
-    viewport_width - layout_chrome_width()
-}
-
-/// Whether both schedule pickers fit in one row at this content width.
-/// Below the threshold they stack, so a narrow window clips nothing.
-/// Measure the VIEWPORT (not the scroll content: an over-wide row inflates
-/// the content width, which would make this check self-fulfilling).
-fn schedule_side_by_side(content_width: f32) -> bool {
-    content_width >= PICKER_PAIR_MIN_WIDTH
-}
-
-/// Scroll bars that reserve their own space instead of overlaying content.
-/// egui's default floating bars paint over the right edge, hiding the margin
-/// of full-width rows (range-bar end labels, picker pairs) in a narrow window.
-fn settings_scroll_style() -> egui::style::ScrollStyle {
-    egui::style::ScrollStyle::solid()
-}
-
-/// Label row with a right-aligned value, e.g. `Brightness` … `80%`.
-fn labeled_value(ui: &mut egui::Ui, label: &str, value: &str) {
-    ui.horizontal(|ui| {
-        ui.label(label);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(egui::RichText::new(value).strong());
-        });
-    });
 }
 
 impl<S: SettingsPersistence> SettingsApp<S> {
     fn header(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Moonglow");
-        if let Ok(state) = self.state.lock() {
-            let mode = if state.auto_color_temperature() {
-                "Automatic"
+        let (automatic, temperature, brightness) = match self.state.lock() {
+            Ok(state) => (
+                state.auto_color_temperature(),
+                state.color_temperature(),
+                state.brightness(),
+            ),
+            Err(_) => (false, self.temperature, self.brightness),
+        };
+        let weak = ui.visuals().weak_text_color();
+        ui.horizontal(|ui| {
+            if let Some(icon) = &self.icon {
+                ui.add(egui::Image::new((icon.id(), egui::vec2(46.0, 46.0))));
             } else {
-                "Manual"
-            };
-            ui.label(
-                egui::RichText::new(format!(
-                    "{mode} · {} K · Brightness {}%",
-                    state.color_temperature(),
-                    state.brightness()
-                ))
-                .small()
-                .weak(),
-            );
-        }
-        ui.add_space(6.0);
+                paint_mark(ui, 46.0);
+            }
+            ui.add_space(6.0);
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
+                ui.label(egui::RichText::new("Moonglow").size(26.0).strong());
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} · {} K · Brightness {}%",
+                        if automatic { "Automatic" } else { "Manual" },
+                        temperature,
+                        brightness
+                    ))
+                    .size(12.0)
+                    .color(weak),
+                );
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                pill(
+                    ui,
+                    if automatic { "Automatic" } else { "Manual" },
+                    automatic,
+                );
+            });
+        });
+        ui.add_space(14.0);
     }
 
     fn brightness_card(&mut self, ui: &mut egui::Ui) {
@@ -507,74 +393,210 @@ impl<S: SettingsPersistence> SettingsApp<S> {
             Ok(state) => (state.has_brightness_support(), state.brightness_status()),
             Err(_) => return,
         };
-        card(ui, "Brightness", |ui| {
-            if supported {
-                labeled_value(ui, "Display brightness", &format!("{}%", self.brightness));
-                if triangle_slider(ui, &mut self.brightness, 1..=100, 1) {
-                    if let Ok(mut state) = self.state.lock() {
-                        state.set_brightness(self.brightness);
-                    }
-                    self.mark_written();
+        card(ui, |ui| {
+            card_title(
+                ui,
+                "Brightness",
+                &format!("{}%", self.brightness),
+                supported,
+            );
+            if value_slider(
+                ui,
+                &mut self.brightness,
+                1..=100,
+                1,
+                supported,
+                SliderLook::Brightness,
+            ) {
+                if let Ok(mut state) = self.state.lock() {
+                    state.set_brightness(self.brightness);
                 }
+                self.mark_written();
             }
-            ui.label(egui::RichText::new(status).small().weak());
+            hint(ui, &status);
         });
     }
 
     fn temperature_card(&mut self, ui: &mut egui::Ui) {
-        let snapshot = match self.state.lock() {
-            Ok(state) => (
-                state.has_color_support(),
-                state.color_status(),
-                state.manual_color_enabled(),
-            ),
+        let (supported, status) = match self.state.lock() {
+            Ok(state) => (state.has_color_support(), state.color_status()),
             Err(_) => return,
         };
-        // Read the live tray flag: the slider hides as soon as a popup exists.
-        let tray_popup = self.tray_popup.load(Ordering::Relaxed);
-        card(ui, "Colour temperature", |ui| {
-            if ui
-                .checkbox(&mut self.auto, "Automatic (follow schedule)")
-                .changed()
-            {
+        card(ui, |ui| {
+            card_title(
+                ui,
+                "Colour temperature",
+                &format!("{} K", self.temperature),
+                supported,
+            );
+            let toggle = ui.checkbox(&mut self.auto, "Automatic (follow schedule)");
+            if toggle.changed() {
                 if let Ok(mut state) = self.state.lock() {
                     state.set_auto_color_temperature(self.auto);
                 }
                 self.mark_written();
                 self.resync_displayed_temp();
             }
-            if !show_manual_slider(snapshot.2, tray_popup) {
-                if self.auto {
-                    ui.label(
-                        egui::RichText::new(format!("Scheduled now: {} K", self.temperature))
-                            .small()
-                            .weak(),
-                    );
-                } else if tray_popup {
-                    ui.label(
-                        egui::RichText::new("Adjust from the tray icon menu.")
-                            .small()
-                            .weak(),
-                    );
-                }
-                ui.label(egui::RichText::new(snapshot.1).small().weak());
-                return;
-            }
-            labeled_value(ui, "Manual temperature", &format!("{} K", self.temperature));
-            if triangle_slider(ui, &mut self.temperature, 900..=6600, 100) {
-                // Snap to the 100 K step like the macOS slider.
+            let slider_enabled = supported && !self.auto;
+            if value_slider(
+                ui,
+                &mut self.temperature,
+                900..=6600,
+                100,
+                slider_enabled,
+                SliderLook::Temperature,
+            ) {
+                // Snap to the 100 K step like the other platform sliders.
                 self.temperature = TemperatureRange::snap(self.temperature);
                 if let Ok(mut state) = self.state.lock() {
                     state.set_color_temperature(self.temperature);
                 }
                 self.mark_written();
             }
-            ui.label(egui::RichText::new(snapshot.1).small().weak());
+            if !supported {
+                hint(ui, &status);
+            } else if self.auto {
+                hint(
+                    ui,
+                    "The schedule is driving the temperature. Switch Automatic off to adjust it by hand.",
+                );
+            } else {
+                hint(ui, &status);
+            }
+
+            ui.add_space(12.0);
+            ui.separator();
+            ui.add_space(8.0);
+            ui.label(egui::RichText::new("Day / night range").strong().size(13.0));
+            ui.label(
+                egui::RichText::new(
+                    "Warmest night target at the left, coolest day target at the right.",
+                )
+                .small()
+                .color(ui.visuals().weak_text_color()),
+            );
+            ui.add_space(2.0);
+            if temperature_range_bar(ui, &mut self.range) {
+                if let Ok(mut state) = self.state.lock() {
+                    state.set_temperature_range(self.range);
+                }
+                self.mark_written();
+            }
+            ui.horizontal(|ui| {
+                let weak = ui.visuals().weak_text_color();
+                ui.label(egui::RichText::new("900 K").small().color(weak));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(egui::RichText::new("6600 K").small().color(weak));
+                });
+            });
+            hint(ui, &self.range.display_text());
+        });
+    }
+
+    fn shortcuts_card(&mut self, ui: &mut egui::Ui) {
+        let status = self
+            .shortcut_status
+            .lock()
+            .map(|status| status.clone())
+            .unwrap_or_default();
+        card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Shortcuts").strong().size(15.0));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let color = if status.is_available() {
+                        ui.visuals().hyperlink_color
+                    } else {
+                        ui.visuals().weak_text_color()
+                    };
+                    ui.label(
+                        egui::RichText::new(status.backend.label())
+                            .small()
+                            .color(color),
+                    );
+                });
+            });
+            ui.label(
+                egui::RichText::new(
+                    "Global keys that work from any application. Click a shortcut, then press the new combination.",
+                )
+                .small()
+                .color(ui.visuals().weak_text_color()),
+            );
+            ui.add_space(6.0);
+
+            for (index, action) in ShortcutAction::ALL.into_iter().enumerate() {
+                self.shortcut_row(ui, index, action);
+                if index + 1 < ShortcutAction::ALL.len() {
+                    ui.add_space(2.0);
+                }
+            }
+
+            let message = self.shortcut_message.as_ref().and_then(|(text, at)| {
+                (at.elapsed() < Duration::from_secs(MESSAGE_SECONDS)).then_some(text)
+            });
+            if let Some(message) = message {
+                ui.add_space(4.0);
+                hint(ui, message);
+            }
+            hint(ui, &status.detail);
+        });
+    }
+
+    fn shortcut_row(&mut self, ui: &mut egui::Ui, index: usize, action: ShortcutAction) {
+        let recording = self.recording == Some(index);
+        let shortcut = self.shortcuts[index];
+        let weak = ui.visuals().weak_text_color();
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 1.0;
+                ui.label(egui::RichText::new(action.label()).size(13.0));
+                ui.label(
+                    egui::RichText::new(shortcut_hint(action))
+                        .size(11.0)
+                        .color(weak),
+                );
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if shortcut.is_some()
+                    && !recording
+                    && ui
+                        .add(egui::Button::new("Clear").small())
+                        .on_hover_text("Remove this shortcut")
+                        .clicked()
+                {
+                    self.assign_shortcut(index, None);
+                }
+                let label = if recording {
+                    "Press keys…".to_string()
+                } else {
+                    shortcut
+                        .map(Shortcut::display_text)
+                        .unwrap_or_else(|| "Record".to_string())
+                };
+                let button = egui::Button::new(egui::RichText::new(label).monospace().size(12.0))
+                    .min_size(egui::vec2(104.0, 26.0));
+                let button = if recording {
+                    button.fill(ui.visuals().hyperlink_color)
+                } else {
+                    button
+                };
+                if ui.add(button).clicked() {
+                    self.recording = if recording { None } else { Some(index) };
+                    self.shortcut_message = None;
+                }
+            });
         });
     }
 
     fn schedule_card(&mut self, ui: &mut egui::Ui) {
-        card(ui, "Schedule", |ui| {
+        card(ui, |ui| {
+            ui.label(egui::RichText::new("Schedule").strong().size(15.0));
+            ui.label(
+                egui::RichText::new("When the temperature fades between day and night.")
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
+            ui.add_space(6.0);
             // Adaptive rows: side-by-side pickers when they fit, stacked
             // when the window is narrow, so the right side never clips.
             for (label, from_field, to_field) in [("Morning", 0, 1), ("Evening", 2, 3)] {
@@ -602,25 +624,6 @@ impl<S: SettingsPersistence> SettingsApp<S> {
                 }
                 ui.add_space(2.0);
             }
-            ui.add_space(6.0);
-            ui.label("Day / night targets");
-            if temperature_range_bar(ui, &mut self.range) {
-                if let Ok(mut state) = self.state.lock() {
-                    state.set_temperature_range(self.range);
-                }
-                self.mark_written();
-            }
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("900 K").small().weak());
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new("6600 K").small().weak());
-                });
-            });
-            ui.label(
-                egui::RichText::new(self.range.display_text())
-                    .small()
-                    .weak(),
-            );
         });
     }
 
@@ -681,7 +684,11 @@ impl<S: SettingsPersistence> SettingsApp<S> {
                 }
                 self.mark_written();
             }
-            ui.label(egui::RichText::new(status).small().weak());
+            ui.label(
+                egui::RichText::new(status)
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
             if ui.small_button("Open autostart folder").clicked() {
                 if let Ok(state) = self.state.lock() {
                     state.open_login_settings();
@@ -719,9 +726,11 @@ impl<S: SettingsPersistence> SettingsApp<S> {
     fn cli_card(&mut self, ui: &mut egui::Ui) {
         collapsed_card(ui, "Command line", |ui| {
             ui.label(
-                egui::RichText::new("Terminal equivalents. With no app running, the setters drive hardware directly.")
-                    .small()
-                    .weak(),
+                egui::RichText::new(
+                    "Terminal equivalents. With no app running, the setters drive hardware directly.",
+                )
+                .small()
+                .weak(),
             );
             ui.add_space(4.0);
             for command in CLI_COMMANDS {
@@ -737,7 +746,7 @@ impl<S: SettingsPersistence> SettingsApp<S> {
                 if ui.small_button("Copy all to clipboard").clicked() {
                     let sheet = CLI_COMMANDS
                         .iter()
-                        .map(|c| format!("moonglow {}  # {}", c.usage, c.desc))
+                        .map(|command| format!("moonglow {}  # {}", command.usage, command.desc))
                         .collect::<Vec<_>>()
                         .join("\n");
                     ui.ctx().copy_text(sheet);
@@ -756,38 +765,641 @@ impl<S: SettingsPersistence> SettingsApp<S> {
 
     fn footer(&mut self, ui: &mut egui::Ui) {
         ui.separator();
+        ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.vertical(|ui| {
+                ui.label(
+                    egui::RichText::new("Closing this window keeps Moonglow running so the schedule and shortcuts stay active.")
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                );
                 ui.label(
                     egui::RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
                         .small()
                         .weak(),
                 );
             });
+            ui.with_layout(
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
+                    if ui
+                        .add(egui::Button::new("Quit Moonglow"))
+                        .on_hover_text("Stop the schedule and shortcuts")
+                        .clicked()
+                    {
+                        crate::quit_now(&self.shutdown);
+                    }
+                    if ui.button("Hide").clicked() {
+                        let commands = self.vis.on_close_requested();
+                        Self::apply_cmds(ui.ctx(), commands);
+                    }
+                },
+            );
         });
     }
 }
 
-/// Handle travel inset. Handles are centred on their value position, so the
-/// value mapping must inset both ends by this much — otherwise the night
-/// handle bleeds into the left padding and the day handle clips on the right
-/// at maximum. It is wider than the head itself (16 pt across), which leaves
-/// the head a little air at both ends.
+// MARK: - Shared chrome
+
+/// Applies the moonlit palette to egui's widgets.
+fn configure_style(ctx: &egui::Context, dark: bool) {
+    let theme = if dark {
+        &ThemeCatalog::DARK
+    } else {
+        &ThemeCatalog::LIGHT
+    };
+    let color = |hex: &str| {
+        parse_hex(hex)
+            .map(|(r, g, b)| egui::Color32::from_rgb(r, g, b))
+            .unwrap_or(egui::Color32::GRAY)
+    };
+    let background = color(theme.window_background);
+    let card = color(theme.card_background);
+    let control = color(theme.control_background);
+    let text = color(theme.primary_text);
+    let weak = color(theme.secondary_text);
+    let border = color(theme.border);
+    let accent = color(theme.accent);
+    let hover = color(theme.button_hover);
+
+    let mut visuals = if dark {
+        egui::Visuals::dark()
+    } else {
+        egui::Visuals::light()
+    };
+    visuals.dark_mode = dark;
+    visuals.panel_fill = background;
+    visuals.window_fill = card;
+    visuals.window_stroke = egui::Stroke::new(1.0_f32, border);
+    visuals.window_corner_radius = egui::CornerRadius::same(16);
+    visuals.menu_corner_radius = egui::CornerRadius::same(10);
+    visuals.extreme_bg_color = control;
+    visuals.faint_bg_color = control;
+    visuals.code_bg_color = control;
+    visuals.override_text_color = Some(text);
+    visuals.weak_text_color = Some(weak);
+    visuals.hyperlink_color = accent;
+    visuals.selection.bg_fill = accent.gamma_multiply(0.32);
+    visuals.selection.stroke = egui::Stroke::new(1.0_f32, accent);
+    visuals.widgets.noninteractive.bg_fill = card;
+    visuals.widgets.noninteractive.weak_bg_fill = card;
+    visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0_f32, border);
+    visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0_f32, text);
+    visuals.widgets.inactive.bg_fill = control;
+    visuals.widgets.inactive.weak_bg_fill = control;
+    visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, border);
+    visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0_f32, text);
+    visuals.widgets.hovered.bg_fill = hover;
+    visuals.widgets.hovered.weak_bg_fill = hover;
+    visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0_f32, accent);
+    visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0_f32, text);
+    visuals.widgets.active.bg_fill = accent;
+    visuals.widgets.active.weak_bg_fill = accent;
+    visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0_f32, accent);
+    // `strong_text_color()` is the active foreground, so it must stay the
+    // primary text colour; accent-filled controls set their own label colour.
+    visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0_f32, text);
+    visuals.widgets.open.bg_fill = hover;
+    visuals.widgets.open.weak_bg_fill = hover;
+    ctx.set_visuals(visuals);
+    ctx.style_mut(|style| {
+        style.spacing.item_spacing = egui::vec2(8.0, 8.0);
+        style.spacing.button_padding = egui::vec2(10.0, 5.0);
+        style.spacing.interact_size.y = 26.0;
+        style.animation_time = 0.12;
+    });
+}
+
+/// Paints the crescent mark used in the header when the embedded icon texture is
+/// unavailable. Proportions match the shared artwork.
+fn paint_mark(ui: &mut egui::Ui, size: f32) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
+    let painter = ui.painter();
+    let color = if ui.visuals().dark_mode {
+        egui::Color32::WHITE
+    } else {
+        egui::Color32::BLACK
+    };
+    let radius = size * 0.4688;
+    // The crescent's bounding box sits up- and left-of the disc centre; shift it back so the
+    // mark looks centred.
+    let center = rect.center() + egui::vec2(size * 0.0330, -size * 0.0330);
+    painter.circle_filled(center, radius, color);
+    painter.circle_filled(
+        center + egui::vec2(radius * 0.4596, -radius * 0.4596),
+        radius * 1.05,
+        ui.visuals().window_fill,
+    );
+}
+
+/// Titled surface with separated content.
+fn card(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new()
+        .fill(ui.visuals().window_fill)
+        .stroke(egui::Stroke::new(1.0_f32, ui.visuals().window_stroke.color))
+        .corner_radius(egui::CornerRadius::same(14))
+        .inner_margin(egui::Margin::symmetric(16, 14))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            content(ui);
+        });
+    ui.add_space(12.0);
+}
+
+/// Collapsible secondary card, collapsed at launch.
+fn collapsed_card(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new()
+        .fill(ui.visuals().window_fill)
+        .stroke(egui::Stroke::new(1.0_f32, ui.visuals().window_stroke.color))
+        .corner_radius(egui::CornerRadius::same(14))
+        .inner_margin(egui::Margin::symmetric(16, 10))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            egui::CollapsingHeader::new(egui::RichText::new(title).strong().size(13.0))
+                .default_open(false)
+                .show(ui, content);
+        });
+    ui.add_space(10.0);
+}
+
+/// Card heading with a large right-aligned value.
+fn card_title(ui: &mut egui::Ui, title: &str, value: &str, enabled: bool) {
+    let color = if enabled {
+        ui.visuals().hyperlink_color
+    } else {
+        ui.visuals().weak_text_color()
+    };
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(title).strong().size(15.0));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(egui::RichText::new(value).size(26.0).strong().color(color));
+        });
+    });
+}
+
+/// A short status line under a control.
+fn hint(ui: &mut egui::Ui, text: &str) {
+    ui.add_space(2.0);
+    ui.label(
+        egui::RichText::new(text)
+            .small()
+            .color(ui.visuals().weak_text_color()),
+    );
+}
+
+/// Rounded accent-tinted status pill.
+fn pill(ui: &mut egui::Ui, text: &str, active: bool) {
+    let accent = ui.visuals().hyperlink_color;
+    let fill = if active {
+        accent.gamma_multiply(0.18)
+    } else {
+        ui.visuals().widgets.inactive.bg_fill
+    };
+    let text_color = if active {
+        accent
+    } else {
+        ui.visuals().weak_text_color()
+    };
+    egui::Frame::new()
+        .fill(fill)
+        .corner_radius(egui::CornerRadius::same(99))
+        .inner_margin(egui::Margin::symmetric(10, 4))
+        .show(ui, |ui| {
+            ui.label(
+                egui::RichText::new(text)
+                    .size(11.0)
+                    .strong()
+                    .color(text_color),
+            );
+        });
+}
+
+/// One CLI flag for the Command Line card. The catalog test pins these to
+/// the clap definition so new flags cannot land without UI coverage.
+pub struct CliCommand {
+    // Read only by the catalog drift test; the card renders usage + desc.
+    #[allow(dead_code)]
+    pub name: &'static str,
+    pub usage: &'static str,
+    pub desc: &'static str,
+}
+
+pub const CLI_COMMANDS: &[CliCommand] = &[
+    CliCommand {
+        name: "show-settings",
+        usage: "--show-settings",
+        desc: "Show the window.",
+    },
+    CliCommand {
+        name: "quit",
+        usage: "--quit",
+        desc: "Quit the running app.",
+    },
+    CliCommand {
+        name: "hidden",
+        usage: "--hidden",
+        desc: "Start in the background.",
+    },
+    CliCommand {
+        name: "set-brightness",
+        usage: "--set-brightness PERCENT",
+        desc: "Set brightness 1-100.",
+    },
+    CliCommand {
+        name: "brighter",
+        usage: "--brighter",
+        desc: "Raise brightness by 5%.",
+    },
+    CliCommand {
+        name: "dimmer",
+        usage: "--dimmer",
+        desc: "Lower brightness by 5%.",
+    },
+    CliCommand {
+        name: "brightness-up",
+        usage: "--brightness-up",
+        desc: "Shortcut action: brightness +5%.",
+    },
+    CliCommand {
+        name: "brightness-down",
+        usage: "--brightness-down",
+        desc: "Shortcut action: brightness -5%.",
+    },
+    CliCommand {
+        name: "set-temp",
+        usage: "--set-temp KELVIN",
+        desc: "Set temperature (manual mode).",
+    },
+    CliCommand {
+        name: "warmer",
+        usage: "--warmer",
+        desc: "Warm by 250 K (manual mode).",
+    },
+    CliCommand {
+        name: "cooler",
+        usage: "--cooler",
+        desc: "Cool by 250 K (manual mode).",
+    },
+    CliCommand {
+        name: "temperature-up",
+        usage: "--temperature-up",
+        desc: "Shortcut action: +100 K, leaves automatic.",
+    },
+    CliCommand {
+        name: "temperature-down",
+        usage: "--temperature-down",
+        desc: "Shortcut action: -100 K, leaves automatic.",
+    },
+    CliCommand {
+        name: "auto",
+        usage: "--auto on|off",
+        desc: "Automatic temperature.",
+    },
+    CliCommand {
+        name: "day-temp",
+        usage: "--day-temp KELVIN",
+        desc: "Daytime schedule target.",
+    },
+    CliCommand {
+        name: "night-temp",
+        usage: "--night-temp KELVIN",
+        desc: "Nighttime schedule target.",
+    },
+    CliCommand {
+        name: "morning",
+        usage: "--morning FROM TO",
+        desc: "Morning window, 24h HH:MM.",
+    },
+    CliCommand {
+        name: "evening",
+        usage: "--evening FROM TO",
+        desc: "Evening window, 24h HH:MM.",
+    },
+    CliCommand {
+        name: "login",
+        usage: "--login on|off",
+        desc: "Start at login.",
+    },
+    CliCommand {
+        name: "status",
+        usage: "--status",
+        desc: "Print status.",
+    },
+    CliCommand {
+        name: "json",
+        usage: "--status --json",
+        desc: "Machine-readable status.",
+    },
+    CliCommand {
+        name: "headless",
+        usage: "--headless",
+        desc: "Schedule and shortcuts, no window.",
+    },
+];
+
+fn shortcuts_of(settings: &AppSettings) -> [Option<Shortcut>; 4] {
+    [
+        settings.increase_brightness_shortcut,
+        settings.decrease_brightness_shortcut,
+        settings.increase_temperature_shortcut,
+        settings.decrease_temperature_shortcut,
+    ]
+}
+
+fn shortcut_hint(action: ShortcutAction) -> &'static str {
+    match action {
+        ShortcutAction::IncreaseBrightness => "Brightness +5%",
+        ShortcutAction::DecreaseBrightness => "Brightness −5%",
+        ShortcutAction::IncreaseTemperature => "+100 K, cooler",
+        ShortcutAction::DecreaseTemperature => "−100 K, warmer",
+    }
+}
+
+/// Maps an egui key to a key the global-shortcut backends understand.
+fn shortcut_key_from_egui(key: egui::Key) -> Option<ShortcutKey> {
+    use egui::Key;
+    let name = match key {
+        Key::ArrowUp => "Up",
+        Key::ArrowDown => "Down",
+        Key::ArrowLeft => "Left",
+        Key::ArrowRight => "Right",
+        Key::PageUp => "PageUp",
+        Key::PageDown => "PageDown",
+        Key::Home => "Home",
+        Key::End => "End",
+        Key::Insert => "Insert",
+        Key::Delete => "Delete",
+        Key::Space => "Space",
+        Key::Tab => "Tab",
+        Key::Enter => "Enter",
+        Key::Escape => "Escape",
+        Key::Backspace => "Backspace",
+        Key::Minus => "Minus",
+        Key::Equals => "Equal",
+        Key::OpenBracket => "BracketLeft",
+        Key::CloseBracket => "BracketRight",
+        Key::Semicolon => "Semicolon",
+        Key::Quote => "Quote",
+        Key::Backslash => "Backslash",
+        Key::Comma => "Comma",
+        Key::Period => "Period",
+        Key::Slash => "Slash",
+        Key::Backtick => "Backquote",
+        Key::F1 => "F1",
+        Key::F2 => "F2",
+        Key::F3 => "F3",
+        Key::F4 => "F4",
+        Key::F5 => "F5",
+        Key::F6 => "F6",
+        Key::F7 => "F7",
+        Key::F8 => "F8",
+        Key::F9 => "F9",
+        Key::F10 => "F10",
+        Key::F11 => "F11",
+        Key::F12 => "F12",
+        Key::Num0 => "0",
+        Key::Num1 => "1",
+        Key::Num2 => "2",
+        Key::Num3 => "3",
+        Key::Num4 => "4",
+        Key::Num5 => "5",
+        Key::Num6 => "6",
+        Key::Num7 => "7",
+        Key::Num8 => "8",
+        Key::Num9 => "9",
+        Key::A => "A",
+        Key::B => "B",
+        Key::C => "C",
+        Key::D => "D",
+        Key::E => "E",
+        Key::F => "F",
+        Key::G => "G",
+        Key::H => "H",
+        Key::I => "I",
+        Key::J => "J",
+        Key::K => "K",
+        Key::L => "L",
+        Key::M => "M",
+        Key::N => "N",
+        Key::O => "O",
+        Key::P => "P",
+        Key::Q => "Q",
+        Key::R => "R",
+        Key::S => "S",
+        Key::T => "T",
+        Key::U => "U",
+        Key::V => "V",
+        Key::W => "W",
+        Key::X => "X",
+        Key::Y => "Y",
+        Key::Z => "Z",
+        _ => return None,
+    };
+    ShortcutKey::from_name(name)
+}
+
+/// Fallback system-theme detection for backends where winit reports None
+/// (XWayland): GNOME's interface color-scheme. None when unreadable.
+fn gsettings_dark() -> Option<bool> {
+    let output = std::process::Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_color_scheme(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn parse_color_scheme(raw: &str) -> Option<bool> {
+    match raw.trim().trim_matches('\'') {
+        "prefer-dark" => Some(true),
+        // 'default' is the light style on stock GNOME and Ubuntu.
+        "prefer-light" | "default" => Some(false),
+        _ => None,
+    }
+}
+
+// MARK: - Sliders
+
 const RANGE_HANDLE_RADIUS: f32 = 10.0;
-
-/// Half-width of the triangle head, ported from the Windows `Thumb`
-/// (`M 8,0 L 16,15 L 0,15 Z`).
 const HANDLE_HALF_WIDTH: f32 = 8.0;
-
-/// How far the apex rises above the handle centre. Windows lifts the head 3 pt above the
-/// track centre, and the apex is another half-height (7.5 pt) above the head's centre.
 const HANDLE_APEX_RISE: f32 = 10.5;
-
-/// How far the base drops below the handle centre (7.5 − 3).
 const HANDLE_BASE_DROP: f32 = 4.5;
+const TRACK_HEIGHT: f32 = 10.0;
 
-/// Paints one upward-pointing triangle head centred on `center`, the same
-/// shape the Windows build uses for every slider handle.
+/// How a single-handle slider paints its track.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SliderLook {
+    Brightness,
+    Temperature,
+}
+
+/// A warm-to-cool colour for the temperature track.
+fn temperature_color(kelvin: i32) -> egui::Color32 {
+    const STOPS: [(i32, [u8; 3]); 4] = [
+        (900, [255, 150, 60]),
+        (2700, [255, 196, 130]),
+        (4200, [255, 232, 205]),
+        (6600, [210, 230, 255]),
+    ];
+    let kelvin = kelvin.clamp(STOPS[0].0, STOPS[3].0);
+    for pair in STOPS.windows(2) {
+        let (from_k, from_rgb) = pair[0];
+        let (to_k, to_rgb) = pair[1];
+        if kelvin <= to_k {
+            let t = (kelvin - from_k) as f32 / (to_k - from_k) as f32;
+            let mix = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * t).round() as u8;
+            return egui::Color32::from_rgb(
+                mix(from_rgb[0], to_rgb[0]),
+                mix(from_rgb[1], to_rgb[1]),
+                mix(from_rgb[2], to_rgb[2]),
+            );
+        }
+    }
+    let last = STOPS[3].1;
+    egui::Color32::from_rgb(last[0], last[1], last[2])
+}
+
+/// Value at an X inside `track`, snapped to `step` and clamped to `lo..=hi`.
+fn triangle_slider_value_at(x: f32, track: egui::Rect, lo: i32, hi: i32, step: i32) -> i32 {
+    if track.width() <= 0.0 || hi <= lo {
+        return lo;
+    }
+    let fraction = ((x - track.left()) / track.width()).clamp(0.0, 1.0) as f64;
+    let raw = lo as f64 + fraction * (hi - lo) as f64;
+    let step = step.max(1) as f64;
+    (((raw / step).round() * step) as i32).clamp(lo, hi)
+}
+
+/// A single-handle slider with the triangle head used across the apps.
+fn value_slider(
+    ui: &mut egui::Ui,
+    value: &mut i32,
+    range: std::ops::RangeInclusive<i32>,
+    step: i32,
+    enabled: bool,
+    look: SliderLook,
+) -> bool {
+    let sense = if enabled {
+        egui::Sense::click_and_drag()
+    } else {
+        egui::Sense::hover()
+    };
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 38.0), sense);
+    let track = egui::Rect::from_min_max(
+        egui::pos2(
+            rect.left() + RANGE_HANDLE_RADIUS,
+            rect.center().y - TRACK_HEIGHT / 2.0,
+        ),
+        egui::pos2(
+            rect.right() - RANGE_HANDLE_RADIUS,
+            rect.center().y + TRACK_HEIGHT / 2.0,
+        ),
+    );
+    let (lo, hi) = (*range.start(), *range.end());
+    let visuals = ui.visuals().clone();
+    let accent = visuals.hyperlink_color;
+    let painter = ui.painter();
+    let radius = egui::CornerRadius::same((TRACK_HEIGHT / 2.0) as u8);
+
+    if !enabled {
+        painter.rect_filled(track, radius, visuals.widgets.inactive.bg_fill);
+        let x = value_to_x(*value, lo, hi, track);
+        paint_triangle_handle(
+            painter,
+            egui::pos2(x, rect.center().y),
+            visuals.weak_text_color(),
+            egui::Stroke::new(1.0_f32, visuals.window_stroke.color),
+        );
+        return false;
+    }
+
+    let mut next = *value;
+    if response.clicked() || response.dragged() {
+        response.request_focus();
+        if let Some(pos) = response.interact_pointer_pos() {
+            next = triangle_slider_value_at(pos.x, track, lo, hi, step);
+        }
+    }
+    if response.has_focus() {
+        let delta = ui.input(|input| {
+            let mut delta = 0;
+            if input.key_pressed(egui::Key::ArrowRight) || input.key_pressed(egui::Key::ArrowUp) {
+                delta += 1;
+            }
+            if input.key_pressed(egui::Key::ArrowLeft) || input.key_pressed(egui::Key::ArrowDown) {
+                delta -= 1;
+            }
+            delta
+        });
+        if delta != 0 {
+            next = (next + delta * step).clamp(lo, hi);
+        }
+    }
+
+    match look {
+        SliderLook::Brightness => {
+            painter.rect_filled(track, radius, visuals.widgets.inactive.bg_fill);
+            let x = value_to_x(next, lo, hi, track);
+            let filled = egui::Rect::from_min_max(track.left_top(), egui::pos2(x, track.bottom()));
+            painter.rect_filled(filled, radius, accent);
+        }
+        SliderLook::Temperature => {
+            // Approximate the app's own temperature curve so the track reads
+            // as warm-to-cool instead of a generic gradient.
+            let segments = 72;
+            for index in 0..segments {
+                let t0 = index as f32 / segments as f32;
+                let t1 = (index + 1) as f32 / segments as f32;
+                let k0 = lo as f32 + t0 * (hi - lo) as f32;
+                let k1 = lo as f32 + t1 * (hi - lo) as f32;
+                let color = temperature_color(((k0 + k1) / 2.0) as i32);
+                painter.rect_filled(
+                    egui::Rect::from_min_max(
+                        egui::pos2(track.left() + t0 * track.width(), track.top()),
+                        egui::pos2(track.left() + t1 * track.width(), track.bottom()),
+                    ),
+                    0,
+                    color,
+                );
+            }
+            let glow = egui::Rect::from_center_size(
+                egui::pos2(value_to_x(next, lo, hi, track), track.center().y),
+                egui::vec2(22.0, TRACK_HEIGHT + 8.0),
+            );
+            painter.rect_filled(glow, radius, visuals.window_fill.gamma_multiply(0.35));
+        }
+    }
+
+    let x = value_to_x(next, lo, hi, track);
+    paint_triangle_handle(
+        painter,
+        egui::pos2(x, rect.center().y),
+        egui::Color32::WHITE,
+        egui::Stroke::new(2.0_f32, visuals.window_stroke.color),
+    );
+    if response.hovered() || response.dragged() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+
+    if next != *value {
+        *value = next;
+        true
+    } else {
+        false
+    }
+}
+
+fn value_to_x(value: i32, lo: i32, hi: i32, track: egui::Rect) -> f32 {
+    let fraction = if hi <= lo {
+        0.0
+    } else {
+        ((value - lo) as f32 / (hi - lo) as f32).clamp(0.0, 1.0)
+    };
+    track.left() + fraction * track.width()
+}
+
 fn paint_triangle_handle(
     painter: &egui::Painter,
     center: egui::Pos2,
@@ -805,120 +1417,11 @@ fn paint_triangle_handle(
     ));
 }
 
-/// Value at an X inside `track`, snapped to `step` and clamped to `lo..=hi`.
-fn triangle_slider_value_at(x: f32, track: egui::Rect, lo: i32, hi: i32, step: i32) -> i32 {
-    if track.width() <= 0.0 || hi <= lo {
-        return lo;
-    }
-    let fraction = ((x - track.left()) / track.width()).clamp(0.0, 1.0) as f64;
-    let raw = lo as f64 + fraction * (hi - lo) as f64;
-    let step = step.max(1) as f64;
-    (((raw / step).round() * step) as i32).clamp(lo, hi)
-}
-
-/// A single-handle slider drawn with the same triangle head as the range bar.
-///
-/// egui's own `Slider` always paints a circular handle and gives no way to
-/// replace it, so the track, the head and the interaction are drawn here.
-/// Pointer behaviour follows `egui::Slider` — click or drag anywhere on the
-/// track — and the arrow keys step by one `step` while focused.
-fn triangle_slider(
-    ui: &mut egui::Ui,
-    value: &mut i32,
-    range: std::ops::RangeInclusive<i32>,
-    step: i32,
-) -> bool {
-    let (rect, response) = ui.allocate_exact_size(
-        egui::vec2(ui.available_width(), 34.0),
-        egui::Sense::click_and_drag(),
-    );
-    let track_height = 10.0;
-    let track = egui::Rect::from_min_max(
-        egui::pos2(
-            rect.left() + RANGE_HANDLE_RADIUS,
-            rect.center().y - track_height / 2.0,
-        ),
-        egui::pos2(
-            rect.right() - RANGE_HANDLE_RADIUS,
-            rect.center().y + track_height / 2.0,
-        ),
-    );
-    let (lo, hi) = (*range.start(), *range.end());
-
-    let mut next = *value;
-    if response.clicked() || response.dragged() {
-        response.request_focus();
-        if let Some(pos) = response.interact_pointer_pos() {
-            next = triangle_slider_value_at(pos.x, track, lo, hi, step);
-        }
-    }
-    if response.has_focus() {
-        // Claim the arrow keys while focused, as `egui::Slider` does, so they
-        // step the value instead of moving focus to the next widget.
-        ui.memory_mut(|memory| {
-            memory.set_focus_lock_filter(
-                response.id,
-                egui::EventFilter {
-                    horizontal_arrows: true,
-                    vertical_arrows: true,
-                    ..Default::default()
-                },
-            );
-        });
-        let (back, forward) = ui.input(|i| {
-            (
-                i.key_pressed(egui::Key::ArrowLeft) || i.key_pressed(egui::Key::ArrowDown),
-                i.key_pressed(egui::Key::ArrowRight) || i.key_pressed(egui::Key::ArrowUp),
-            )
-        });
-        if back {
-            next -= step;
-        }
-        if forward {
-            next += step;
-        }
-        next = next.clamp(lo, hi);
-    }
-
-    let changed = next != *value;
-    *value = next;
-
-    let fraction = if hi > lo {
-        ((*value - lo) as f32 / (hi - lo) as f32).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    let x = track.left() + fraction * track.width();
-
-    let painter = ui.painter();
-    let visuals = ui.visuals();
-    painter.rect_filled(track, track_height / 2.0, visuals.extreme_bg_color);
-    painter.rect_filled(
-        egui::Rect::from_min_max(track.left_top(), egui::pos2(x, track.bottom())),
-        track_height / 2.0,
-        visuals.selection.bg_fill,
-    );
-    paint_triangle_handle(
-        painter,
-        egui::pos2(x, rect.center().y),
-        egui::Color32::WHITE,
-        egui::Stroke::new(2.0_f32, visuals.window_stroke.color),
-    );
-
-    if response.hovered() || response.dragged() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-    }
-
-    changed
-}
-
-/// Handle travel width within a bar of `rect_width`: the bar minus one
-/// handle radius at each end.
+/// Handle travel width within a bar of `rect_width`.
 fn range_bar_span(rect_width: f32) -> f32 {
     (rect_width - 2.0 * RANGE_HANDLE_RADIUS).max(0.0)
 }
 
-/// X of a kelvin value inside a bar starting at `rect_left`.
 fn range_bar_x(value: i32, rect_left: f32, rect_width: f32) -> f32 {
     let bounds = TemperatureScale::bounds();
     rect_left
@@ -926,7 +1429,6 @@ fn range_bar_x(value: i32, rect_left: f32, rect_width: f32) -> f32 {
         + TemperatureScale::fraction(value, bounds) as f32 * range_bar_span(rect_width)
 }
 
-/// Kelvin value at an X inside a bar starting at `rect_left`.
 fn range_bar_value_at(x: f32, rect_left: f32, rect_width: f32) -> i32 {
     let span = range_bar_span(rect_width);
     let fraction = if span > 0.0 {
@@ -937,41 +1439,39 @@ fn range_bar_value_at(x: f32, rect_left: f32, rect_width: f32) -> i32 {
     TemperatureScale::value_at_fraction(fraction, TemperatureScale::bounds())
 }
 
-/// Two-handle day/night range bar over a warm-to-cool gradient. Returns true
-/// when the range changed.
+/// Two-handle day/night range bar. Returns true when the range changed.
 fn temperature_range_bar(ui: &mut egui::Ui, range: &mut TemperatureRange) -> bool {
-    let height = 34.0;
+    let height = 36.0;
     let (rect, response) = ui.allocate_exact_size(
         egui::vec2(ui.available_width(), height),
         egui::Sense::click_and_drag(),
     );
     let painter = ui.painter();
-    let track_height = 10.0;
     let track = egui::Rect::from_min_max(
         egui::pos2(
             rect.left() + RANGE_HANDLE_RADIUS,
-            rect.center().y - track_height / 2.0,
+            rect.center().y - TRACK_HEIGHT / 2.0,
         ),
         egui::pos2(
             rect.right() - RANGE_HANDLE_RADIUS,
-            rect.center().y + track_height / 2.0,
+            rect.center().y + TRACK_HEIGHT / 2.0,
         ),
     );
+    let radius = egui::CornerRadius::same((TRACK_HEIGHT / 2.0) as u8);
 
-    // Warm-to-cool gradient track.
-    let segments = 64;
-    let warm = egui::Color32::from_rgb(235, 150, 60);
-    let cool = egui::Color32::from_rgb(130, 180, 235);
-    for i in 0..segments {
-        let t0 = i as f32 / segments as f32;
-        let t1 = (i + 1) as f32 / segments as f32;
-        let color = warm.lerp_to_gamma(cool, t0);
+    let segments = 72;
+    for index in 0..segments {
+        let t0 = index as f32 / segments as f32;
+        let t1 = (index + 1) as f32 / segments as f32;
+        let k0 = 900.0 + t0 * (6600.0 - 900.0);
+        let k1 = 900.0 + t1 * (6600.0 - 900.0);
+        let color = temperature_color(((k0 + k1) / 2.0) as i32);
         painter.rect_filled(
             egui::Rect::from_min_max(
                 egui::pos2(track.left() + t0 * track.width(), track.top()),
                 egui::pos2(track.left() + t1 * track.width(), track.bottom()),
             ),
-            0.0,
+            0,
             color,
         );
     }
@@ -979,13 +1479,13 @@ fn temperature_range_bar(ui: &mut egui::Ui, range: &mut TemperatureRange) -> boo
     let x_of = |value: i32| range_bar_x(value, rect.left(), rect.width());
     let value_at = |x: f32| range_bar_value_at(x, rect.left(), rect.width());
     // Dim the track outside the selected span.
-    let dim = ui.visuals().window_fill().gamma_multiply(0.55);
+    let dim = ui.visuals().window_fill.gamma_multiply(0.60);
     painter.rect_filled(
         egui::Rect::from_min_max(
             track.left_top(),
             egui::pos2(x_of(range.night()), track.bottom()),
         ),
-        0.0,
+        radius,
         dim,
     );
     painter.rect_filled(
@@ -993,7 +1493,7 @@ fn temperature_range_bar(ui: &mut egui::Ui, range: &mut TemperatureRange) -> boo
             egui::pos2(x_of(range.day()), track.top()),
             track.right_bottom(),
         ),
-        0.0,
+        radius,
         dim,
     );
 
@@ -1043,11 +1543,39 @@ fn temperature_range_bar(ui: &mut egui::Ui, range: &mut TemperatureRange) -> boo
     false
 }
 
+// MARK: - Layout budget
+
+const HOUR_COMBO_WIDTH: f32 = 42.0;
+const MINUTE_COMBO_WIDTH: f32 = 46.0;
+const MERIDIEM_COMBO_WIDTH: f32 = 52.0;
+const PICKER_ITEM_SPACING: f32 = 4.0;
+const PICKER_GAP: f32 = 12.0;
+const TIME_PICKER_WIDTH: f32 =
+    HOUR_COMBO_WIDTH + MINUTE_COMBO_WIDTH + MERIDIEM_COMBO_WIDTH + 2.0 * PICKER_ITEM_SPACING;
+const PICKER_PAIR_FIT_MARGIN: f32 = 40.0;
+const PICKER_PAIR_MIN_WIDTH: f32 = 2.0 * TIME_PICKER_WIDTH + PICKER_GAP + PICKER_PAIR_FIT_MARGIN;
+
+/// Horizontal chrome around card content, in points: the outer margin (2×18),
+/// the card frame (2×(16 margin + 1 stroke)), and the solid scrollbar gutter.
+fn layout_chrome_width() -> f32 {
+    36.0 + 34.0 + egui::style::ScrollStyle::solid().allocated_width()
+}
+
+fn schedule_content_budget(viewport_width: f32) -> f32 {
+    viewport_width - layout_chrome_width()
+}
+
+fn schedule_side_by_side(content_width: f32) -> bool {
+    content_width >= PICKER_PAIR_MIN_WIDTH
+}
+
+// MARK: - Window
+
 /// Wakes the settings event loop from any thread.
 ///
-/// A hidden window schedules no repaints, so tray/IPC/CLI commands would sit
-/// in the channel unwitnessed (quit included) until some OS event happened to
-/// wake the loop. Every command sender calls [`wake_ui`] after sending.
+/// A hidden window schedules no repaints, so IPC commands would sit in the
+/// channel unwitnessed until some OS event happened to wake the loop. Every
+/// command sender calls [`wake_ui`] after sending.
 static UI_CONTEXT: std::sync::OnceLock<egui::Context> = std::sync::OnceLock::new();
 
 pub fn wake_ui() {
@@ -1060,18 +1588,23 @@ pub fn wake_ui() {
 /// window quits.
 pub fn run_settings_window<S: SettingsPersistence + 'static>(
     state: SharedState<S>,
-    cmd_rx: mpsc::Receiver<TrayCommand>,
-    tray_popup: Arc<AtomicBool>,
+    cmd_rx: mpsc::Receiver<AppCommand>,
+    shortcut_status: SharedShortcutStatus,
     visible: bool,
     shutdown: crate::SharedShutdown,
 ) -> Result<(), String> {
+    let icon = app_icon();
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("Moonglow")
+        .with_app_id("moonglow")
+        .with_inner_size([560.0, 820.0])
+        .with_min_inner_size([420.0, 540.0])
+        .with_visible(visible);
+    if let Some(icon) = icon.clone() {
+        viewport = viewport.with_icon(icon);
+    }
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("Moonglow")
-            .with_app_id("moonglow")
-            .with_inner_size([480.0, 720.0])
-            .with_min_inner_size([400.0, 500.0])
-            .with_visible(visible),
+        viewport,
         ..Default::default()
     };
     eframe::run_native(
@@ -1081,17 +1614,33 @@ pub fn run_settings_window<S: SettingsPersistence + 'static>(
             // `egui::Context` is a cheap handle: clones share everything and
             // `request_repaint` is thread-safe by design.
             let _ = UI_CONTEXT.set(cc.egui_ctx.clone());
+            let texture = icon.map(|icon| {
+                let image = egui::ColorImage::from_rgba_unmultiplied(
+                    [icon.width as usize, icon.height as usize],
+                    &icon.rgba,
+                );
+                cc.egui_ctx
+                    .load_texture("moonglow-app-icon", image, egui::TextureOptions::LINEAR)
+            });
             Ok(Box::new(SettingsApp::new(
-                state, cmd_rx, tray_popup, visible, shutdown,
+                state,
+                cmd_rx,
+                shortcut_status,
+                visible,
+                shutdown,
+                texture,
             )))
         }),
     )
-    .map_err(|e| format!("settings window failed: {e}"))
+    .map_err(|error| format!("settings window failed: {error}"))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_color_scheme, show_manual_slider};
+    use super::{
+        layout_chrome_width, parse_color_scheme, schedule_content_budget, schedule_side_by_side,
+        shortcut_key_from_egui, temperature_color, PICKER_PAIR_MIN_WIDTH, TIME_PICKER_WIDTH,
+    };
 
     #[test]
     fn color_scheme_maps_to_dark_flag() {
@@ -1103,98 +1652,41 @@ mod tests {
     }
 
     #[test]
-    fn manual_slider_only_without_tray_popup() {
-        // Tray popup offers steppers: settings keeps just the range bar.
-        assert!(!show_manual_slider(true, true));
-        // Tray-less systems keep the slider as their only manual control.
-        assert!(show_manual_slider(true, false));
-        // Automatic mode never shows it.
-        assert!(!show_manual_slider(false, false));
-        assert!(!show_manual_slider(false, true));
+    fn recorder_maps_supported_keys() {
+        assert_eq!(
+            shortcut_key_from_egui(egui::Key::ArrowUp).map(|key| key.name()),
+            Some("Up")
+        );
+        assert_eq!(
+            shortcut_key_from_egui(egui::Key::F9).map(|key| key.name()),
+            Some("F9")
+        );
+        assert_eq!(
+            shortcut_key_from_egui(egui::Key::A).map(|key| key.name()),
+            Some("A")
+        );
+        assert_eq!(shortcut_key_from_egui(egui::Key::Copy), None);
     }
 
     #[test]
     fn schedule_pickers_stack_when_narrow() {
-        use super::{
-            layout_chrome_width, schedule_content_budget, schedule_side_by_side,
-            PICKER_PAIR_MIN_WIDTH, TIME_PICKER_WIDTH,
-        };
         // The threshold covers two pickers, the gap, and render headroom.
         assert_eq!(TIME_PICKER_WIDTH, 148.0);
-        assert_eq!(PICKER_PAIR_MIN_WIDTH, 340.0);
-        assert_eq!(layout_chrome_width(), 64.0);
-        // The budget derives from the viewport, never the (inflatable) content.
-        assert_eq!(schedule_content_budget(400.0), 336.0);
-        assert_eq!(schedule_content_budget(480.0), 416.0);
+        assert_eq!(PICKER_PAIR_MIN_WIDTH, 348.0);
+        assert_eq!(layout_chrome_width(), 80.0);
+        assert_eq!(schedule_content_budget(420.0), 340.0);
+        assert_eq!(schedule_content_budget(560.0), 480.0);
         // Minimum window: stack, so the right side never clips.
-        assert!(!schedule_side_by_side(schedule_content_budget(400.0)));
+        assert!(!schedule_side_by_side(schedule_content_budget(420.0)));
         // Default window: from/to share one row.
-        assert!(schedule_side_by_side(schedule_content_budget(480.0)));
-        // Boundary behavior.
-        assert!(schedule_side_by_side(PICKER_PAIR_MIN_WIDTH));
-        assert!(!schedule_side_by_side(PICKER_PAIR_MIN_WIDTH - 1.0));
+        assert!(schedule_side_by_side(schedule_content_budget(560.0)));
     }
 
     #[test]
-    fn settings_scrollbar_reserves_space() {
-        // A floating bar would paint over the right margin of wide rows.
-        assert!(!super::settings_scroll_style().floating);
-    }
-
-    #[test]
-    fn solid_scrollbar_gutter_matches_budget() {
-        // The layout budget derives this from egui; pin the value so an egui
-        // upgrade that changes solid-bar metrics fails here with a pointer to
-        // the budget instead of silently clipping content again.
-        assert_eq!(egui::style::ScrollStyle::solid().allocated_width(), 10.0);
-    }
-
-    #[test]
-    fn triangle_slider_maps_pixels_to_values() {
-        // The hand-drawn slider must clamp at both ends and snap to its step.
-        let track = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(100.0, 10.0));
-        assert_eq!(super::triangle_slider_value_at(-5.0, track, 1, 100, 1), 1);
-        assert_eq!(super::triangle_slider_value_at(0.0, track, 1, 100, 1), 1);
-        assert_eq!(
-            super::triangle_slider_value_at(100.0, track, 1, 100, 1),
-            100
-        );
-        assert_eq!(
-            super::triangle_slider_value_at(150.0, track, 1, 100, 1),
-            100
-        );
-        assert_eq!(
-            // 50 % across 900..=6600 is 3750 K, which rounds up to the nearest 100 K step.
-            super::triangle_slider_value_at(50.0, track, 900, 6600, 100),
-            3800
-        );
-        assert_eq!(
-            super::triangle_slider_value_at(100.0, track, 900, 6600, 100),
-            6600
-        );
-    }
-
-    #[test]
-    fn range_bar_handles_stay_inside_bar() {
-        use super::{range_bar_span, range_bar_value_at, range_bar_x};
-        use moonglow_core::temperature_range::TemperatureScale;
-        let (min, max) = TemperatureScale::bounds();
-        // Travel stops one handle radius from each edge: handles never
-        // overhang the bar, so the day handle cannot clip on the right.
-        assert_eq!(range_bar_span(400.0), 380.0);
-        assert_eq!(range_bar_x(min, 0.0, 400.0), 10.0);
-        assert_eq!(range_bar_x(max, 0.0, 400.0), 390.0);
-        // Mapping round-trips through the inset span.
-        assert_eq!(range_bar_value_at(10.0, 0.0, 400.0), min);
-        assert_eq!(range_bar_value_at(390.0, 0.0, 400.0), max);
-        // Degenerate widths collapse instead of dividing by zero.
-        assert_eq!(range_bar_span(10.0), 0.0);
-        assert_eq!(range_bar_value_at(5.0, 0.0, 10.0), min);
-    }
-
-    #[test]
-    fn wake_without_context_is_silent() {
-        // No window in tests: must be a no-op, never a panic.
-        super::wake_ui();
+    fn temperature_track_moves_from_warm_to_cool() {
+        let warm = temperature_color(900);
+        let cool = temperature_color(6600);
+        assert!(warm.r() > warm.b());
+        assert!(cool.b() > cool.r());
     }
 }

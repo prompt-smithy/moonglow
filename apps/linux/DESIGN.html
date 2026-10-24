@@ -49,15 +49,17 @@ Covers Ubuntu, Debian, Arch, Fedora, openSUSE and derivatives.</p>
   <li>External-monitor <strong>brightness</strong> over DDC/CI (1–100%).</li>
   <li><strong>Scheduled colour temperature</strong>: day/night targets with
       morning/evening transition windows, plus a manual mode.</li>
-  <li><strong>Tray popup(s)</strong> with steppers, automatic toggle, settings, quit.</li>
-  <li><strong>Settings window</strong>: schedule pickers, day/night range, startup, displays.</li>
+  <li><strong>Settings window</strong>: brightness and colour-temperature sliders,
+      an automatic switch that disables the temperature slider, the day/night range,
+      schedule pickers, startup, and displays.</li>
+  <li><strong>Global shortcuts</strong>: increase/decrease brightness and colour
+      temperature, recordable in the window.</li>
   <li><strong>Start at login</strong> (opt-in) and a <strong>full CLI</strong> mirroring every setting.</li>
-  <li><strong>Scroll-on-icon</strong> adjustment with transient value bubbles (OSD).</li>
 </ul>
 <h3>Platform</h3>
 <ul>
   <li>Debian/Ubuntu (.deb), Arch (AUR), Fedora/openSUSE (rpm/COPR) from one codebase.</li>
-  <li>GNOME (Wayland), KDE, and X11 desktops; tray-less operation where no host exists.</li>
+  <li>GNOME (Wayland), KDE, and X11 desktops; no tray host or shell extension required.</li>
   <li>Single self-contained binary; runs from the build dir with zero install.</li>
   <li>The app itself never needs sudo; hardware access comes from udev rules + group membership.</li>
   <li>XDG directories for config, state/log, runtime socket; freedesktop autostart entry.</li>
@@ -66,7 +68,7 @@ Covers Ubuntu, Debian, Arch, Fedora, openSUSE and derivatives.</p>
 <h2 id="arch">2. Architecture</h2>
 <p>Cargo workspace: <code>moonglow-core</code> (pure logic: settings, state machine,
 schedule math, kelvin, traits — no hardware) + <code>moonglow</code>
-(backends, tray, UI, IPC, CLI). The macOS model layer was ported into the core
+(backends, UI, shortcuts, IPC, CLI). The macOS model layer was ported into the core
 first; Linux backends implement its traits.</p>
 <table>
   <tr><th>Session</th><th>Colour backend</th><th>Brightness backend</th></tr>
@@ -75,37 +77,38 @@ first; Linux backends implement its traits.</p>
   <tr><td>wlroots Wayland</td><td>wlr-gamma protocol</td><td>DDC/CI</td></tr>
   <tr><td>X11</td><td>RandR gamma ramps</td><td>DDC/CI</td></tr>
 </table>
-<p>Two tray channels (brightness half-disc mark, colour moon) each own a D-Bus
-connection and menu. One Unix-socket IPC server enforces single-instance and
-forwards CLI commands; a settings window (egui) mirrors all state.</p>
+<p>One Unix-socket IPC server enforces single-instance and forwards CLI
+commands; the egui settings window is the primary surface. A shortcut worker
+re-registers the four global bindings whenever settings change.</p>
 
 <h2 id="decisions">3. Key decisions (with rationale)</h2>
 
 <details open>
 <summary>Stack: Rust + egui + raw zbus (not Tauri, not Python)</summary>
-<p>Tauri would pull WebKitGTK (~100 MB, per-distro webview quirks) for a tray
+<p>Tauri would pull WebKitGTK (~100 MB, per-distro webview quirks) for a background
 daemon; Python would need a runtime + packaging story per distro. Rust gives one
 ~17 MB binary with two shared-lib deps (<code>libc6, libgcc-s1</code> — GUI
 libs are dlopen'd at runtime) and fearless refactors under 144 tests.</p>
 </details>
 
 <details open>
-<summary>Tray via raw StatusNotifierItem + dbusmenu (no ayatana libraries)</summary>
-<p>Zero system-library deps and full control of the wire shapes. Hard-won rules:
-one item per D-Bus connection; probe theme dirs and serve an empty
-<code>IconName</code> when the packaged icon is absent (any non-empty name
-bypasses the embedded pixmap silently); <code>GetLayout</code> must declare
-exactly <code>(u(ia{sv}av))</code> — strict hosts reject bare variants with a
-journal-only error while lenient clients hide the bug.</p>
+<summary>Normal application window, no tray icon</summary>
+<p>The app is a first-class desktop window: sliders, the automatic toggle, the
+day/night range, and shortcuts live in one place. Closing hides it to the
+background (the schedule and shortcut worker keep running); the footer's
+<strong>Quit Moonglow</strong> button, <code>--quit</code>, and Ctrl-C stop it.
+The autostart entry launches with <code>--hidden</code> so login does not pop a
+window.</p>
 </details>
 
-<details>
-<summary>Popup UX: steppers + scroll + OSD (no sliders on GNOME)</summary>
-<p>Verified in the ubuntu-appindicators source: the Shell closes the popup on
-<strong>every</strong> item click with no stay-open flag, and the renderer has
-zero slider support. So: ± steppers for discoverability, wheel-on-icon
-(<code>Scroll</code>) for repeated adjustment, and a notification bubble
-showing the new value as the confirmation the popup cannot give.</p>
+<details open>
+<summary>Global shortcuts: GNOME keybindings, XDG portal, or X11 grabs</summary>
+<p>Wayland compositors do not expose key grabs to ordinary clients. GNOME
+custom keybindings (<code>gsettings</code>) are used first because they work on
+both X11 and Wayland and stay editable in GNOME Settings. KDE and recent
+wlroots desktops use <code>org.freedesktop.portal.GlobalShortcuts</code>; plain
+X11 sessions use <code>XGrabKey</code>. The settings card shows which backend
+is active and explains when none is available.</p>
 </details>
 
 <details>
@@ -138,7 +141,7 @@ scripts and keyboard shortcuts.</p>
 <details>
 <summary>Quit on a dedicated thread, then exit(0)</summary>
 <p>eframe has no programmatic exit and minimized windows starve
-<code>update()</code>, so IPC/tray/Ctrl-C quit paths run cleanup (hardware
+<code>update()</code>, so IPC/UI-button/Ctrl-C quit paths run cleanup (hardware
 restore, Night Light key restore) on their own thread instead of waiting on
 the event loop. ~10 s stop time is joins + restore, by design.</p>
 </details>
@@ -160,7 +163,7 @@ that stack; first report is logged for audit.</p>
 
 <details>
 <summary>Docs that can't drift: CLI catalog card + strict test</summary>
-<p>The settings window lists all 18 CLI flags (selectable + copy-all). A test
+<p>The settings window lists all 22 CLI flags (selectable + copy-all). A test
 asserts set-equality against the clap definition, so new flags fail CI until
 documented. Same philosophy for the man page and <code>--help</code> texts.</p>
 </details>
@@ -170,7 +173,7 @@ documented. Same philosophy for the man page and <code>--help</code> texts.</p>
 <p><code>build-deb.sh</code> stages + <code>dpkg-deb -b</code> (no cargo-deb
 dependency, version from <code>Cargo.toml</code>); Arch PKGBUILD +
 <code>.SRCINFO</code> + install hooks; RPM spec for COPR. All three install the
-same file set (binary, desktop, metainfo, two SVG icons, udev rule, gzipped
+same file set (binary, desktop, metainfo, icon set, udev rule, gzipped
 man) and run the same post-install logic (create <code>i2c</code> group,
 reload udev, refresh caches, print the group-join notice).</p>
 </details>
@@ -200,9 +203,9 @@ name. Human display strings ("Moonglow") are unchanged.</p>
       through a sandbox is uncharted. No official Fedora (Koji) build (needs vendoring).</li>
   <li><strong>Theme flips apply within ~5 s</strong> on XWayland (poll cadence), instantly
       where winit reports.</li>
-  <li><code>packaging/gnome-shell-extension/</code> is a <strong>frozen experiment</strong>,
-      never installed or shipped; the SNI path needs no extension on KDE and rides
-      Ubuntu's preinstalled AppIndicator support on GNOME.</li>
+  <li><strong>Global shortcuts need a cooperating desktop</strong>: GNOME uses
+      custom keybindings, KDE/wlroots use the portal, and plain X11 uses grabs.
+      A session that offers none shows an explanation and the CLI commands.</li>
   <li>Runtime paths renamed in the 1.0.0 rebrand (socket, log, config, autostart entry):
       pre-release installs start from default settings.</li>
 </ul>
@@ -212,7 +215,7 @@ name. Human display strings ("Moonglow") are unchanged.</p>
 <ul>
   <li><code>libc6, libgcc-s1</code> — the only linked libs (verified via <code>ldd</code>).</li>
   <li>X11/Wayland/GL client libs — <strong>dlopen'd at runtime</strong>, present on any GUI system.</li>
-  <li>Recommends: <code>i2c-tools</code> (DDC debugging). Suggests: AppIndicator shell extension (Debian GNOME).</li>
+  <li>Recommends: <code>i2c-tools</code> (DDC debugging).</li>
 </ul>
 <h3>Build</h3>
 <ul>
@@ -238,17 +241,14 @@ each release attaches the <code>.deb</code>
 <pre>sudo apt install ./moonglow_1.0.0_amd64.deb</pre>
 <p>Use <code>apt install ./file.deb</code>, not bare <code>dpkg -i</code>, so
 dependencies resolve. GUI alternative: double-click the file (Software /
-Discover) and install graphically. On Kubuntu the tray icon appears
-immediately — Plasma has a native StatusNotifier host, no extension
-needed. On Ubuntu GNOME the icon rides the preinstalled AppIndicator
-support.</p>
+Discover) and install graphically. Launch Moonglow from the application menu;
+no tray host or shell extension is needed.</p>
 </details>
 <details open>
 <summary>Debian (.deb)</summary>
 <pre>sudo apt install ./moonglow_1.0.0_amd64.deb</pre>
-<p>Same file as Ubuntu. On vanilla Debian GNOME, install an AppIndicator
-shell extension (a package <code>Suggests</code>) or the tray icon has no
-host — the app still runs via its settings window and CLI.</p>
+<p>Same file as Ubuntu; the settings window is the whole application, so
+vanilla Debian GNOME needs no extra extension.</p>
 </details>
 <details open>
 <summary>Arch, Manjaro, EndeavourOS (AUR)</summary>
@@ -292,23 +292,23 @@ line puts <em>you</em> in that group — the one step a package can never do.
 with permission denied.</p>
 <h3>Build from source</h3>
 <pre>cargo build --release -p moonglow
-./target/release/moonglow        # tray app
+./target/release/moonglow        # settings window
 ./target/release/moonglow --status</pre>
 <h3>First launch checklist</h3>
 <ul>
-  <li>Both tray icons appear; popups open; scroll shows value bubbles.</li>
   <li>Settings window opens (Startup/Displays/Command-line start collapsed).</li>
+  <li>Shortcuts register; editing one updates the backend; Clear removes it.</li>
   <li>Automatic schedule visibly warms the screen at night; brightness moves the monitor.</li>
   <li>Quit restores the user's Night Light keys; log lands in the state dir (§3).</li>
 </ul>
 
 <h2 id="verify">7. Verification matrix</h2>
 <ul>
-  <li><strong>144 tests</strong> (<code>cargo test --workspace</code>) + clippy-clean +
-      fmt-checked. Live-hardware tests are <code>#[ignore]</code>d by default and run
-      manually (Night Light round-trip, OSD path).</li>
-  <li>Proven-fail regression tests: tray <code>drive()</code> bridge, CLI catalog
-      drift, OSD urgency pin, pixmap shape witnesses.</li>
+  <li><strong>cargo test --workspace</strong> + clippy-clean + fmt-checked.
+      Live-hardware tests are <code>#[ignore]</code>d by default and run
+      manually (Night Light round-trip, DDC writes, shortcut registration).</li>
+  <li>Proven-fail regression tests: CLI catalog drift, settings leniency,
+      shortcut parsing/conflict handling, shutdown-once bookkeeping.</li>
   <li>Distro order after Ubuntu: <strong>Kubuntu → Debian stable → Arch → Fedora</strong>
       (new DE, oldest stack, rolling ceiling, rpm/SELinux). DDC needs bare metal
       per GPU vendor; everything else validates in VMs.</li>
@@ -322,7 +322,7 @@ with permission denied.</p>
 <pre>moonglow/
 ├── Cargo.toml / Cargo.lock     # workspace (version = single source of truth)
 ├── crates/moonglow-core/            # pure logic + traits
-├── crates/moonglow/  # backends, tray, UI, IPC, CLI
+├── crates/moonglow/  # backends, UI, shortcuts, IPC, CLI
 ├── packaging/                  # build-deb.sh, debian/, arch/, rpm/, icons/,
 │                               #   desktop, metainfo, man, udev, RELEASE.md
 ├── DESIGN.html                 # this document

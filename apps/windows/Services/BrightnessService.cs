@@ -1,6 +1,6 @@
 using System.Management;
 using System.Threading.Tasks;
-using Moonglow.Infrastructure;
+using Moonglow.Core;
 using static Moonglow.Native.NativeMethods;
 
 namespace Moonglow.Services;
@@ -13,15 +13,21 @@ public sealed class BrightnessService
 
     private readonly MonitorService _monitors;
 
+    // A DDC transaction can hang on a monitor that is waking or being unplugged. After this
+    // long, a new request starts a fresh worker instead of waiting on the stuck one forever.
+    private static readonly TimeSpan ApplyTimeout = TimeSpan.FromSeconds(5);
+
     private readonly object _applyGate = new();
     private int _targetPercent = -1;
     private bool _applying;
+    private DateTime _applyStartedUtc;
+    private int _generation;
 
     public bool InternalPanelAvailable { get; private set; }
 
     /// <summary>Whether any attached display can take a hardware brightness write.</summary>
     public bool IsSupported
-        => InternalPanelAvailable || _monitors.Monitors.Any(m => m.SupportsDdcBrightness);
+        => InternalPanelAvailable || _monitors.Snapshot().Any(m => m.SupportsDdcBrightness);
 
     public BrightnessService(MonitorService monitors)
     {
@@ -76,17 +82,28 @@ public sealed class BrightnessService
     public void SetBrightness(int percent)
     {
         percent = MathUtil.Clamp(percent, MinBrightnessPercent, 100);
+
+        int generation;
+        bool startWorker;
         lock (_applyGate)
         {
             _targetPercent = percent;
-            if (_applying)
+
+            bool stuck = _applying
+                && DateTime.UtcNow - _applyStartedUtc >= ApplyTimeout;
+            startWorker = !_applying || stuck;
+            if (!startWorker)
                 return;
+
             _applying = true;
+            _applyStartedUtc = DateTime.UtcNow;
+            generation = ++_generation;
         }
-        Task.Run(ApplyLoop);
+
+        Task.Run(() => ApplyLoop(generation));
     }
 
-    private void ApplyLoop()
+    private void ApplyLoop(int generation)
     {
         while (true)
         {
@@ -94,6 +111,9 @@ public sealed class BrightnessService
             lock (_applyGate)
             {
                 target = _targetPercent;
+                // Measure the timeout from the start of this attempt, not the worker's birth,
+                // so a long drag through many values never looks like a hung transaction.
+                _applyStartedUtc = DateTime.UtcNow;
             }
 
             try
@@ -110,7 +130,10 @@ public sealed class BrightnessService
             {
                 if (_targetPercent == target)
                 {
-                    _applying = false;
+                    // A worker that timed out was replaced; it must not clear the flag owned
+                    // by the newer worker.
+                    if (generation == _generation)
+                        _applying = false;
                     return;
                 }
             }

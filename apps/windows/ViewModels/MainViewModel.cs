@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.Threading.Tasks;
+using System.Windows.Threading;
+using Moonglow.Core;
 using Moonglow.Infrastructure;
-using Moonglow.Models;
 using Moonglow.Services;
 
 namespace Moonglow.ViewModels;
@@ -12,9 +14,11 @@ public sealed class MainViewModel : ObservableObject
     private readonly ScheduleService _schedule;
     private readonly SettingsService _settingsService;
     private readonly MonitorService _monitors;
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
 
     private bool _applyingFromSchedule;
     private bool _startupRegistrationFailed;
+    private int _refreshInProgress;
 
     private int _brightnessValue;
     private int _colorTemp;
@@ -76,9 +80,9 @@ public sealed class MainViewModel : ObservableObject
 
     public bool HasBrightnessSupport => _brightness.IsSupported;
 
-    public bool HasColorSupport => _monitors.Monitors.Count > 0;
+    public bool HasColorSupport => _monitors.Snapshot().Count > 0;
 
-    public bool HasNoDisplays => !_brightness.InternalPanelAvailable && _monitors.Monitors.Count == 0;
+    public bool HasNoDisplays => !_brightness.InternalPanelAvailable && _monitors.Snapshot().Count == 0;
 
     public int Brightness
     {
@@ -102,7 +106,8 @@ public sealed class MainViewModel : ObservableObject
         get => _colorTemp;
         set
         {
-            if (!SetProperty(ref _colorTemp, AppSettings.ClampKelvin(value)))
+            // The shared contract stores and applies colour temperature in 100 K steps.
+            if (!SetProperty(ref _colorTemp, TemperatureRange.Snap(value)))
                 return;
 
             // In automatic mode the slider shows the schedule's value, which is never
@@ -148,33 +153,28 @@ public sealed class MainViewModel : ObservableObject
     public int DayColorTemp
     {
         get => Settings.DayColorTempK;
-        set
-        {
-            int clamped = AppSettings.ClampKelvin(value);
-            if (Settings.DayColorTempK == clamped)
-                return;
-
-            Settings.DayColorTempK = clamped;
-            _settingsService.Save();
-            OnPropertyChanged();
-            RetickIfAuto();
-        }
+        set => SetTemperatureRange(TemperatureRange.FromSettings(Settings).MovingDay(value));
     }
 
     public int NightColorTemp
     {
         get => Settings.NightColorTempK;
-        set
-        {
-            int clamped = AppSettings.ClampKelvin(value);
-            if (Settings.NightColorTempK == clamped)
-                return;
+        set => SetTemperatureRange(TemperatureRange.FromSettings(Settings).MovingNight(value));
+    }
 
-            Settings.NightColorTempK = clamped;
-            _settingsService.Save();
-            OnPropertyChanged();
-            RetickIfAuto();
-        }
+    /// <summary>Stores an ordered, snapped range. Both handles are refreshed because moving
+    /// one can pin it against the other.</summary>
+    private void SetTemperatureRange(TemperatureRange range)
+    {
+        if (Settings.NightColorTempK == range.Night && Settings.DayColorTempK == range.Day)
+            return;
+
+        Settings.NightColorTempK = range.Night;
+        Settings.DayColorTempK = range.Day;
+        _settingsService.Save();
+        OnPropertyChanged(nameof(NightColorTemp));
+        OnPropertyChanged(nameof(DayColorTemp));
+        RetickIfAuto();
     }
 
     public string MorningStart
@@ -345,13 +345,54 @@ public sealed class MainViewModel : ObservableObject
     public void RefreshDisplays()
     {
         bool hadBrightnessSupport = HasBrightnessSupport;
-
         _brightness.RefreshSupport();
         _monitors.Refresh();
+        PublishDisplays(hadBrightnessSupport);
+    }
 
+    /// <summary>Re-enumerates displays on a worker thread. DDC probing can block while a
+    /// panel is waking, so it must not run on the UI thread.</summary>
+    public void RefreshDisplaysAsync()
+    {
+        if (Interlocked.Exchange(ref _refreshInProgress, 1) == 1)
+            return;
+
+        bool hadBrightnessSupport = HasBrightnessSupport;
+        Task.Run(() =>
+        {
+            try
+            {
+                _brightness.RefreshSupport();
+                _monitors.Refresh();
+            }
+            catch
+            {
+                // Probing is best effort; the next attempt can retry.
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _refreshInProgress, 0);
+            }
+
+            if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
+                return;
+
+            try
+            {
+                _dispatcher.BeginInvoke(new Action(() => PublishDisplays(hadBrightnessSupport)));
+            }
+            catch (InvalidOperationException)
+            {
+                // The dispatcher shut down between the check and the post.
+            }
+        });
+    }
+
+    private void PublishDisplays(bool hadBrightnessSupport)
+    {
         Displays.Clear();
 
-        foreach (var monitor in _monitors.Monitors)
+        foreach (var monitor in _monitors.Snapshot())
         {
             string caps = monitor.SupportsDdcBrightness
                 ? "brightness via DDC/CI"
@@ -374,5 +415,9 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(HasColorSupport));
         OnPropertyChanged(nameof(HasNoDisplays));
         OnPropertyChanged(nameof(ManualColorEnabled));
+
+        // A panel that just woke may have lost the ramp (and the composition fallback), so
+        // reassert the current target whenever the display set is republished.
+        ReapplyColorTemperature();
     }
 }

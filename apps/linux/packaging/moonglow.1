@@ -7,12 +7,13 @@ moonglow \- external-display brightness and scheduled colour temperature
 .SH DESCRIPTION
 Moonglow drives external-monitor brightness over DDC/CI and
 follows a morning/evening colour-temperature schedule. The first invocation
-starts the tray app (two icons: brightness and colour temperature, each with
-a popup menu); later invocations forward commands to the running instance.
-With no daemon running, the setter flags drive the hardware directly and exit,
-which suits headless use and scripts.
+starts the application; later invocations forward commands to the running
+instance. With no daemon running, the setter flags drive the hardware directly
+and exit, which suits headless use and scripts.
 .PP
-Scroll on a tray icon to adjust its channel; a bubble shows the new value.
+The settings window has brightness and colour-temperature sliders, a day/night
+range, and global shortcuts. Closing the window keeps the app running in the
+background so the schedule and shortcuts stay active.
 .SH OPTIONS
 .TP
 .BR \-\-show\-settings
@@ -51,11 +52,17 @@ Print brightness, temperature, schedule, and displays.
 .BR \-\-status " " \-\-json
 Machine-readable status.
 .TP
-.BR \-\-no\-tray
-Run without a tray icon.
+.BR \-\-hidden
+Start with the window hidden (used by the autostart entry).
 .TP
 .BR \-\-headless
-Run schedule plus tray with no settings window.
+Run schedule and shortcuts with no settings window.
+.TP
+.BR \-\-brightness\-up ", " \-\-brightness\-down
+Global-shortcut action: step brightness by 5%.
+.TP
+.BR \-\-temperature\-up ", " \-\-temperature\-down
+Global-shortcut action: step temperature by 100 K; turns automatic off first.
 .SH FILES
 .TP
 .I ~/.local/state/moonglow/moonglow.log

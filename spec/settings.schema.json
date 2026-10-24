@@ -69,19 +69,19 @@
     },
     "increaseBrightnessShortcut": {
       "$ref": "#/$defs/hotKey",
-      "description": "macOS only. Absent on platforms without global hot keys."
+      "description": "Global brightness-up shortcut. null disables it."
     },
     "decreaseBrightnessShortcut": {
       "$ref": "#/$defs/hotKey",
-      "description": "macOS only. Absent on platforms without global hot keys."
+      "description": "Global brightness-down shortcut. null disables it."
     },
     "increaseTemperatureShortcut": {
       "$ref": "#/$defs/hotKey",
-      "description": "macOS only. Absent on platforms without global hot keys."
+      "description": "Global temperature-up (cooler) shortcut. null disables it."
     },
     "decreaseTemperatureShortcut": {
       "$ref": "#/$defs/hotKey",
-      "description": "macOS only. Absent on platforms without global hot keys."
+      "description": "Global temperature-down (warmer) shortcut. null disables it."
     }
   },
   "$defs": {
@@ -91,7 +91,19 @@
       "description": "Zero-padded 24-hour wall-clock time, independent of date and time zone."
     },
     "hotKey": {
-      "type": ["object", "null"],
+      "description": "Global shortcut. macOS writes {keyCode, modifiers}; Linux writes a readable string such as \"Ctrl+Alt+Up\". null disables the action. Values are interpreted by the platform and are not portable between operating systems.",
+      "oneOf": [
+        { "$ref": "#/$defs/macHotKey" },
+        {
+          "type": "string",
+          "pattern": "^(?:(?:Ctrl|Alt|Shift|Super)\\+)+.+$",
+          "description": "Readable shortcut string: at least one modifier plus one key, e.g. \"Ctrl+Alt+Up\"."
+        },
+        { "type": "null" }
+      ]
+    },
+    "macHotKey": {
+      "type": "object",
       "required": ["keyCode", "modifiers"],
       "additionalProperties": false,
       "properties": {

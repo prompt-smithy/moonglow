@@ -1,7 +1,7 @@
 [package]
 name = "moonglow"
 version.workspace = true
-description = "Linux menu-bar/tray app for external-display hardware brightness and scheduled colour temperature."
+description = "Linux desktop app for external-display hardware brightness, scheduled colour temperature, and global shortcuts."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -27,3 +27,4 @@ wayland-protocols-wlr = "0.3"
 rustix = { version = "1", features = ["fs", "shm", "process", "stdio"] }
 eframe = { version = "0.33", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 egui = "0.33"
+futures-util = "0.3"

@@ -1,4 +1,4 @@
-//! UI state for the tray controls, settings window, and CLI.
+//! UI state for the settings window, global shortcuts, and CLI.
 //!
 //! Ported from `ViewModels/MainViewModel.swift`. This is the single shared
 //! instance (wrapped in `Arc<Mutex<..>>` by the app) that keeps every surface
@@ -9,7 +9,8 @@
 //! - Colour temperature: `900...6600` K, in 100 K steps.
 
 use crate::schedule::ScheduleCalculator;
-use crate::settings::AppSettings;
+use crate::settings::{AppSettings, KELVIN_STEP};
+use crate::shortcut::{Shortcut, ShortcutAction};
 use crate::temperature_range::TemperatureRange;
 use crate::time_of_day::{TimeOfDay, MINUTES_PER_DAY};
 use crate::traits::{
@@ -191,6 +192,24 @@ impl<S: SettingsPersistence> StateManager<S> {
         }
     }
 
+    /// Brightness points per shortcut press.
+    pub const HOTKEY_BRIGHTNESS_STEP: i32 = 5;
+
+    /// One shortcut step up. Does nothing without a brightness-capable display,
+    /// matching the macOS hot key.
+    pub fn increase_brightness(&mut self) {
+        if self.has_brightness_support() {
+            self.set_brightness(self.brightness() + Self::HOTKEY_BRIGHTNESS_STEP);
+        }
+    }
+
+    /// One shortcut step down.
+    pub fn decrease_brightness(&mut self) {
+        if self.has_brightness_support() {
+            self.set_brightness(self.brightness() - Self::HOTKEY_BRIGHTNESS_STEP);
+        }
+    }
+
     // MARK: - Colour temperature
 
     pub fn color_temperature(&self) -> i32 {
@@ -240,6 +259,31 @@ impl<S: SettingsPersistence> StateManager<S> {
         !self.settings.auto_color_temperature && self.has_color_support()
     }
 
+    /// One shortcut step cooler (higher kelvin).
+    ///
+    /// A fixed temperature cannot survive the next schedule tick, so a
+    /// temperature shortcut leaves automatic mode first. The macOS build asks
+    /// before doing that; here the key press itself is the intent, and no
+    /// modal can be shown reliably while another window is focused.
+    pub fn increase_color_temperature(&mut self) {
+        self.step_color_temperature(KELVIN_STEP);
+    }
+
+    /// One shortcut step warmer (lower kelvin).
+    pub fn decrease_color_temperature(&mut self) {
+        self.step_color_temperature(-KELVIN_STEP);
+    }
+
+    fn step_color_temperature(&mut self, delta: i32) {
+        if !self.has_color_support() {
+            return;
+        }
+        if self.settings.auto_color_temperature {
+            self.set_auto_color_temperature(false);
+        }
+        self.set_color_temperature(self.color_temperature() + delta);
+    }
+
     // MARK: - Schedule targets
 
     pub fn day_color_temp(&self) -> i32 {
@@ -276,6 +320,43 @@ impl<S: SettingsPersistence> StateManager<S> {
         if self.settings.auto_color_temperature {
             self.tick_schedule();
         }
+    }
+
+    // MARK: - Shortcuts
+
+    pub fn shortcut(&self, action: ShortcutAction) -> Option<Shortcut> {
+        match action {
+            ShortcutAction::IncreaseBrightness => self.settings.increase_brightness_shortcut,
+            ShortcutAction::DecreaseBrightness => self.settings.decrease_brightness_shortcut,
+            ShortcutAction::IncreaseTemperature => self.settings.increase_temperature_shortcut,
+            ShortcutAction::DecreaseTemperature => self.settings.decrease_temperature_shortcut,
+        }
+    }
+
+    /// Assigns or clears one shortcut.
+    ///
+    /// The same key combination is stolen from the other three actions so one
+    /// press can never fire two things. A modifier-less shortcut is refused;
+    /// `None` clears the action.
+    pub fn set_shortcut(&mut self, action: ShortcutAction, value: Option<Shortcut>) {
+        if let Some(shortcut) = value {
+            if !shortcut.is_valid() {
+                return;
+            }
+        }
+        if self.shortcut(action) == value {
+            return;
+        }
+        self.mutate_settings(|settings| {
+            if let Some(value) = value {
+                for other in ShortcutAction::ALL {
+                    if other != action && shortcut_of(settings, other) == Some(value) {
+                        set_shortcut(settings, other, None);
+                    }
+                }
+            }
+            set_shortcut(settings, action, value);
+        });
     }
 
     pub fn schedule_time(&self, which: ScheduleTime) -> TimeOfDay {
@@ -570,6 +651,24 @@ impl<S: SettingsPersistence> StateManager<S> {
         if self.settings.auto_color_temperature {
             self.tick_schedule();
         }
+    }
+}
+
+fn shortcut_of(settings: &AppSettings, action: ShortcutAction) -> Option<Shortcut> {
+    match action {
+        ShortcutAction::IncreaseBrightness => settings.increase_brightness_shortcut,
+        ShortcutAction::DecreaseBrightness => settings.decrease_brightness_shortcut,
+        ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut,
+        ShortcutAction::DecreaseTemperature => settings.decrease_temperature_shortcut,
+    }
+}
+
+fn set_shortcut(settings: &mut AppSettings, action: ShortcutAction, value: Option<Shortcut>) {
+    match action {
+        ShortcutAction::IncreaseBrightness => settings.increase_brightness_shortcut = value,
+        ShortcutAction::DecreaseBrightness => settings.decrease_brightness_shortcut = value,
+        ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut = value,
+        ShortcutAction::DecreaseTemperature => settings.decrease_temperature_shortcut = value,
     }
 }
 
@@ -1420,5 +1519,113 @@ mod tests {
         assert!(service.is_supported());
         assert!(hw_applied.lock().unwrap().is_empty());
         assert_eq!(*sw_applied.lock().unwrap(), [40]);
+    }
+
+    #[test]
+    fn brightness_shortcut_steps_and_clamps() {
+        let mut harness =
+            make_harness(AppSettings::default(), true, true, None, true, false, false);
+        harness.state.increase_brightness();
+        assert_eq!(harness.state.brightness(), 85);
+        harness.state.decrease_brightness();
+        harness.state.decrease_brightness();
+        assert_eq!(harness.state.brightness(), 75);
+
+        harness.state.set_brightness(99);
+        harness.state.increase_brightness();
+        assert_eq!(harness.state.brightness(), 100);
+    }
+
+    #[test]
+    fn brightness_shortcut_requires_support() {
+        let mut harness = make_harness(
+            AppSettings::default(),
+            false,
+            true,
+            None,
+            true,
+            false,
+            false,
+        );
+        harness.state.increase_brightness();
+        assert_eq!(harness.state.brightness(), 80);
+    }
+
+    #[test]
+    fn temperature_shortcut_leaves_automatic_mode() {
+        let mut harness =
+            make_harness(AppSettings::default(), true, true, None, true, false, false);
+        assert!(harness.state.auto_color_temperature());
+        harness.state.increase_color_temperature();
+        assert!(!harness.state.auto_color_temperature());
+        let raised = harness.state.color_temperature();
+        harness.state.decrease_color_temperature();
+        assert_eq!(harness.state.color_temperature(), raised - KELVIN_STEP);
+        // The manual value is what persists once automatic mode is off.
+        assert_eq!(
+            harness.state.settings().manual_color_temp_k,
+            harness.state.color_temperature()
+        );
+    }
+
+    #[test]
+    fn temperature_shortcut_requires_color_support() {
+        let mut harness = make_harness(
+            AppSettings::default(),
+            true,
+            false,
+            None,
+            true,
+            false,
+            false,
+        );
+        let before = harness.state.color_temperature();
+        harness.state.decrease_color_temperature();
+        assert!(harness.state.auto_color_temperature());
+        assert_eq!(harness.state.color_temperature(), before);
+    }
+    #[test]
+    fn assigning_a_shortcut_steals_it_from_its_previous_action() {
+        let mut harness =
+            make_harness(AppSettings::default(), true, true, None, true, false, false);
+        let combo: Shortcut = "Ctrl+Shift+F9".parse().unwrap();
+        harness
+            .state
+            .set_shortcut(ShortcutAction::IncreaseBrightness, Some(combo));
+        harness
+            .state
+            .set_shortcut(ShortcutAction::DecreaseTemperature, Some(combo));
+        assert_eq!(
+            harness.state.shortcut(ShortcutAction::DecreaseTemperature),
+            Some(combo)
+        );
+        assert_eq!(
+            harness.state.shortcut(ShortcutAction::IncreaseBrightness),
+            None
+        );
+    }
+
+    #[test]
+    fn shortcut_can_be_cleared_and_invalid_values_are_refused() {
+        let mut harness =
+            make_harness(AppSettings::default(), true, true, None, true, false, false);
+        harness
+            .state
+            .set_shortcut(ShortcutAction::IncreaseBrightness, None);
+        assert_eq!(
+            harness.state.shortcut(ShortcutAction::IncreaseBrightness),
+            None
+        );
+        // A bare key must never be registered.
+        let bare: Shortcut = "Ctrl+Up".parse().unwrap();
+        let mut naked = bare;
+        naked.ctrl = false;
+        harness
+            .state
+            .set_shortcut(ShortcutAction::DecreaseBrightness, Some(naked));
+        assert_eq!(
+            harness.state.shortcut(ShortcutAction::DecreaseBrightness),
+            Some(ShortcutAction::DecreaseBrightness.default_shortcut())
+        );
     }
 }

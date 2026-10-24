@@ -116,6 +116,7 @@ struct Profile {
 }
 
 impl Profile {
+    #[allow(clippy::field_reassign_with_default)]
     fn to_settings(&self) -> AppSettings {
         let mut settings = AppSettings::default();
         settings.day_color_temp_k = self.day_color_temp_k;

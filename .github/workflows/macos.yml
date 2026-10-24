@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'apps/macos/**'
+      - 'resources/**'
       - 'spec/**'
       - '.github/workflows/macos.yml'
   pull_request:
     paths:
       - 'apps/macos/**'
+      - 'resources/**'
       - 'spec/**'
       - '.github/workflows/macos.yml'
 

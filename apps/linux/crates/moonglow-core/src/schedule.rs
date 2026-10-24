@@ -257,6 +257,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn custom_targets_are_honoured() {
         let mut settings = AppSettings::default();
         settings.day_color_temp_k = 5000;
@@ -288,6 +289,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn inverted_span_falls_back_to_end_target() {
         let mut settings = AppSettings::default();
         settings.morning_start = at(7, 0);
@@ -335,6 +337,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn scheduler_inert_while_automatic_is_off() {
         let applied = Arc::new(StdMutex::new(Vec::new()));
         let color = Arc::new(Mutex::new(StubColor {

@@ -27,10 +27,19 @@
             </DockPanel>
                 <Slider Margin="0,4,0,0" Background="{DynamicResource TemperatureRangeGradient}"
                     Minimum="900" Maximum="6600"
+                    TickFrequency="100" IsSnapToTickEnabled="True"
                     IsMoveToPointEnabled="True"
                     IsEnabled="{Binding ManualColorEnabled}"
                     Value="{Binding ColorTemperature, Mode=OneWay}"
                     ValueChanged="ColorTempSlider_ValueChanged" />
+                <!-- Endpoint labels keep the direction unambiguous even while the screen
+                     itself is tinted by the active temperature. -->
+                <Grid Margin="0,2,0,0">
+                    <TextBlock Text="WARM 900 K" FontSize="10" HorizontalAlignment="Left"
+                               Foreground="{DynamicResource ThemeSecondaryText}" />
+                    <TextBlock Text="COOL 6600 K" FontSize="10" HorizontalAlignment="Right"
+                               Foreground="{DynamicResource ThemeSecondaryText}" />
+                </Grid>
 
             <DockPanel Margin="0,10,0,0" LastChildFill="False">
                 <TextBlock Text="Follow color temperature schedule" Foreground="{DynamicResource ThemePrimaryText}"

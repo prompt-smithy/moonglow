@@ -1,6 +1,6 @@
 using System.IO;
 using System.Text.Json;
-using Moonglow.Models;
+using Moonglow.Core;
 
 namespace Moonglow.Services;
 
@@ -49,8 +49,13 @@ public sealed class SettingsService
 
     public void Load()
     {
+        // A file preserved as "corrupt" may still be readable; a transient failure is not
+        // corruption. Fall back to it when the canonical file is gone so the user is not
+        // stranded on defaults.
+        string corruptPath = _filePath + ".corrupt";
         string? source = File.Exists(_filePath) ? _filePath
             : !string.IsNullOrEmpty(_legacyFilePath) && File.Exists(_legacyFilePath) ? _legacyFilePath
+            : File.Exists(corruptPath) ? corruptPath
             : null;
 
         if (source is null)
@@ -59,12 +64,31 @@ public sealed class SettingsService
             return;
         }
 
+        string json;
         try
         {
-            Settings = Parse(File.ReadAllText(source)).Normalized();
+            json = File.ReadAllText(source);
         }
-        catch (Exception)
+        catch (IOException)
         {
+            // A scanner, indexer, or another reader can hold the file briefly. Keep the file
+            // and use defaults for this session; the next launch can read it again.
+            Settings = new AppSettings();
+            return;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Settings = new AppSettings();
+            return;
+        }
+
+        try
+        {
+            Settings = Parse(json).Normalized();
+        }
+        catch (JsonException)
+        {
+            // Only malformed content is worth moving aside.
             if (source == _filePath)
                 PreserveCorruptFile();
             Settings = new AppSettings();
@@ -78,11 +102,28 @@ public sealed class SettingsService
             string? directory = Path.GetDirectoryName(_filePath);
             if (!string.IsNullOrEmpty(directory))
                 Directory.CreateDirectory(directory);
-            File.WriteAllText(_filePath, JsonSerializer.Serialize(Settings.Normalized(), Options));
+
+            // Write through a temporary file so a crash or a concurrent reader never sees a
+            // half-written settings file.
+            string tempPath = _filePath + ".tmp";
+            File.WriteAllText(tempPath, JsonSerializer.Serialize(Settings.Normalized(), Options));
+
+            if (File.Exists(_filePath))
+                File.Replace(tempPath, _filePath, destinationBackupFileName: null);
+            else
+                File.Move(tempPath, _filePath);
         }
         catch
         {
             // Persisting settings is best-effort; ignore IO failures.
+            try
+            {
+                File.Delete(_filePath + ".tmp");
+            }
+            catch
+            {
+                // Best effort.
+            }
         }
     }
 

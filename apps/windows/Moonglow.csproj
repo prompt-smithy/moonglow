@@ -10,7 +10,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>Moonglow</RootNamespace>
     <AssemblyName>Moonglow</AssemblyName>
-    <ApplicationIcon>Assets\Moonglow.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\resources\Moonglow.ico</ApplicationIcon>
     <Version>1.0.0</Version>
     <Product>Moonglow</Product>
     <AssemblyTitle>Moonglow</AssemblyTitle>
@@ -30,6 +30,14 @@
 
   <ItemGroup>
     <Compile Remove="tools\PortableLauncher\**\*.cs" />
+    <!-- Separate projects: the default glob would otherwise compile them into the app too. -->
+    <Compile Remove="Moonglow.Core\**\*.cs" />
+    <Compile Remove="Moonglow.Core.Tests\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Pure settings, schedule, kelvin, and range logic, shared with the conformance tests. -->
+    <ProjectReference Include="Moonglow.Core\Moonglow.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,12 +54,6 @@
   <ItemGroup>
     <!-- Ships with .NET Framework itself; not a NuGet package on net48. -->
     <Reference Include="System.Management" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- App logo art, embedded so the tray and window icons match the packaged icon. -->
-    <EmbeddedResource Include="Assets\Moonglow.png" LogicalName="Moonglow.Assets.Moonglow.png" />
-    <EmbeddedResource Include="Assets\Moonglow-small.png" LogicalName="Moonglow.Assets.Moonglow-small.png" />
   </ItemGroup>
 
   <!-- Single command that builds the portable launcher and installer. Run with:

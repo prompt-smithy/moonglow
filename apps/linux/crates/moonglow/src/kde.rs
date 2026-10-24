@@ -58,7 +58,7 @@ impl KwinNightLightService {
     }
 
     fn preview(&self, temp: u32) -> bool {
-        // Reachable from tray handlers (inside a runtime): never block directly.
+        // Reachable from UI and shortcut handlers (inside a runtime): never block directly.
         crate::runtime::drive(&self.runtime, async {
             let proxy = zbus::Proxy::new(&self.conn, BUS_NAME, OBJECT_PATH, INTERFACE).await?;
             proxy.call_method("preview", &(temp,)).await?;

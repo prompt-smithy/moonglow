@@ -1,16 +1,16 @@
 //! Blocking bridge for backend D-Bus calls from any thread.
 //!
 //! Backend `apply` methods are synchronous but speak D-Bus through a tokio
-//! runtime. Tray menu handlers run *inside* a tokio runtime already, where a
-//! direct `block_on` panics ("Cannot block_on within a runtime") — killing
-//! the reply (the host sees a timeout) and poisoning any mutex held across
-//! the call. Hopping to a fresh OS thread keeps every call site safe no
-//! matter which thread it runs on.
+//! runtime. Some handlers (the shortcut worker's portal session, and any UI
+//! call made from inside a runtime) run *inside* a tokio runtime already,
+//! where a direct `block_on` panics ("Cannot block_on within a runtime") —
+//! killing the reply and poisoning any mutex held across the call. Hopping to
+//! a fresh OS thread keeps every call site safe no matter which thread it runs
+//! on.
 //!
-//! Rule: any backend call reachable from tray handlers (or of otherwise
-//! unknown provenance) goes through [`drive`]. Threads that are plain OS
-//! threads by construction (startup probes, dedicated refreshers) may block
-//! their runtime directly.
+//! Rule: any backend call reachable from a handler of unknown provenance goes
+//! through [`drive`]. Threads that are plain OS threads by construction
+//! (startup probes, dedicated refreshers) may block their runtime directly.
 
 use std::future::Future;
 

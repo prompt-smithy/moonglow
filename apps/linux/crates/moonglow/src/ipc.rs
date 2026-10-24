@@ -3,9 +3,9 @@
 //! Protocol: newline-delimited JSON. Requests look like
 //! `{"cmd":"set_brightness","value":80}`; responses are `{"ok":true,...}` or
 //! `{"error":"..."}`. A second invocation forwards its command to the running
-//! instance instead of starting a second tray icon and schedule loop.
+//! instance instead of starting a second schedule loop and window.
 
-use crate::tray::{SharedState, TrayCommand};
+use crate::commands::{AppCommand, SharedState};
 use moonglow_core::state::ScheduleTime;
 use moonglow_core::time_of_day::TimeOfDay;
 use moonglow_core::traits::SettingsPersistence;
@@ -104,7 +104,7 @@ fn bind_socket(path: &std::path::Path) -> std::io::Result<UnixListener> {
 /// winner's socket.
 pub fn spawn_ipc<S: SettingsPersistence + 'static>(
     state: SharedState<S>,
-    cmd_tx: mpsc::Sender<TrayCommand>,
+    cmd_tx: mpsc::Sender<AppCommand>,
 ) -> Result<IpcHandle, String> {
     let path = socket_path();
     if let Some(parent) = path.parent() {
@@ -138,7 +138,7 @@ pub fn spawn_ipc<S: SettingsPersistence + 'static>(
 fn handle_connection<S: SettingsPersistence>(
     stream: UnixStream,
     state: &SharedState<S>,
-    cmd_tx: &mpsc::Sender<TrayCommand>,
+    cmd_tx: &mpsc::Sender<AppCommand>,
 ) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let mut reader = std::io::BufReader::new(stream.try_clone().unwrap_or(stream));
@@ -157,20 +157,20 @@ fn handle_connection<S: SettingsPersistence>(
 fn dispatch<S: SettingsPersistence>(
     request: &serde_json::Value,
     state: &SharedState<S>,
-    cmd_tx: &mpsc::Sender<TrayCommand>,
+    cmd_tx: &mpsc::Sender<AppCommand>,
 ) -> serde_json::Value {
     let cmd = request.get("cmd").and_then(|c| c.as_str()).unwrap_or("");
     match cmd {
         "ping" => serde_json::json!({"ok": true}),
         "show_settings" => {
-            let _ = cmd_tx.send(TrayCommand::ShowSettings);
+            let _ = cmd_tx.send(AppCommand::ShowWindow);
             crate::settings_ui::wake_ui();
             serde_json::json!({"ok": true})
         }
         "quit" => {
             // Direct first (never waits for the event loop), channel as backup.
             crate::request_quit();
-            let _ = cmd_tx.send(TrayCommand::Quit);
+            let _ = cmd_tx.send(AppCommand::Quit);
             crate::settings_ui::wake_ui();
             serde_json::json!({"ok": true})
         }
@@ -194,6 +194,29 @@ fn dispatch<S: SettingsPersistence>(
                 Err(_) => serde_json::json!({"error": "state locked"}),
             },
             None => serde_json::json!({"error": "missing integer 'delta'"}),
+        },
+        "hotkey" => match request.get("action").and_then(|v| v.as_str()) {
+            Some(action) => match state.lock() {
+                Ok(mut s) => {
+                    match action {
+                        "increase-brightness" => s.increase_brightness(),
+                        "decrease-brightness" => s.decrease_brightness(),
+                        "increase-temperature" => s.increase_color_temperature(),
+                        "decrease-temperature" => s.decrease_color_temperature(),
+                        _ => {
+                            return serde_json::json!({"error": format!("unknown hotkey action '{action}'")})
+                        }
+                    }
+                    serde_json::json!({
+                        "ok": true,
+                        "brightness": s.brightness(),
+                        "temperature": s.color_temperature(),
+                        "auto": s.auto_color_temperature(),
+                    })
+                }
+                Err(_) => serde_json::json!({"error": "state locked"}),
+            },
+            None => serde_json::json!({"error": "missing string 'action'"}),
         },
         "adjust_temp" => match request.get("delta").and_then(|v| v.as_i64()) {
             Some(delta) => match state.lock() {
@@ -428,7 +451,7 @@ mod tests {
         assert!(unknown.get("error").is_some());
 
         dispatch(&serde_json::json!({"cmd": "quit"}), &state, &tx);
-        assert_eq!(rx.try_recv().unwrap(), TrayCommand::Quit);
+        assert_eq!(rx.try_recv().unwrap(), AppCommand::Quit);
     }
 
     #[test]

@@ -20,12 +20,8 @@ install -Dm644 "packaging/moonglow.desktop" \
     "$STAGE/usr/share/applications/moonglow.desktop"
 install -Dm644 "packaging/moonglow.metainfo.xml" \
     "$STAGE/usr/share/metainfo/io.github.prompt-smithy.moonglow.metainfo.xml"
-for icon in moonglow-tray moonglow-brightness; do
-    install -Dm644 "packaging/icons/hicolor/scalable/apps/$icon.svg" \
-        "$STAGE/usr/share/icons/hicolor/scalable/apps/$icon.svg"
-done
 for size in 16 24 32 48 64 128 256 512; do
-    install -Dm644 "packaging/icons/hicolor/${size}x${size}/apps/moonglow.png" \
+    install -Dm644 "../../resources/linux/hicolor/${size}x${size}/apps/moonglow.png" \
         "$STAGE/usr/share/icons/hicolor/${size}x${size}/apps/moonglow.png"
 done
 install -Dm644 "packaging/51-moonglow-i2c.rules" \

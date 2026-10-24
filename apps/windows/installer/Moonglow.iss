@@ -27,7 +27,7 @@ UninstallDisplayName={#MyAppName}
 OutputDir={#OutputDir}
 ; Every flavor produces an installer named Moonglow.exe.
 OutputBaseFilename=Moonglow
-SetupIconFile={#SourcePath}\..\Assets\Moonglow.ico
+SetupIconFile={#SourcePath}\..\..\..\resources\Moonglow.ico
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

@@ -3,13 +3,13 @@
 <component type="desktop-application">
   <id>io.github.prompt-smithy.moonglow</id>
   <name>Moonglow</name>
-  <summary>External-display brightness and scheduled colour temperature</summary>
+  <summary>External-display brightness, colour temperature, and global shortcuts</summary>
   <description>
     <p>
       Moonglow drives external-monitor brightness over DDC/CI
-      and follows a morning/evening colour-temperature schedule. It lives
-      in the system tray with per-channel popups, scroll-to-adjust with
-      on-screen feedback, a settings window, and a full command-line
+      and follows a morning/evening colour-temperature schedule. Its
+      settings window has brightness and colour-temperature sliders, a
+      day/night range, global keyboard shortcuts, and a full command-line
       interface.
     </p>
   </description>
@@ -25,8 +25,8 @@
     <release version="1.0.0" date="2026-10-08">
       <description>
         <p>First stable Linux release: DDC/CI brightness, scheduled colour
-        temperature, tray popups with scroll adjustment and OSD feedback,
-        settings window, CLI, and autostart.</p>
+        temperature, a desktop settings window with global shortcuts, CLI,
+        and autostart.</p>
       </description>
     </release>
   </releases>

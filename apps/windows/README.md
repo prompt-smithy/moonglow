@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Assets/Moonglow.png" alt="Moonglow logo" width="160" height="160">
+  <img src="../../resources/Moonglow.png" alt="Moonglow logo" width="160" height="160">
 </p>
 
 <h1 align="center">Moonglow</h1>
@@ -39,13 +39,15 @@ Choose the download that matches your system:
 
 Use an installer for a standard Windows installation, or a portable build to run Moonglow without installing it.
 
-Moonglow runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, time format, and startup options.
+Moonglow runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, time format, and startup options. The tray and window icons are drawn at runtime in black or white to match the current Windows light/dark mode.
 
 ## Limitations
 
 Moonglow adjusts desktop colour temperature using a hardware gamma LUT (a 256-entry lookup table for each RGB channel). Gamma-LUT support varies by display driver; on at least one machine `SetDeviceGammaRamp` reported success without a visible change, so the effect is not guaranteed. Moonglow saves the existing ramp before changing it and restores it on exit.
 
-After waking from sleep while locked, Moonglow reapplies its gamma LUT because Windows may reset display state. The Windows password prompt and elevated consent prompts use a separate *secure desktop*, so tinting those screens remains driver-dependent. If the LUT does not appear there, configure Windows Night Light, which uses a different OS-level path.
+After waking from sleep while locked, Moonglow reapplies its gamma LUT because Windows may reset display state. The Windows password prompt and elevated consent prompts use a separate *secure desktop*, so tinting those screens remains driver-dependent.
+
+Windows **Night Light** and **HDR** take ownership of the display colour pipeline, which disables the GDI gamma ramp. Moonglow detects that and applies the same colour transform through the composition path so the schedule still works, but the two tints combine. For an exact temperature, turn Night Light/HDR off while Moonglow controls the screen.
 
 ## Build from source
 
@@ -54,6 +56,9 @@ Build on Windows with the [.NET SDK](https://dotnet.microsoft.com/download/dotne
 ```powershell
 # Build the application in Release configuration
 dotnet build Moonglow.csproj -c Release
+
+# Run the shared spec conformance suite
+dotnet test Moonglow.Core.Tests/Moonglow.Core.Tests.csproj -c Release
 
 # Build both distributables
 dotnet build Moonglow.csproj -t:PackageAll

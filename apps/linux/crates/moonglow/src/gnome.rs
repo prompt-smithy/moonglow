@@ -86,7 +86,7 @@ impl GnomeNightLightService {
     }
 
     fn set_temperature_live(&self, temp: u32) -> bool {
-        // Reachable from tray handlers (inside a runtime): never block directly.
+        // Reachable from UI and shortcut handlers (inside a runtime): never block directly.
         let result = crate::runtime::drive(&self.runtime, async {
             let proxy = zbus::Proxy::new(&self.conn, BUS_NAME, OBJECT_PATH, INTERFACE).await?;
             proxy.set_property("Temperature", temp).await

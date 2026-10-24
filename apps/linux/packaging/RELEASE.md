@@ -41,7 +41,7 @@ ls /usr/lib/udev/rules.d/51-moonglow-i2c.rules
 ```
 
 Then: `sudo usermod -aG i2c $USER`, log out/in, launch the app, check
-tray + DDC + schedule.
+window + DDC + schedule + shortcuts.
 
 ## 4. Arch (AUR)
 
@@ -68,7 +68,7 @@ list (adapted: `rpm -ql`, `man`).
 ## 6. Post-release
 
 - Record per-distro results in the test matrix (README or tracking
-  issue): installer path, tray, popup, OSD, DDC, schedule, quit
+  issue): installer path, window, shortcuts, DDC, schedule, quit
   restore, log location.
 - Kubuntu (KDE paths) and Debian stable (oldest stack) first, per the
   rollout plan.

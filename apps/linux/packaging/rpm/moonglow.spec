@@ -1,7 +1,7 @@
 Name:           moonglow
 Version:        1.0.0
 Release:        1%{?dist}
-Summary:        Tray app for external-display DDC/CI brightness and scheduled colour temperature
+Summary:        Desktop app for external-display DDC/CI brightness and scheduled colour temperature
 License:        MIT AND Apache-2.0
 URL:            https://github.com/prompt-smithy/moonglow
 Source0:        %{url}/archive/refs/tags/linux-v%{version}.tar.gz
@@ -16,9 +16,9 @@ ExclusiveArch:  x86_64 aarch64
 
 %description
 Moonglow drives external-monitor brightness over DDC/CI and
-follows a morning/evening colour-temperature schedule. It lives in the
-system tray with per-channel popups, scroll-to-adjust with on-screen
-feedback, a settings window, and a full command-line interface.
+follows a morning/evening colour-temperature schedule. Its settings window
+has brightness and colour-temperature sliders, a day/night range, global
+keyboard shortcuts, and a full command-line interface.
 
 %prep
 %autosetup -n moonglow-linux-v%{version}
@@ -26,17 +26,16 @@ feedback, a settings window, and a full command-line interface.
 %build
 # COPR builders have network access for the crates.io fetch. For Koji or
 # offline builds, vendor the registry and add --offline.
+cd apps/linux
 cargo build --release --locked -p moonglow
 
 %install
+cd apps/linux
 install -Dm755 target/release/moonglow %{buildroot}%{_bindir}/moonglow
 install -Dm644 packaging/moonglow.desktop %{buildroot}%{_datadir}/applications/moonglow.desktop
 install -Dm644 packaging/moonglow.metainfo.xml %{buildroot}%{_datadir}/metainfo/io.github.prompt-smithy.moonglow.metainfo.xml
-for icon in moonglow-tray moonglow-brightness; do
-    install -Dm644 packaging/icons/hicolor/scalable/apps/$icon.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/$icon.svg
-done
 for size in 16 24 32 48 64 128 256 512; do
-    install -Dm644 packaging/icons/hicolor/${size}x${size}/apps/moonglow.png %{buildroot}%{_datadir}/icons/hicolor/${size}x${size}/apps/moonglow.png
+    install -Dm644 ../../resources/linux/hicolor/${size}x${size}/apps/moonglow.png %{buildroot}%{_datadir}/icons/hicolor/${size}x${size}/apps/moonglow.png
 done
 install -Dm644 packaging/51-moonglow-i2c.rules %{buildroot}%{_udevrulesdir}/51-moonglow-i2c.rules
 install -Dm644 packaging/moonglow.1 %{buildroot}%{_mandir}/man1/moonglow.1
@@ -58,8 +57,6 @@ EOF
 %{_bindir}/moonglow
 %{_datadir}/applications/moonglow.desktop
 %{_datadir}/metainfo/io.github.prompt-smithy.moonglow.metainfo.xml
-%{_datadir}/icons/hicolor/scalable/apps/moonglow-tray.svg
-%{_datadir}/icons/hicolor/scalable/apps/moonglow-brightness.svg
 %{_datadir}/icons/hicolor/*/apps/moonglow.png
 %{_udevrulesdir}/51-moonglow-i2c.rules
 %{_mandir}/man1/moonglow.1*

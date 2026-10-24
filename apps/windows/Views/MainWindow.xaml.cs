@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Moonglow.Infrastructure;
+using Moonglow.Services;
 
 namespace Moonglow.Views;
 
@@ -12,7 +13,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Icon = IconFactory.CreateImageSource();
+        Icon = IconFactory.CreateImageSource(!ThemeService.IsWindowsLight());
 
         _inactivityTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
         _inactivityTimer.Tick += (_, _) => Close();

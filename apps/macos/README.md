@@ -24,7 +24,11 @@ macOS blocks it.
 | `Sources/Moonglow/` | macOS app shell: entry point, status item, popover, settings window, SwiftUI views, native bridges. |
 | `Tests/MoonglowKitTests/` | Swift Testing suite for everything in `MoonglowKit`. |
 | `Packaging/` | `Info.plist` and `build-app.sh` (app bundle, DMG, ZIP). |
-| `Resources/` | App icon art. `Moonglow.png` is the 1024 px master; `Moonglow-small.png` supplies the 16/32 pt frames, where the rays are too small to read. Both are produced by `tools/generate-app-icons.py`. |
+
+The app icon is generated from the shared [`resources/Moonglow.png`](../../resources/Moonglow.png)
+at the repository root, and the menu-bar button draws the same crescent mark as a
+template image ([`StatusIconFactory`](Sources/Moonglow/Shell/StatusIconFactory.swift)), so the
+system tints it for the current appearance.
 
 ## Requirements
 

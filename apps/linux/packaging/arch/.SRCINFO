@@ -1,6 +1,6 @@
 # Generated with `makepkg --printsrcinfo` after filling in sha256sums.
 pkgbase = moonglow
-	pkgdesc = Tray app for external-display DDC/CI brightness and scheduled colour temperature
+	pkgdesc = Desktop app for external-display DDC/CI brightness and scheduled colour temperature
 	pkgver = 1.0.0
 	pkgrel = 1
 	url = https://github.com/prompt-smithy/moonglow

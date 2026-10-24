@@ -27,11 +27,8 @@ dmg_staging_dir="$artifacts_dir/dmg"
 iconset_dir="$artifacts_dir/Moonglow.iconset"
 zip_path="$release_dir/Moonglow-macOS-universal.zip"
 dmg_path="$release_dir/Moonglow-macOS-universal.dmg"
-icon_source="$repo_dir/Resources/Moonglow.png"
-# The 16 and 32 pt frames use the crescent-only artwork; the rays fall below a
-# pixel at those sizes. Falls back to the full logo if the variant is missing.
-small_icon_source="$repo_dir/Resources/Moonglow-small.png"
-[[ -f "$small_icon_source" ]] || small_icon_source="$icon_source"
+# Shared artwork lives at the repository root so every app consumes one master.
+icon_source="$repo_dir/../../resources/Moonglow.png"
 configuration="${MOONGLOW_CONFIGURATION:-release}"
 # Single source for the release version, stamped into the built plist below.
 moonglow_version="${MOONGLOW_VERSION:-0.2.0}"
@@ -97,9 +94,9 @@ plutil -replace CFBundleShortVersionString -string "$moonglow_version" "$app_dir
 plutil -replace CFBundleVersion -string "$moonglow_build" "$app_dir/Contents/Info.plist"
 plutil -insert MoonglowInstallationID -string "$moonglow_version ($moonglow_build)" "$app_dir/Contents/Info.plist"
 
-sips -z 16 16 "$small_icon_source" --out "$iconset_dir/icon_16x16.png" >/dev/null
-sips -z 32 32 "$small_icon_source" --out "$iconset_dir/icon_16x16@2x.png" >/dev/null
-sips -z 32 32 "$small_icon_source" --out "$iconset_dir/icon_32x32.png" >/dev/null
+sips -z 16 16 "$icon_source" --out "$iconset_dir/icon_16x16.png" >/dev/null
+sips -z 32 32 "$icon_source" --out "$iconset_dir/icon_16x16@2x.png" >/dev/null
+sips -z 32 32 "$icon_source" --out "$iconset_dir/icon_32x32.png" >/dev/null
 sips -z 64 64 "$icon_source" --out "$iconset_dir/icon_32x32@2x.png" >/dev/null
 sips -z 128 128 "$icon_source" --out "$iconset_dir/icon_128x128.png" >/dev/null
 sips -z 256 256 "$icon_source" --out "$iconset_dir/icon_128x128@2x.png" >/dev/null

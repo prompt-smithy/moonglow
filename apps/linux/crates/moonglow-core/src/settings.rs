@@ -5,6 +5,7 @@
 //! is lenient: any missing or malformed value falls back to its default rather
 //! than failing the whole load.
 
+use crate::shortcut::{Shortcut, ShortcutAction};
 use crate::TimeOfDay;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -46,6 +47,16 @@ pub struct AppSettings {
     /// settings file, so it is re-asserted at launch rather than trusted.
     #[serde(default)]
     pub launch_at_login: bool,
+    /// Global shortcuts, stored as `"Ctrl+Alt+Up"` strings. `None` disables
+    /// that action without clearing the others.
+    #[serde(default = "default_increase_brightness_shortcut")]
+    pub increase_brightness_shortcut: Option<Shortcut>,
+    #[serde(default = "default_decrease_brightness_shortcut")]
+    pub decrease_brightness_shortcut: Option<Shortcut>,
+    #[serde(default = "default_increase_temperature_shortcut")]
+    pub increase_temperature_shortcut: Option<Shortcut>,
+    #[serde(default = "default_decrease_temperature_shortcut")]
+    pub decrease_temperature_shortcut: Option<Shortcut>,
 }
 
 fn default_day() -> i32 {
@@ -75,6 +86,36 @@ fn default_brightness() -> i32 {
 fn default_manual_temp() -> i32 {
     6500
 }
+fn shortcut_of(settings: &AppSettings, action: ShortcutAction) -> Option<Shortcut> {
+    match action {
+        ShortcutAction::IncreaseBrightness => settings.increase_brightness_shortcut,
+        ShortcutAction::DecreaseBrightness => settings.decrease_brightness_shortcut,
+        ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut,
+        ShortcutAction::DecreaseTemperature => settings.decrease_temperature_shortcut,
+    }
+}
+
+fn set_shortcut(settings: &mut AppSettings, action: ShortcutAction, value: Option<Shortcut>) {
+    match action {
+        ShortcutAction::IncreaseBrightness => settings.increase_brightness_shortcut = value,
+        ShortcutAction::DecreaseBrightness => settings.decrease_brightness_shortcut = value,
+        ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut = value,
+        ShortcutAction::DecreaseTemperature => settings.decrease_temperature_shortcut = value,
+    }
+}
+
+fn default_increase_brightness_shortcut() -> Option<Shortcut> {
+    Some(ShortcutAction::IncreaseBrightness.default_shortcut())
+}
+fn default_decrease_brightness_shortcut() -> Option<Shortcut> {
+    Some(ShortcutAction::DecreaseBrightness.default_shortcut())
+}
+fn default_increase_temperature_shortcut() -> Option<Shortcut> {
+    Some(ShortcutAction::IncreaseTemperature.default_shortcut())
+}
+fn default_decrease_temperature_shortcut() -> Option<Shortcut> {
+    Some(ShortcutAction::DecreaseTemperature.default_shortcut())
+}
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -89,6 +130,10 @@ impl Default for AppSettings {
             manual_brightness: default_brightness(),
             manual_color_temp_k: default_manual_temp(),
             launch_at_login: false,
+            increase_brightness_shortcut: default_increase_brightness_shortcut(),
+            decrease_brightness_shortcut: default_decrease_brightness_shortcut(),
+            increase_temperature_shortcut: default_increase_temperature_shortcut(),
+            decrease_temperature_shortcut: default_decrease_temperature_shortcut(),
         }
     }
 }
@@ -147,6 +192,19 @@ impl AppSettings {
         if !copy.evening_end.valid() {
             copy.evening_end = Self::default_evening_end();
         }
+        // One key combination must never fire two actions, even if the file
+        // was edited by hand. Later assignments lose to earlier ones.
+        let mut seen: Vec<Shortcut> = Vec::new();
+        for action in ShortcutAction::ALL {
+            let Some(shortcut) = shortcut_of(&copy, action) else {
+                continue;
+            };
+            if seen.contains(&shortcut) {
+                set_shortcut(&mut copy, action, None);
+            } else {
+                seen.push(shortcut);
+            }
+        }
         copy
     }
 }
@@ -170,6 +228,21 @@ impl<'de> Deserialize<'de> for AppSettings {
                 .unwrap_or(fallback)
         }
 
+        // `null` deliberately clears a shortcut, so a present null must not
+        // fall back to the default the way a malformed value does.
+        fn shortcut(
+            value: Option<&serde_json::Value>,
+            fallback: Option<Shortcut>,
+        ) -> Option<Shortcut> {
+            match value {
+                None => fallback,
+                Some(serde_json::Value::Null) => None,
+                Some(v) => serde_json::from_value::<Shortcut>(v.clone())
+                    .ok()
+                    .or(fallback),
+            }
+        }
+
         // Unknown keys (older theme keys, removed clock keys) are ignored.
         Ok(AppSettings {
             day_color_temp_k: convert(get("dayColorTempK"), defaults.day_color_temp_k),
@@ -185,6 +258,22 @@ impl<'de> Deserialize<'de> for AppSettings {
             manual_brightness: convert(get("manualBrightness"), defaults.manual_brightness),
             manual_color_temp_k: convert(get("manualColorTempK"), defaults.manual_color_temp_k),
             launch_at_login: convert(get("launchAtLogin"), defaults.launch_at_login),
+            increase_brightness_shortcut: shortcut(
+                get("increaseBrightnessShortcut"),
+                defaults.increase_brightness_shortcut,
+            ),
+            decrease_brightness_shortcut: shortcut(
+                get("decreaseBrightnessShortcut"),
+                defaults.decrease_brightness_shortcut,
+            ),
+            increase_temperature_shortcut: shortcut(
+                get("increaseTemperatureShortcut"),
+                defaults.increase_temperature_shortcut,
+            ),
+            decrease_temperature_shortcut: shortcut(
+                get("decreaseTemperatureShortcut"),
+                defaults.decrease_temperature_shortcut,
+            ),
         })
     }
 }
@@ -202,6 +291,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn normalizes_out_of_range_values() {
         let mut bad = AppSettings::default();
         bad.manual_brightness = 500;
@@ -237,6 +327,48 @@ mod tests {
         let decoded: AppSettings = serde_json::from_str(json).unwrap();
         assert_eq!(decoded.manual_brightness, default_brightness());
         assert_eq!(decoded.day_color_temp_k, 5000);
+    }
+
+    #[test]
+    fn shortcuts_decode_leniently_and_null_clears() {
+        let json = r#"{
+            "increaseBrightnessShortcut": "Ctrl+Shift+F1",
+            "decreaseBrightnessShortcut": null,
+            "increaseTemperatureShortcut": "not a shortcut",
+            "decreaseTemperatureShortcut": 42
+        }"#;
+        let decoded: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            decoded.increase_brightness_shortcut,
+            Some("Ctrl+Shift+F1".parse().unwrap())
+        );
+        assert_eq!(decoded.decrease_brightness_shortcut, None);
+        // Malformed values fall back to the default instead of failing the load.
+        assert_eq!(
+            decoded.increase_temperature_shortcut,
+            Some(ShortcutAction::IncreaseTemperature.default_shortcut())
+        );
+        assert_eq!(
+            decoded.decrease_temperature_shortcut,
+            Some(ShortcutAction::DecreaseTemperature.default_shortcut())
+        );
+        // A missing key falls back to the default too.
+        let missing: AppSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(
+            missing.increase_brightness_shortcut,
+            Some(ShortcutAction::IncreaseBrightness.default_shortcut())
+        );
+    }
+
+    #[test]
+    fn duplicate_shortcuts_are_resolved_on_normalize() {
+        let mut settings = AppSettings::default();
+        let duplicate: Shortcut = "Ctrl+Shift+F10".parse().unwrap();
+        settings.increase_brightness_shortcut = Some(duplicate);
+        settings.decrease_temperature_shortcut = Some(duplicate);
+        let fixed = settings.normalized();
+        assert_eq!(fixed.increase_brightness_shortcut, Some(duplicate));
+        assert_eq!(fixed.decrease_temperature_shortcut, None);
     }
 
     #[test]

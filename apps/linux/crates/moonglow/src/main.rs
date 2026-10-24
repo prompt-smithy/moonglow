@@ -1,30 +1,31 @@
 //! Moonglow for Linux.
 //!
-//! Tray app for external-display DDC/CI brightness and scheduled colour
-//! temperature. This module is the composition root (deliberately hand-rolled,
-//! like the macOS `AppDelegate`): it picks the gamma backend for the running
-//! session, wires the shared state, and owns shutdown — including restoring
-//! the pre-launch gamma state so quitting never leaves a display tinted.
+//! Desktop application for external-display DDC/CI brightness and scheduled
+//! colour temperature. This module is the composition root (deliberately
+//! hand-rolled, like the macOS `AppDelegate`): it picks the gamma backend for
+//! the running session, wires the shared state, and owns shutdown — including
+//! restoring the pre-launch gamma state so quitting never leaves a display
+//! tinted.
 
 mod autostart;
+mod commands;
 mod ddc;
 mod displays;
 mod gnome;
 mod ipc;
 mod kde;
 mod logging;
-mod osd;
 mod runtime;
 mod session;
 mod settings_ui;
+mod shortcuts;
 mod store;
-mod tray;
 mod visibility;
 mod wlr;
 mod x11;
-mod xembed;
 
 use clap::Parser;
+use commands::{AppCommand, SharedState};
 use moonglow_core::schedule::TICK_INTERVAL_SECS;
 use moonglow_core::state::{ScheduleTime, ScheduleWindow, StateManager};
 use moonglow_core::time_of_day::TimeOfDay;
@@ -34,13 +35,12 @@ use moonglow_core::traits::{
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
-use tray::{SharedState, TrayCommand};
 
 #[derive(Parser)]
 #[command(
     name = "moonglow",
     version,
-    about = "External-display brightness and scheduled colour temperature"
+    about = "External-display brightness, scheduled colour temperature, and global shortcuts"
 )]
 struct Cli {
     /// Show the settings window (forwards to the running instance).
@@ -91,12 +91,24 @@ struct Cli {
     /// With --status: print machine-readable JSON.
     #[arg(long)]
     json: bool,
-    /// Run without a tray icon.
+    /// Start with the window hidden (still running in the background).
     #[arg(long)]
-    no_tray: bool,
-    /// Run without the settings window (tray and schedule only).
+    hidden: bool,
+    /// Run without the settings window (schedule and shortcuts only).
     #[arg(long)]
     headless: bool,
+    /// Global-shortcut action: raise brightness by 5%.
+    #[arg(long)]
+    brightness_up: bool,
+    /// Global-shortcut action: lower brightness by 5%.
+    #[arg(long)]
+    brightness_down: bool,
+    /// Global-shortcut action: raise colour temperature by 100 K.
+    #[arg(long)]
+    temperature_up: bool,
+    /// Global-shortcut action: lower colour temperature by 100 K.
+    #[arg(long)]
+    temperature_down: bool,
 }
 
 /// Forwards `ColorTemperatureService` to a shared concrete backend so the
@@ -385,6 +397,24 @@ fn direct_command(cli: &Cli) -> i32 {
         state.set_brightness(state.brightness() - 5);
         println!("brightness: {}%", state.brightness());
     }
+    if cli.brightness_up {
+        state.increase_brightness();
+        println!("brightness: {}%", state.brightness());
+    }
+    if cli.brightness_down {
+        state.decrease_brightness();
+        println!("brightness: {}%", state.brightness());
+    }
+    if cli.temperature_up {
+        state.increase_color_temperature();
+        println!("temperature: {} K", state.color_temperature());
+        println!("automatic: {}", state.auto_color_temperature());
+    }
+    if cli.temperature_down {
+        state.decrease_color_temperature();
+        println!("temperature: {} K", state.color_temperature());
+        println!("automatic: {}", state.auto_color_temperature());
+    }
     if let Some(kelvin) = cli.set_temp {
         if state.auto_color_temperature() {
             println!(
@@ -480,7 +510,11 @@ fn direct_command(cli: &Cli) -> i32 {
             && !cli.brighter
             && !cli.dimmer
             && !cli.warmer
-            && !cli.cooler)
+            && !cli.cooler
+            && !cli.brightness_up
+            && !cli.brightness_down
+            && !cli.temperature_up
+            && !cli.temperature_down)
     {
         let status = serde_json::json!({
             "brightness": state.brightness(),
@@ -549,6 +583,31 @@ fn forward_command(cli: &Cli) -> i32 {
         let delta = if cli.brighter { 5 } else { -5 };
         match ipc::send(&serde_json::json!({"cmd": "adjust_brightness", "delta": delta})) {
             Ok(response) => println!("brightness: {}%", response["brightness"]),
+            Err(e) => {
+                eprintln!("{e}");
+                return 1;
+            }
+        }
+    }
+    let hotkey_action = if cli.brightness_up {
+        Some("increase-brightness")
+    } else if cli.brightness_down {
+        Some("decrease-brightness")
+    } else if cli.temperature_up {
+        Some("increase-temperature")
+    } else if cli.temperature_down {
+        Some("decrease-temperature")
+    } else {
+        None
+    };
+    if let Some(action) = hotkey_action {
+        acted = true;
+        match ipc::send(&serde_json::json!({"cmd": "hotkey", "action": action})) {
+            Ok(response) => {
+                println!("brightness: {}%", response["brightness"]);
+                println!("temperature: {} K", response["temperature"]);
+                println!("automatic: {}", response["auto"]);
+            }
             Err(e) => {
                 eprintln!("{e}");
                 return 1;
@@ -731,9 +790,7 @@ fn forward_command(cli: &Cli) -> i32 {
 struct Shutdown {
     sched_stop: Arc<AtomicBool>,
     sched_thread: Option<std::thread::JoinHandle<()>>,
-    tray_handle: Option<tray::TrayHandle>,
-    xembed_stop: Arc<AtomicBool>,
-    xembed_thread: Option<std::thread::JoinHandle<()>>,
+    shortcut_handle: Option<shortcuts::ShortcutHandle>,
     ipc_handle: Option<ipc::IpcHandle>,
     color: Arc<Mutex<dyn ColorTemperatureService>>,
     hardware: Arc<Mutex<ddc::LinuxDdcService>>,
@@ -746,12 +803,8 @@ impl Shutdown {
         if let Some(thread) = self.sched_thread {
             let _ = thread.join();
         }
-        if let Some(handle) = self.tray_handle {
+        if let Some(handle) = self.shortcut_handle {
             handle.stop();
-        }
-        self.xembed_stop.store(true, Ordering::Relaxed);
-        if let Some(thread) = self.xembed_thread {
-            let _ = thread.join();
         }
         if let Some(handle) = self.ipc_handle {
             handle.stop();
@@ -805,7 +858,7 @@ fn quit_now(shutdown: &SharedShutdown) -> ! {
     std::process::exit(0);
 }
 
-/// Shutdown bundle for out-of-loop quit requests (IPC, tray, Ctrl-C).
+/// Shutdown bundle for out-of-loop quit requests (IPC, Ctrl-C).
 static SHUTDOWN: std::sync::OnceLock<SharedShutdown> = std::sync::OnceLock::new();
 
 /// Quits from any thread without involving the event loop: shutdown runs on a
@@ -840,7 +893,11 @@ fn main() {
         || cli.brighter
         || cli.dimmer
         || cli.warmer
-        || cli.cooler;
+        || cli.cooler
+        || cli.brightness_up
+        || cli.brightness_down
+        || cli.temperature_up
+        || cli.temperature_down;
     if one_shot && !cli.show_settings {
         std::process::exit(direct_command(&cli));
     }
@@ -873,19 +930,19 @@ fn main() {
         state.apply_initial_state();
     }
 
-    let (cmd_tx, cmd_rx) = mpsc::channel::<TrayCommand>();
+    let (cmd_tx, cmd_rx) = mpsc::channel::<AppCommand>();
     {
         let tx = cmd_tx.clone();
         if let Ok(mut state) = state.lock() {
             state.on_show_settings(move || {
-                let _ = tx.send(TrayCommand::ShowSettings);
+                let _ = tx.send(AppCommand::ShowWindow);
                 settings_ui::wake_ui();
             });
         }
         let tx = cmd_tx.clone();
         if let Ok(mut state) = state.lock() {
             state.on_quit(move || {
-                let _ = tx.send(TrayCommand::Quit);
+                let _ = tx.send(AppCommand::Quit);
                 settings_ui::wake_ui();
             });
         }
@@ -926,75 +983,19 @@ fn main() {
     // IPC always runs on the primary so later invocations forward.
     let ipc_handle = ipc::spawn_ipc(state.clone(), cmd_tx.clone()).ok();
 
-    // Tray unless disabled; failure is non-fatal (GNOME without the extension).
-    let tray_registered = Arc::new(AtomicBool::new(false));
-    // Value-feedback bubbles for tray scroll/steppers; the worker exits
-    // silently without a notification daemon.
-    let osd_tx = osd::spawn();
-    let tray_handle = if cli.no_tray {
-        None
-    } else {
-        match tray::spawn_tray(
-            state.clone(),
-            cmd_tx.clone(),
-            osd_tx,
-            tray_registered.clone(),
-        ) {
-            Ok(handle) => Some(handle),
-            Err(e) => {
-                eprintln!("{e}; continuing without a tray icon");
-                None
-            }
-        }
-    };
-
-    // X11 only: if StatusNotifier never registers (minimal panels), fall back
-    // to a legacy XEmbed dock icon so the app still has a presence.
+    // Global shortcuts: registered by the desktop or grabbed on X11, then
+    // re-registered whenever the bindings change.
     let session_kind = session::detect_session();
-    let xembed_stop = Arc::new(AtomicBool::new(false));
-    let xembed_thread = if !cli.no_tray
-        && matches!(
-            session_kind,
-            session::SessionKind::X11 | session::SessionKind::XWayland
-        ) {
-        let stop = xembed_stop.clone();
-        let registered = tray_registered.clone();
-        let tx = cmd_tx.clone();
-        std::thread::Builder::new()
-            .name("moonglow-xembed-watch".to_string())
-            .spawn(move || {
-                for _ in 0..80 {
-                    if stop.load(Ordering::Relaxed) {
-                        return;
-                    }
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-                if registered.load(Ordering::Relaxed) || stop.load(Ordering::Relaxed) {
-                    return;
-                }
-                match xembed::spawn_xembed(tx) {
-                    Ok(handle) => {
-                        eprintln!("tray: using legacy XEmbed fallback");
-                        while !stop.load(Ordering::Relaxed) {
-                            std::thread::sleep(Duration::from_millis(500));
-                        }
-                        handle.stop();
-                    }
-                    Err(e) => eprintln!("{e}; continuing without a tray icon"),
-                }
-            })
-            .ok()
-    } else {
-        None
-    };
+    let (shortcut_handle, shortcut_status) = shortcuts::spawn(state.clone(), session_kind);
+    let shortcut_handle = Some(shortcut_handle);
 
-    // Ctrl-C quits gracefully through the same path as the tray.
+    // Ctrl-C quits gracefully through the same path as the window button.
     {
         let tx = cmd_tx.clone();
         let _ = ctrlc::set_handler(move || {
             // Direct first (never waits for the event loop), channel as backup.
             request_quit();
-            let _ = tx.send(TrayCommand::Quit);
+            let _ = tx.send(AppCommand::Quit);
             settings_ui::wake_ui();
         });
     }
@@ -1004,9 +1005,7 @@ fn main() {
     let shutdown: SharedShutdown = Arc::new(Mutex::new(Some(Shutdown {
         sched_stop,
         sched_thread,
-        tray_handle,
-        xembed_stop,
-        xembed_thread,
+        shortcut_handle,
         ipc_handle,
         color,
         hardware,
@@ -1014,11 +1013,11 @@ fn main() {
     let _ = SHUTDOWN.set(shutdown.clone());
 
     if cli.headless {
-        eprintln!("running headless (schedule + tray); quit with Ctrl-C or --quit");
+        eprintln!("running headless (schedule + shortcuts); quit with Ctrl-C or --quit");
         loop {
             match cmd_rx.recv() {
-                Ok(TrayCommand::Quit) => break,
-                Ok(TrayCommand::ShowSettings) => {
+                Ok(AppCommand::Quit) => break,
+                Ok(AppCommand::ShowWindow) => {
                     eprintln!("settings window unavailable in --headless mode");
                 }
                 Err(_) => break,
@@ -1026,21 +1025,22 @@ fn main() {
         }
     } else {
         // winit cannot hide windows on Wayland (`set_visible` is a documented
-        // no-op there), which breaks the tray-first hide/show lifecycle into
-        // stuck empty windows. Run the settings window through XWayland,
-        // where hide/unmap works; session and backends were already detected
-        // from the real environment above, so color, tray, and IPC select
-        // the native Wayland paths regardless.
+        // no-op there), which breaks the hide/show lifecycle into stuck empty
+        // windows. Run the settings window through XWayland, where hide/unmap
+        // works; session and backends were already detected from the real
+        // environment above, so colour, shortcuts, and IPC select the native
+        // Wayland paths regardless.
         if std::env::var_os("WAYLAND_DISPLAY").is_some() {
             std::env::remove_var("WAYLAND_DISPLAY");
         }
         // The settings window owns the main thread (GUI toolkits require it)
-        // and polls the same command channel every frame.
-        let start_visible = cli.show_settings;
+        // and polls the same command channel every frame. A normal launch is
+        // visible; `--hidden` starts in the background for autostart.
+        let start_visible = cli.show_settings || !cli.hidden;
         if let Err(e) = settings_ui::run_settings_window(
             state.clone(),
             cmd_rx,
-            tray_registered.clone(),
+            shortcut_status,
             start_visible,
             shutdown.clone(),
         ) {
@@ -1157,9 +1157,7 @@ mod tests {
         let shutdown: SharedShutdown = Arc::new(Mutex::new(Some(Shutdown {
             sched_stop: Arc::new(AtomicBool::new(false)),
             sched_thread: None,
-            tray_handle: None,
-            xembed_stop: Arc::new(AtomicBool::new(false)),
-            xembed_thread: None,
+            shortcut_handle: None,
             ipc_handle: None,
             color,
             hardware: Arc::new(Mutex::new(ddc::LinuxDdcService::probe())),

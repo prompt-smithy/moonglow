@@ -6,13 +6,12 @@ Section: utils
 Priority: optional
 Depends: libc6, libgcc-s1
 Recommends: i2c-tools
-Suggests: gnome-shell-extension-appindicator
 Homepage: https://github.com/prompt-smithy/moonglow
-Description: Tray app for external-display brightness and scheduled colour temperature
+Description: Desktop app for external-display brightness and scheduled colour temperature
  Moonglow drives external-monitor brightness over DDC/CI and
- follows a morning/evening colour-temperature schedule. It lives in the
- system tray with per-channel popups, scroll-to-adjust with OSD feedback,
- a settings window, and a full command-line interface.
+ follows a morning/evening colour-temperature schedule. Its settings window
+ has brightness and colour-temperature sliders, a day/night range, global
+ keyboard shortcuts, and a full command-line interface.
  .
  DDC/CI brightness needs i2c access: install i2c-tools, join the i2c group
  (sudo usermod -aG i2c $USER), and log out and back in.

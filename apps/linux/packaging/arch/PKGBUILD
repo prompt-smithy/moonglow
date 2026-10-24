@@ -4,7 +4,7 @@
 pkgname=moonglow
 pkgver=1.0.0
 pkgrel=1
-pkgdesc="Tray app for external-display DDC/CI brightness and scheduled colour temperature"
+pkgdesc="Desktop app for external-display DDC/CI brightness and scheduled colour temperature"
 arch=('x86_64' 'aarch64')
 url="https://github.com/prompt-smithy/moonglow"
 license=('MIT' 'Apache-2.0')
@@ -16,20 +16,17 @@ source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/linux-v$pkgver.tar.gz")
 sha256sums=('REPLACE_AFTER_TAG')
 
 build() {
-    cd "moonglow-linux-v$pkgver"
+    cd "moonglow-linux-v$pkgver/apps/linux"
     cargo build --release --locked -p moonglow
 }
 
 package() {
-    cd "moonglow-linux-v$pkgver"
+    cd "moonglow-linux-v$pkgver/apps/linux"
     install -Dm755 "target/release/moonglow" "$pkgdir/usr/bin/moonglow"
     install -Dm644 "packaging/moonglow.desktop" "$pkgdir/usr/share/applications/moonglow.desktop"
     install -Dm644 "packaging/moonglow.metainfo.xml" "$pkgdir/usr/share/metainfo/io.github.prompt-smithy.moonglow.metainfo.xml"
-    for icon in moonglow-tray moonglow-brightness; do
-        install -Dm644 "packaging/icons/hicolor/scalable/apps/$icon.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/$icon.svg"
-    done
     for size in 16 24 32 48 64 128 256 512; do
-        install -Dm644 "packaging/icons/hicolor/${size}x${size}/apps/moonglow.png" "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/moonglow.png"
+        install -Dm644 "../../resources/linux/hicolor/${size}x${size}/apps/moonglow.png" "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/moonglow.png"
     done
     install -Dm644 "packaging/51-moonglow-i2c.rules" "$pkgdir/usr/lib/udev/rules.d/51-moonglow-i2c.rules"
     install -Dm644 "packaging/moonglow.1" "$pkgdir/usr/share/man/man1/moonglow.1"

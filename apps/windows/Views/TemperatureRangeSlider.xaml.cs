@@ -2,15 +2,15 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using Moonglow.Infrastructure;
+using Moonglow.Core;
 
 namespace Moonglow.Views;
 
 public partial class TemperatureRangeSlider : UserControl
 {
-    private const int Minimum = 900;
-    private const int Maximum = 6600;
-    private const int Step = 100;
+    private const int Minimum = AppSettings.MinKelvin;
+    private const int Maximum = AppSettings.MaxKelvin;
+    private const int Step = AppSettings.KelvinStep;
     private const double ThumbSize = 16;
     /// <summary>Must match the track <c>Border</c> height in TemperatureRangeSlider.xaml.</summary>
     private const double TrackThickness = 6;
@@ -101,7 +101,7 @@ public partial class TemperatureRangeSlider : UserControl
         double trackStart = ThumbSize / 2;
         double trackWidth = SliderCanvas.ActualWidth - ThumbSize;
         double progress = MathUtil.Clamp((position - trackStart) / trackWidth, 0, 1);
-        return MathUtil.Clamp(Minimum + (int)Math.Round((Maximum - Minimum) * progress / Step) * Step, Minimum, Maximum);
+        return TemperatureRange.Snap(Minimum + (int)Math.Round((Maximum - Minimum) * progress));
     }
 
     private void SliderCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

@@ -25,7 +25,7 @@ fn desktop_entry_text(exec: &str) -> String {
          Type=Application\n\
          Name=Moonglow\n\
          Comment=External-display brightness and scheduled colour temperature\n\
-         Exec={exec}\n\
+         Exec={exec} --hidden\n\
          Icon=moonglow\n\
          Terminal=false\n\
          Categories=Utility;\n\
@@ -63,6 +63,13 @@ impl LoginItemService for AutostartService {
             let exec = std::env::current_exe()
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_else(|_| "moonglow".to_string());
+            // Desktop entries parse Exec as a command line; a path with spaces
+            // must be quoted or the launcher splits it.
+            let exec = if exec.contains(' ') {
+                format!("\"{exec}\"")
+            } else {
+                exec
+            };
             if let Some(parent) = self.file_path.parent() {
                 if std::fs::create_dir_all(parent).is_err() {
                     return false;
@@ -135,6 +142,7 @@ mod tests {
         assert!(service.is_enabled());
         let text = std::fs::read_to_string(&service.file_path).unwrap();
         assert!(text.contains("[Desktop Entry]"));
+        assert!(text.contains(" --hidden"));
         assert!(text.contains("X-GNOME-Autostart-enabled=true"));
         assert!(service.set_enabled(false));
         assert!(!service.is_enabled());

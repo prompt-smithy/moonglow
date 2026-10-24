@@ -11,7 +11,13 @@ public sealed class MonitorService : IDisposable
     private readonly List<PHYSICAL_MONITOR> _physical = new();
     private readonly object _sync = new();
 
-    public IReadOnlyList<MonitorInfo> Monitors => _monitors;
+    /// <summary>A stable copy of the current displays. Refresh can run on a worker thread, so
+    /// callers must not enumerate the live list.</summary>
+    public IReadOnlyList<MonitorInfo> Snapshot()
+    {
+        lock (_sync)
+            return _monitors.ToArray();
+    }
 
     public void Refresh()
     {
