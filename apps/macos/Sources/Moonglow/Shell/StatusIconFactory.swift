@@ -1,7 +1,7 @@
 import AppKit
 
-/// Draws the shared Moonglow crescent as a template image, so the menu bar tints it for the
-/// current appearance on its own.
+/// Draws the shared Moonglow crescent: a black moon with a white keyline, the same
+/// two-tone mark as the packaged icon, in every appearance.
 ///
 /// Geometry mirrors `tools/generate-logo-assets.ps1`, which produces the icons used by the
 /// Windows and Linux builds.
@@ -15,13 +15,13 @@ enum StatusIconFactory {
     private static let cutAngleDegrees: Double = 45
 
     /// The crescent at `size` points, ready for a status-bar button.
-    static func trayImage(size: CGFloat = 18) -> NSImage {
+    static func trayImage(size: CGFloat = 18) -> NSImage { // Keyline mirrors tools/generate-logo-assets.ps1.
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
-            NSColor.black.setFill()
-            crescentPath(scale: Double(size) / design).fill()
-            return true
+            let path = crescentPath(scale: Double(size) / design)
+            NSColor.white.setStroke(); path.lineWidth = CGFloat(2.5 * max(24 * Double(size) / design, 1.15)); path.stroke()
+            NSColor.black.setFill(); path.fill(); return true
         }
-        image.isTemplate = true
+        image.isTemplate = false
         image.accessibilityDescription = "Moonglow"
         return image
     }

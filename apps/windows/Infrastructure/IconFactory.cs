@@ -7,8 +7,8 @@ using Moonglow.Native;
 namespace Moonglow.Infrastructure;
 
 /// <summary>
-/// Draws the Moonglow crescent at runtime, so the tray and window icons follow the active
-/// theme instead of shipping one baked bitmap per mode. Geometry mirrors
+/// Draws the Moonglow crescent at runtime: a black moon with a white keyline, the same
+/// two-tone mark as the packaged icon, in every theme. Geometry mirrors
 /// tools/generate-logo-assets.ps1.
 /// </summary>
 internal static class IconFactory
@@ -23,19 +23,19 @@ internal static class IconFactory
     private const float CutRadiusFactor = 1.05f;
     private const float CrescentThickness = 0.60f;
 
-    /// <summary>Creates the tray icon: white for a dark taskbar, black for a light one.</summary>
-    public static Icon CreateTrayIcon(bool dark)
+    /// <summary>Creates the tray icon: the two-tone mark, identical in every theme.</summary>
+    public static Icon CreateTrayIcon()
     {
         // Draw at the shell's small-icon size so the tray does not have to rescale the bitmap.
         int size = Math.Max(16, NativeMethods.GetSystemMetrics(SM_CXSMICON));
-        using Bitmap bitmap = DrawMark(size, dark ? Color.White : Color.Black);
+        using Bitmap bitmap = DrawMark(size);
         return ToIcon(bitmap);
     }
 
     /// <summary>Rasterizes the mark as a WPF image for use as the window/taskbar icon.</summary>
-    public static System.Windows.Media.ImageSource CreateImageSource(bool dark)
+    public static System.Windows.Media.ImageSource CreateImageSource()
     {
-        using Bitmap bitmap = DrawMark(WindowSize, dark ? Color.White : Color.Black);
+        using Bitmap bitmap = DrawMark(WindowSize);
         using Icon icon = ToIcon(bitmap);
         var source = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
             icon.Handle,
@@ -59,7 +59,7 @@ internal static class IconFactory
         }
     }
 
-    private static Bitmap DrawMark(int size, Color color)
+    private static Bitmap DrawMark(int size)
     {
         int large = size * Supersample;
         float scale = large / (float)Design;
@@ -74,9 +74,9 @@ internal static class IconFactory
                 g.CompositingQuality = CompositingQuality.HighQuality;
                 g.Clear(Color.Transparent);
 
-                using var path = CreateCrescentPath(scale);
-                using var brush = new SolidBrush(color);
-                g.FillPath(brush, path);
+                using var path = CreateCrescentPath(scale); // Keyline mirrors the generator, but tiny icons exaggerate it 2.5x so the ring stays white instead of blurring to gray.
+                using var keyPen = new Pen(Color.White, (size <= 32 ? 2.5f : 1f) * Math.Max(24f, 1.15f * Design / size) * scale) { LineJoin = LineJoin.Round };
+                g.DrawPath(keyPen, path); using var brush = new SolidBrush(Color.Black); g.FillPath(brush, path);
             }
 
             using (var g = Graphics.FromImage(result))

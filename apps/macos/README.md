@@ -26,9 +26,9 @@ macOS blocks it.
 | `Packaging/` | `Info.plist` and `build-app.sh` (app bundle, DMG, ZIP). |
 
 The app icon is generated from the shared [`resources/Moonglow.png`](../../resources/Moonglow.png)
-at the repository root, and the menu-bar button draws the same crescent mark as a
-template image ([`StatusIconFactory`](Sources/Moonglow/Shell/StatusIconFactory.swift)), so the
-system tints it for the current appearance.
+at the repository root, and the menu-bar button draws that same two-tone mark
+([`StatusIconFactory`](Sources/Moonglow/Shell/StatusIconFactory.swift)) in every appearance.
+
 
 ## Requirements
 

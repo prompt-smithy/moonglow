@@ -39,7 +39,7 @@ Choose the download that matches your system:
 
 Use an installer for a standard Windows installation, or a portable build to run Moonglow without installing it.
 
-Moonglow runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, time format, and startup options. The tray and window icons are drawn at runtime in black or white to match the current Windows light/dark mode.
+Moonglow runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, time format, and startup options. The tray and window icons draw that same two-tone mark at runtime in every Windows light/dark mode.
 
 ## Limitations
 

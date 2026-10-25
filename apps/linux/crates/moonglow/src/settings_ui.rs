@@ -870,26 +870,24 @@ fn configure_style(ctx: &egui::Context, dark: bool) {
     });
 }
 
-/// Paints the crescent mark used in the header when the embedded icon texture is
-/// unavailable. Proportions match the shared artwork.
+/// Paints the two-tone crescent mark used in the header when the embedded icon texture
+/// is unavailable: a black moon with a white keyline, matching the shared artwork.
 fn paint_mark(ui: &mut egui::Ui, size: f32) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
     let painter = ui.painter();
-    let color = if ui.visuals().dark_mode {
-        egui::Color32::WHITE
-    } else {
-        egui::Color32::BLACK
-    };
     let radius = size * 0.4688;
     // The crescent's bounding box sits up- and left-of the disc centre; shift it back so the
     // mark looks centred.
     let center = rect.center() + egui::vec2(size * 0.0330, -size * 0.0330);
-    painter.circle_filled(center, radius, color);
-    painter.circle_filled(
-        center + egui::vec2(radius * 0.4596, -radius * 0.4596),
-        radius * 1.05,
-        ui.visuals().window_fill,
-    );
+    let cut = center + egui::vec2(radius * 0.4596, -radius * 0.4596);
+    let cut_radius = radius * 1.05;
+    // White keyline from the shared artwork: 24/1024 of the width, at least ~1px.
+    let outline = (size * 24.0 / 1024.0).max(1.15);
+    // Outline crescent first, then the black crescent on top.
+    painter.circle_filled(center, radius + outline, egui::Color32::WHITE);
+    painter.circle_filled(cut, cut_radius + outline, ui.visuals().window_fill);
+    painter.circle_filled(center, radius, egui::Color32::BLACK);
+    painter.circle_filled(cut, cut_radius, ui.visuals().window_fill);
 }
 
 /// Titled surface with separated content.

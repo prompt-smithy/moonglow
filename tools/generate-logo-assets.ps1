@@ -9,8 +9,8 @@
         Moonglow.png          two-tone master (black crescent with a white keyline) used for the
                               packaged app icons and the README art
         Moonglow.ico          Windows icon (exe, installer, portable launcher)
-        Moonglow-light.png    light-theme icon: black crescent, transparent background
-        Moonglow-dark.png     dark-theme icon: white crescent, transparent background
+
+
         linux/hicolor/**      freedesktop icon theme set installed by the Linux packages
 
     Usage: powershell -ExecutionPolicy Bypass -File tools/generate-logo-assets.ps1
@@ -35,7 +35,7 @@ $CrescentThickness = 0.60   # belly thickness as a fraction of the radius
 $Supersample = 4
 
 $LightColor = '#000000'
-$DarkColor = '#FFFFFF'
+
 $KeylineColor = '#FFFFFF'
 $KeylineDesign = 24.0       # two-tone keyline width, in design units
 
@@ -217,11 +217,11 @@ function Save-Ico {
 $master = New-MarkBitmap 1024 $LightColor $KeylineColor 0
 try { Save-Png $master (Join-Path $ResourcesDir 'Moonglow.png') } finally { $master.Dispose() }
 
-$light = New-MarkBitmap 1024 $LightColor
-try { Save-Png $light (Join-Path $ResourcesDir 'Moonglow-light.png') } finally { $light.Dispose() }
 
-$dark = New-MarkBitmap 1024 $DarkColor
-try { Save-Png $dark (Join-Path $ResourcesDir 'Moonglow-dark.png') } finally { $dark.Dispose() }
+
+
+
+
 
 Save-Ico (Join-Path $ResourcesDir 'Moonglow.ico')
 

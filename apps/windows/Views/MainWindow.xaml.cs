@@ -1,8 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
-using Moonglow.Infrastructure;
-using Moonglow.Services;
+
 
 namespace Moonglow.Views;
 
@@ -13,7 +12,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Icon = IconFactory.CreateImageSource(!ThemeService.IsWindowsLight());
+        // No explicit window icon: the title bar and taskbar fall back to the
+        // executable's icon, whose per-size frames stay crisper than a
+        // runtime bitmap scaled down by the shell.
 
         _inactivityTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
         _inactivityTimer.Tick += (_, _) => Close();

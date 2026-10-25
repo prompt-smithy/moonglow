@@ -51,7 +51,11 @@ public partial class App : Application
         }
 
         // Only allow one instance per user session (RunAtStartup + a manual launch would otherwise duplicate).
-        if (!TryAcquireMutex(InstanceNames.MutexName, out _instanceMutex))
+        // A predecessor that is shutting down (installer upgrade, slow gamma-restore
+        // exit) still holds the mutex briefly with no live rival behind it: wait for
+        // the release instead of silently refusing a launch the user just asked for.
+        if (!TryAcquireMutex(InstanceNames.MutexName, out _instanceMutex) &&
+            !WaitForPredecessorExit())
         {
             Shutdown();
             return;
@@ -76,7 +80,16 @@ public partial class App : Application
 
         // A named mutex alone once let two same-generation builds tint the screen at
         // once, so a process scan backs it up before anything touches the hardware.
-        if (IsAnotherCopyRunning())
+        // A predecessor that is shutting down (or the installer that just launched
+        // this copy) can linger a few seconds: re-scan briefly before refusing to start.
+        bool rivalRunning = IsAnotherCopyRunning();
+        for (int i = 0; rivalRunning && i < 3; i++)
+        {
+            Thread.Sleep(1000);
+            rivalRunning = IsAnotherCopyRunning();
+        }
+
+        if (rivalRunning)
         {
             MessageBox.Show(
                 "Another copy of Moonglow (or the old Amber / Night Mode Controller) is already running.\nClose every copy first (check Task Manager for Moonglow and Amber), then start again.",
@@ -129,7 +142,7 @@ public partial class App : Application
 
         _tray = new TaskbarIcon
         {
-            Icon = IconFactory.CreateTrayIcon(_theme.IsDark),
+            Icon = IconFactory.CreateTrayIcon(),
             ToolTipText = "Moonglow",
             DataContext = _viewModel,
             TrayPopup = popup,
@@ -272,15 +285,10 @@ public partial class App : Application
 
     private void OnThemeChanged()
     {
-        // The mark is monochrome, so it has to be redrawn in the colour that contrasts with
-        // the new theme.
-        if (_tray is not null)
-            _tray.Icon = IconFactory.CreateTrayIcon(_theme.IsDark);
-
+        // The icon is identical in every theme; only the title bar follows the new theme.
         if (_settingsWindow is not null)
         {
             _theme.ApplyWindowTitleBar(_settingsWindow);
-            _settingsWindow.Icon = IconFactory.CreateImageSource(_theme.IsDark);
         }
     }
 
@@ -393,6 +401,23 @@ public partial class App : Application
         {
             NativeMethods.CloseHandle(snapshot);
         }
+    }
+
+    /// <summary>Waits a few seconds for an exiting predecessor to release the
+    /// instance mutex. Returns false when a live rival is visible or the mutex
+    /// stays held: that launch must stay silent.</summary>
+    private static bool WaitForPredecessorExit()
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            Thread.Sleep(1500);
+            if (IsAnotherCopyRunning())
+                return false;
+            if (TryAcquireMutex(InstanceNames.MutexName, out _instanceMutex))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>Takes a session-local single-instance mutex. A mutex abandoned by a
