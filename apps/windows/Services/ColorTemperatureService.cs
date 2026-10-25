@@ -29,6 +29,13 @@ public sealed class ColorTemperatureService : IDisposable
     private readonly Thread _workerThread;
     private RAMP? _savedDesktopGammaRamp;
     private int _targetKelvin = -1;
+    /// <summary>Fade granularity: large jumps glide through 25 K intermediates
+    /// instead of stepping. Last value actually written; worker thread only.</summary>
+    private const int FadeStepKelvin = 25;
+    private int _displayedKelvin = -1;
+    /// <summary>True when the last successful write went through the composition
+    /// fallback. Worker thread only.</summary>
+    private bool _lastApplyWasMagnification;
     private bool _disposed;
     private bool _magnificationInitialized;
     private bool _magnificationApplied;
@@ -180,11 +187,11 @@ public sealed class ColorTemperatureService : IDisposable
             if (freshEpisode)
                 pendingSince = DateTime.UtcNow;
 
-            ApplyResult result;
+            int next = FadeNext(target); ApplyResult result;
             var watch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                result = ApplySynchronously(target);
+                result = ApplySynchronously(next);
             }
             catch
             {
@@ -192,6 +199,8 @@ public sealed class ColorTemperatureService : IDisposable
                 result = ApplyResult.Applied;
             }
             watch.Stop();
+            if (result == ApplyResult.Applied)
+                _displayedKelvin = next;
 
             // A hung driver call below looks exactly like a lost update from the outside:
             // the UI keeps queueing while the screen freezes. Name it when it happens.
@@ -214,7 +223,7 @@ public sealed class ColorTemperatureService : IDisposable
                     // Drained: sleep until the next Apply. The reset is under the same
                     // gate as the queue write, so a value arriving between the check
                     // and the reset re-wakes the thread instead of being lost.
-                    _workAvailable.Reset();
+                    if (next == target) _workAvailable.Reset();
                     continue;
                 }
 
@@ -228,6 +237,18 @@ public sealed class ColorTemperatureService : IDisposable
             TimeSpan age = DateTime.UtcNow - pendingSince;
             System.Threading.Thread.Sleep(age < TimeSpan.FromSeconds(2) ? 200 : 2000);
         }
+    }
+
+    /// <summary>Next fade step from what is on screen toward the target. A newer
+    /// target queued mid-fade simply retargets from the current step, so drags
+    /// glide instead of jumping.</summary>
+    private int FadeNext(int target)
+    {
+        // The composition fallback throttles updates, so fading there only queues stale
+        // intermediates behind the throttle: jump straight to the latest target instead.
+        if (_displayedKelvin < 0 || _displayedKelvin == target || _lastApplyWasMagnification)
+            return target;
+        return _displayedKelvin + Math.Sign(target - _displayedKelvin) * Math.Min(FadeStepKelvin, Math.Abs(target - _displayedKelvin));
     }
 
     private ApplyResult ApplySynchronously(int kelvin)
@@ -249,6 +270,7 @@ public sealed class ColorTemperatureService : IDisposable
                 if (!ClearMagnification())
                     return ApplyResult.RetryLater;
                 LogColorApply($"apply {kelvin}K rgb=({redScale:F3},{greenScale:F3},{blueScale:F3}) via=gamma");
+                _lastApplyWasMagnification = false;
                 return ApplyResult.Applied;
             }
 
@@ -260,6 +282,7 @@ public sealed class ColorTemperatureService : IDisposable
             {
                 RestoreOriginalGammaRampsLocked();
                 LogColorApply($"apply {kelvin}K rgb=({redScale:F3},{greenScale:F3},{blueScale:F3}) via=magnification");
+                _lastApplyWasMagnification = true;
                 return ApplyResult.Applied;
             }
 

@@ -176,7 +176,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <TextBlock Text="Increase temperature (cooler)" />
-                                <TextBlock Text="+100 K" FontSize="11" Foreground="{DynamicResource ThemeSecondaryText}" />
+                                <TextBlock Text="+250 K" FontSize="11" Foreground="{DynamicResource ThemeSecondaryText}" />
                             </StackPanel>
                             <Button Grid.Column="1" Content="Clear" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
                                     IsEnabled="{Binding HasIncreaseTemperatureHotkey}"
@@ -192,7 +192,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <TextBlock Text="Decrease temperature (warmer)" />
-                                <TextBlock Text="-100 K" FontSize="11" Foreground="{DynamicResource ThemeSecondaryText}" />
+                                <TextBlock Text="-250 K" FontSize="11" Foreground="{DynamicResource ThemeSecondaryText}" />
                             </StackPanel>
                             <Button Grid.Column="1" Content="Clear" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
                                     IsEnabled="{Binding HasDecreaseTemperatureHotkey}"

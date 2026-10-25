@@ -183,7 +183,16 @@ public sealed class MainViewModel : ObservableObject
     {
         if (_auto || !HasColorSupport)
             return;
-        ColorTemperature = ColorTemperature + direction * AppSettings.KelvinStep;
+        int target = AppSettings.ClampKelvin(_colorTemp + direction * AppSettings.HotkeyTemperatureStep);
+        if (_colorTemp == target)
+            return;
+        // Assign directly: SetProperty would report this method's name, but bindings
+        // listen for ColorTemperature.
+        _colorTemp = target;
+        OnPropertyChanged(nameof(ColorTemperature));
+        Settings.ManualColorTempK = _colorTemp;
+        _settingsService.Save();
+        _color.Apply(_colorTemp);
     }
 
     public string IncreaseBrightnessHotkeyText => HotkeyText(HotkeySlot.IncreaseBrightness, Settings.IncreaseBrightnessShortcut);

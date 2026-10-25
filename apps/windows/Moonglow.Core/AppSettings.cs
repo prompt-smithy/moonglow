@@ -18,6 +18,10 @@ public sealed class AppSettings
     /// <summary>Brightness points per shortcut press, mirroring the Linux build.</summary>
     public const int HotkeyBrightnessStep = 5;
 
+    /// <summary>Kelvin per temperature shortcut press. Deliberately off the 100 K
+    /// slider grid: shortcuts jump while the slider stays fine-grained.</summary>
+    public const int HotkeyTemperatureStep = 250;
+
     public const string DefaultMorningStart = "06:00";
     public const string DefaultMorningEnd = "07:00";
     public const string DefaultEveningStart = "17:30";
