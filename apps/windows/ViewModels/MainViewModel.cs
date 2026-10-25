@@ -23,9 +23,11 @@ public sealed class MainViewModel : ObservableObject
     private int _brightnessValue;
     private int _colorTemp;
     private bool _auto;
+    private string? _hotkeyMessage;
 
     public event EventHandler? OpenSettingsRequested;
     public event EventHandler? ExitRequested;
+    public event EventHandler? HotkeysChanged;
 
     public ObservableCollection<string> Displays { get; } = new();
 
@@ -149,6 +151,148 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public bool ManualColorEnabled => !_auto && HasColorSupport;
+
+    public HotkeySlot? CapturingSlot { get; private set; }
+
+    public string? HotkeyMessage
+    {
+        get => _hotkeyMessage;
+        private set
+        {
+            SetProperty(ref _hotkeyMessage, value);
+        }
+    }
+
+    public void SetHotkeyMessage(string message)
+    {
+        HotkeyMessage = message;
+    }
+
+    /// <summary>One shortcut step brighter or dimmer. Like the other platforms,
+    /// the keys do nothing without brightness-capable hardware.</summary>
+    public void NudgeBrightness(int direction)
+    {
+        if (!HasBrightnessSupport)
+            return;
+        Brightness = Brightness + direction * AppSettings.HotkeyBrightnessStep;
+    }
+
+    /// <summary>One shortcut step cooler or warmer. Manual keys must not fight
+    /// the schedule: in automatic mode they do nothing.</summary>
+    public void NudgeTemperature(int direction)
+    {
+        if (_auto || !HasColorSupport)
+            return;
+        ColorTemperature = ColorTemperature + direction * AppSettings.KelvinStep;
+    }
+
+    public string IncreaseBrightnessHotkeyText => HotkeyText(HotkeySlot.IncreaseBrightness, Settings.IncreaseBrightnessShortcut);
+    public string DecreaseBrightnessHotkeyText => HotkeyText(HotkeySlot.DecreaseBrightness, Settings.DecreaseBrightnessShortcut);
+    public string IncreaseTemperatureHotkeyText => HotkeyText(HotkeySlot.IncreaseTemperature, Settings.IncreaseTemperatureShortcut);
+    public string DecreaseTemperatureHotkeyText => HotkeyText(HotkeySlot.DecreaseTemperature, Settings.DecreaseTemperatureShortcut);
+
+    public bool HasIncreaseBrightnessHotkey => Settings.IncreaseBrightnessShortcut is not null;
+    public bool HasDecreaseBrightnessHotkey => Settings.DecreaseBrightnessShortcut is not null;
+    public bool HasIncreaseTemperatureHotkey => Settings.IncreaseTemperatureShortcut is not null;
+    public bool HasDecreaseTemperatureHotkey => Settings.DecreaseTemperatureShortcut is not null;
+
+    public void BeginCapture(HotkeySlot slot)
+    {
+        CapturingSlot = slot;
+        HotkeyMessage = null;
+        NotifyHotkeys();
+    }
+
+    public void CancelCapture()
+    {
+        CapturingSlot = null;
+        HotkeyMessage = null;
+        NotifyHotkeys();
+    }
+
+    /// <summary>Assigns a captured gesture (canonical text) or disables with null.
+    /// A combo already used elsewhere moves here, like the Linux settings.</summary>
+    public bool SetHotkey(HotkeySlot slot, string? gesture)
+    {
+        string? canonical = null;
+        if (gesture is not null)
+        {
+            if (!Hotkey.TryParse(gesture, out Hotkey? parsed) || parsed is null)
+                return false;
+            canonical = parsed.ToString();
+        }
+
+        if (canonical is not null)
+            ClearHotkeyDuplicate(slot, canonical);
+        SetSlotGesture(slot, canonical);
+        _settingsService.Save();
+        CapturingSlot = null;
+        HotkeyMessage = null;
+        NotifyHotkeys();
+        HotkeysChanged?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    public void ResetHotkeys()
+    {
+        Settings.IncreaseBrightnessShortcut = AppSettings.DefaultIncreaseBrightnessShortcut;
+        Settings.DecreaseBrightnessShortcut = AppSettings.DefaultDecreaseBrightnessShortcut;
+        Settings.IncreaseTemperatureShortcut = AppSettings.DefaultIncreaseTemperatureShortcut;
+        Settings.DecreaseTemperatureShortcut = AppSettings.DefaultDecreaseTemperatureShortcut;
+        _settingsService.Save();
+        CapturingSlot = null;
+        HotkeyMessage = null;
+        NotifyHotkeys();
+        HotkeysChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private string HotkeyText(HotkeySlot slot, string? gesture)
+        => CapturingSlot == slot ? "Press keys..." : gesture ?? "Off";
+
+    private void ClearHotkeyDuplicate(HotkeySlot keep, string canonical)
+    {
+        if (keep != HotkeySlot.IncreaseBrightness && Settings.IncreaseBrightnessShortcut == canonical)
+            Settings.IncreaseBrightnessShortcut = null;
+        if (keep != HotkeySlot.DecreaseBrightness && Settings.DecreaseBrightnessShortcut == canonical)
+            Settings.DecreaseBrightnessShortcut = null;
+        if (keep != HotkeySlot.IncreaseTemperature && Settings.IncreaseTemperatureShortcut == canonical)
+            Settings.IncreaseTemperatureShortcut = null;
+        if (keep != HotkeySlot.DecreaseTemperature && Settings.DecreaseTemperatureShortcut == canonical)
+            Settings.DecreaseTemperatureShortcut = null;
+    }
+
+    private void SetSlotGesture(HotkeySlot slot, string? gesture)
+    {
+        switch (slot)
+        {
+            case HotkeySlot.IncreaseBrightness:
+                Settings.IncreaseBrightnessShortcut = gesture;
+                break;
+            case HotkeySlot.DecreaseBrightness:
+                Settings.DecreaseBrightnessShortcut = gesture;
+                break;
+            case HotkeySlot.IncreaseTemperature:
+                Settings.IncreaseTemperatureShortcut = gesture;
+                break;
+            case HotkeySlot.DecreaseTemperature:
+                Settings.DecreaseTemperatureShortcut = gesture;
+                break;
+        }
+    }
+
+    private void NotifyHotkeys()
+    {
+        OnPropertyChanged(nameof(IncreaseBrightnessHotkeyText));
+        OnPropertyChanged(nameof(DecreaseBrightnessHotkeyText));
+        OnPropertyChanged(nameof(IncreaseTemperatureHotkeyText));
+        OnPropertyChanged(nameof(DecreaseTemperatureHotkeyText));
+        OnPropertyChanged(nameof(HasIncreaseBrightnessHotkey));
+        OnPropertyChanged(nameof(HasDecreaseBrightnessHotkey));
+        OnPropertyChanged(nameof(HasIncreaseTemperatureHotkey));
+        OnPropertyChanged(nameof(HasDecreaseTemperatureHotkey));
+        OnPropertyChanged(nameof(CapturingSlot));
+        OnPropertyChanged(nameof(HotkeyMessage));
+    }
 
     public int DayColorTemp
     {

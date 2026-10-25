@@ -182,4 +182,17 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    // ---------------------------------------------------------------- Global hotkeys (user32)
+    public const int MOD_ALT = 0x1;
+    public const int MOD_CONTROL = 0x2;
+    public const int MOD_SHIFT = 0x4;
+    public const int MOD_WIN = 0x8;
+    public const int WM_HOTKEY = 0x0312;
+
+    [DllImport("user32.dll")]
+    public static extern bool RegisterHotKey(IntPtr hWnd, int id, int fsModifiers, int vk);
+
+    [DllImport("user32.dll")]
+    public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 }

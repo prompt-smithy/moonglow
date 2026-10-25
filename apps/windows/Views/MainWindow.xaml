@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Moonglow.Views"
+        xmlns:core="clr-namespace:Moonglow.Core;assembly=Moonglow.Core"
         Title="Moonglow" Height="680" Width="470"
         WindowStartupLocation="CenterScreen" Background="{DynamicResource ThemeWindowBackground}"
         ResizeMode="CanMinimize"
@@ -126,6 +127,84 @@
                       IsChecked="{Binding RunAtStartup, Mode=TwoWay}" />
             <TextBlock Text="{Binding RunAtStartupStatus}"
                        Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,6,0,0" TextWrapping="Wrap" />
+
+            <Expander Margin="0,8,0,0" IsExpanded="False">
+                <Expander.Header>
+                    <TextBlock Text="Keyboard shortcuts" FontSize="13" FontWeight="SemiBold" />
+                </Expander.Header>
+                <Border Style="{StaticResource Card}" Margin="0,8,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Global keys that work from any application. Temperature shortcuts do nothing while automatic color temperature is on. Click a shortcut to change it, then press the new combination; press Delete to turn it off."
+                                   Foreground="{DynamicResource ThemeSecondaryText}" TextWrapping="Wrap" />
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="Increase brightness" />
+                                <TextBlock Text="Brightness +5%" FontSize="11" Foreground="{DynamicResource ThemeSecondaryText}" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Clear" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    IsEnabled="{Binding HasIncreaseBrightnessHotkey}"
+                                    Click="ClearHotkey_Click" Tag="{x:Static core:HotkeySlot.IncreaseBrightness}" />
+                            <Button Grid.Column="2" Content="{Binding IncreaseBrightnessHotkeyText}" MinWidth="130" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    Click="RecordHotkey_Click" Tag="{x:Static core:HotkeySlot.IncreaseBrightness}" />
+                        </Grid>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="Decrease brightness" />
+                                <TextBlock Text="Brightness -5%" FontSize="11" Foreground="{DynamicResource ThemeSecondaryText}" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Clear" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    IsEnabled="{Binding HasDecreaseBrightnessHotkey}"
+                                    Click="ClearHotkey_Click" Tag="{x:Static core:HotkeySlot.DecreaseBrightness}" />
+                            <Button Grid.Column="2" Content="{Binding DecreaseBrightnessHotkeyText}" MinWidth="130" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    Click="RecordHotkey_Click" Tag="{x:Static core:HotkeySlot.DecreaseBrightness}" />
+                        </Grid>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="Increase temperature (cooler)" />
+                                <TextBlock Text="+100 K" FontSize="11" Foreground="{DynamicResource ThemeSecondaryText}" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Clear" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    IsEnabled="{Binding HasIncreaseTemperatureHotkey}"
+                                    Click="ClearHotkey_Click" Tag="{x:Static core:HotkeySlot.IncreaseTemperature}" />
+                            <Button Grid.Column="2" Content="{Binding IncreaseTemperatureHotkeyText}" MinWidth="130" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    Click="RecordHotkey_Click" Tag="{x:Static core:HotkeySlot.IncreaseTemperature}" />
+                        </Grid>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="Decrease temperature (warmer)" />
+                                <TextBlock Text="-100 K" FontSize="11" Foreground="{DynamicResource ThemeSecondaryText}" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Clear" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    IsEnabled="{Binding HasDecreaseTemperatureHotkey}"
+                                    Click="ClearHotkey_Click" Tag="{x:Static core:HotkeySlot.DecreaseTemperature}" />
+                            <Button Grid.Column="2" Content="{Binding DecreaseTemperatureHotkeyText}" MinWidth="130" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    Click="RecordHotkey_Click" Tag="{x:Static core:HotkeySlot.DecreaseTemperature}" />
+                        </Grid>
+                        <TextBlock Text="{Binding HotkeyMessage}" Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,8,0,0" TextWrapping="Wrap" />
+                        <Button Content="Reset defaults" HorizontalAlignment="Left" Margin="0,8,0,0" Padding="12,5" Click="ResetHotkeys_Click" />
+                    </StackPanel>
+                </Border>
+            </Expander>
 
             <Expander Margin="0,8,0,0" IsExpanded="False">
                 <Expander.Header>

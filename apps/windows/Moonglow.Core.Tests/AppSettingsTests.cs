@@ -49,6 +49,46 @@ public sealed class AppSettingsTests
     }
 
     [Fact]
+    public void HotkeyStringsParseAndCanonicalize()
+    {
+        Assert.True(Hotkey.TryParse("Ctrl+Alt+PageUp", out Hotkey? up));
+        Assert.Equal(Hotkey.ModControl | Hotkey.ModAlt, up!.Modifiers);
+        Assert.Equal(0x21, up.VirtualKey);
+        Assert.Equal("Ctrl+Alt+PageUp", up.ToString());
+
+        Assert.True(Hotkey.TryParse("alt+ctrl+]", out Hotkey? bracket));
+        Assert.Equal("Ctrl+Alt+]", bracket!.ToString());
+
+        Assert.True(Hotkey.TryParse("Win+Up", out Hotkey? win));
+        Assert.Equal(Hotkey.ModWin, win!.Modifiers);
+        Assert.Equal("Super+Up", win.ToString());
+
+        Assert.True(Hotkey.TryGetKeyName(0x21, out string? name));
+        Assert.Equal("PageUp", name);
+        Assert.False(Hotkey.TryGetKeyName(0xFF, out _));
+
+        Assert.False(Hotkey.TryParse("Ctrl+Alt", out _));
+        Assert.False(Hotkey.TryParse("Ctrl+Nonsense", out _));
+        Assert.False(Hotkey.TryParse("JustAKey", out _));
+        Assert.False(Hotkey.TryParse(null, out _));
+        Assert.False(Hotkey.TryParse("  ", out _));
+    }
+
+    [Fact]
+    public void ShortcutSettingsFallBackLeniently()
+    {
+        var settings = new AppSettings
+        {
+            IncreaseBrightnessShortcut = "bogus",
+            DecreaseBrightnessShortcut = null,
+        }.Normalized();
+
+        Assert.Equal(AppSettings.DefaultIncreaseBrightnessShortcut, settings.IncreaseBrightnessShortcut);
+        Assert.Null(settings.DecreaseBrightnessShortcut);
+        Assert.Equal(AppSettings.DefaultIncreaseTemperatureShortcut, settings.IncreaseTemperatureShortcut);
+    }
+
+    [Fact]
     public void RangeHandlesPinInsteadOfCrossing()
     {
         var range = new TemperatureRange(1200, 6500);

@@ -15,6 +15,9 @@ public sealed class AppSettings
     public const int MaxKelvin = 6600;
     public const int KelvinStep = 100;
 
+    /// <summary>Brightness points per shortcut press, mirroring the Linux build.</summary>
+    public const int HotkeyBrightnessStep = 5;
+
     public const string DefaultMorningStart = "06:00";
     public const string DefaultMorningEnd = "07:00";
     public const string DefaultEveningStart = "17:30";
@@ -34,6 +37,17 @@ public sealed class AppSettings
     public string EveningEnd { get; set; } = DefaultEveningEnd;
 
     public bool LaunchAtLogin { get; set; }
+
+    public const string DefaultIncreaseBrightnessShortcut = "Ctrl+Alt+PageUp";
+    public const string DefaultDecreaseBrightnessShortcut = "Ctrl+Alt+PageDown";
+    public const string DefaultIncreaseTemperatureShortcut = "Ctrl+Alt+]";
+    public const string DefaultDecreaseTemperatureShortcut = "Ctrl+Alt+[";
+
+    /// <summary>Global shortcuts as readable strings; null disables the action.</summary>
+    public string? IncreaseBrightnessShortcut { get; set; } = DefaultIncreaseBrightnessShortcut;
+    public string? DecreaseBrightnessShortcut { get; set; } = DefaultDecreaseBrightnessShortcut;
+    public string? IncreaseTemperatureShortcut { get; set; } = DefaultIncreaseTemperatureShortcut;
+    public string? DecreaseTemperatureShortcut { get; set; } = DefaultDecreaseTemperatureShortcut;
 
     // Parsed forms never throw: a hand-edited or truncated file falls back to the default
     // wall-clock time instead of crashing the scheduler on its next tick.
@@ -88,6 +102,11 @@ public sealed class AppSettings
         copy.MorningEnd = NormalizeTime(copy.MorningEnd, DefaultMorningEnd);
         copy.EveningStart = NormalizeTime(copy.EveningStart, DefaultEveningStart);
         copy.EveningEnd = NormalizeTime(copy.EveningEnd, DefaultEveningEnd);
+
+        copy.IncreaseBrightnessShortcut = Hotkey.Normalize(copy.IncreaseBrightnessShortcut, DefaultIncreaseBrightnessShortcut);
+        copy.DecreaseBrightnessShortcut = Hotkey.Normalize(copy.DecreaseBrightnessShortcut, DefaultDecreaseBrightnessShortcut);
+        copy.IncreaseTemperatureShortcut = Hotkey.Normalize(copy.IncreaseTemperatureShortcut, DefaultIncreaseTemperatureShortcut);
+        copy.DecreaseTemperatureShortcut = Hotkey.Normalize(copy.DecreaseTemperatureShortcut, DefaultDecreaseTemperatureShortcut);
 
         return copy;
     }

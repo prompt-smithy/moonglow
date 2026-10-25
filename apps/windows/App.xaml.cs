@@ -32,6 +32,7 @@ public partial class App : Application
     private SettingsService _settingsService = null!;
     private ThemeService _theme = null!;
     private MainViewModel _viewModel = null!;
+    private HotkeyService? _hotkeys;
     private MainWindow? _settingsWindow;
     private readonly DispatcherTimer _supportProbeTimer = new() { Interval = TimeSpan.FromSeconds(20) };
     private bool _sessionLocked;
@@ -129,6 +130,27 @@ public partial class App : Application
         _viewModel = new MainViewModel(_brightness, _color, _schedule, _settingsService, _monitors);
         _viewModel.OpenSettingsRequested += (_, _) => OpenSettings();
         _viewModel.ExitRequested += (_, _) => Shutdown();
+
+        _hotkeys = new HotkeyService(slot =>
+        {
+            switch (slot)
+            {
+                case HotkeySlot.IncreaseBrightness:
+                    _viewModel.NudgeBrightness(+1);
+                    break;
+                case HotkeySlot.DecreaseBrightness:
+                    _viewModel.NudgeBrightness(-1);
+                    break;
+                case HotkeySlot.IncreaseTemperature:
+                    _viewModel.NudgeTemperature(+1);
+                    break;
+                case HotkeySlot.DecreaseTemperature:
+                    _viewModel.NudgeTemperature(-1);
+                    break;
+            }
+        });
+        _viewModel.HotkeysChanged += (_, _) => _hotkeys.Refresh(_settingsService.Settings);
+        _hotkeys.Refresh(_settingsService.Settings);
 
         var popup = new TrayPopup { DataContext = _viewModel };
         // Opening the popup is the moment before a brightness change, so refresh the display
@@ -322,6 +344,7 @@ public partial class App : Application
         _color?.Reset();
         _color?.Dispose();
         _monitors?.Dispose();
+        _hotkeys?.Dispose();
         _tray?.Dispose();
         _shutdownWait?.Unregister(null);
         _shutdownEvent?.Dispose();

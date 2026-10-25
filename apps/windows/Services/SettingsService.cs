@@ -148,6 +148,10 @@ public sealed class SettingsService
             ManualBrightness = ReadInt(root, "manualBrightness", defaults.ManualBrightness),
             ManualColorTempK = ReadInt(root, "manualColorTempK", defaults.ManualColorTempK),
             LaunchAtLogin = ReadBool(root, "launchAtLogin", defaults.LaunchAtLogin, legacyName: "runAtStartup"),
+            IncreaseBrightnessShortcut = ReadHotkey(root, "increaseBrightnessShortcut", defaults.IncreaseBrightnessShortcut),
+            DecreaseBrightnessShortcut = ReadHotkey(root, "decreaseBrightnessShortcut", defaults.DecreaseBrightnessShortcut),
+            IncreaseTemperatureShortcut = ReadHotkey(root, "increaseTemperatureShortcut", defaults.IncreaseTemperatureShortcut),
+            DecreaseTemperatureShortcut = ReadHotkey(root, "decreaseTemperatureShortcut", defaults.DecreaseTemperatureShortcut),
         };
     }
 
@@ -190,6 +194,21 @@ public sealed class SettingsService
             && element.ValueKind == JsonValueKind.String
             ? AppSettings.NormalizeTime(element.GetString(), fallback)
             : fallback;
+
+    /// <summary>Reads one global shortcut: a present null disables it (like the
+    /// other platforms), while a missing or malformed value keeps the default.</summary>
+    private static string? ReadHotkey(JsonElement root, string name, string? fallback)
+    {
+        if (!TryGet(root, name, legacyName: null, out JsonElement element))
+            return fallback;
+        if (element.ValueKind == JsonValueKind.Null)
+            return null;
+        if (element.ValueKind == JsonValueKind.String
+            && Hotkey.TryParse(element.GetString(), out Hotkey? hotkey)
+            && hotkey is not null)
+            return hotkey.ToString();
+        return fallback;
+    }
 
     /// <summary>Moves an unparseable settings file aside, replacing any previous preservation.</summary>
     private void PreserveCorruptFile()
