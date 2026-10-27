@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <mask id="crescent">
+      <circle cx="512.000" cy="512.000" r="245.760" fill="#ffffff"/>
+      <circle cx="611.054" cy="412.946" r="258.048" fill="#000000"/>
+    </mask>
+  </defs>
+  <rect width="1024" height="1024" rx="245.760" fill="#ffb300"/>
+  <g mask="url(#crescent)">
+    <circle cx="512.000" cy="512.000" r="245.760" fill="#18181c"/>
+  </g>
+    <line x1="512.000" y1="189.440" x2="512.000" y2="92.160" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
+  <line x1="740.084" y1="283.916" x2="808.872" y2="215.128" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
+  <line x1="834.560" y1="512.000" x2="931.840" y2="512.000" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
+  <line x1="740.084" y1="740.084" x2="808.872" y2="808.872" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
+  <line x1="512.000" y1="834.560" x2="512.000" y2="931.840" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
+  <line x1="283.916" y1="740.084" x2="215.128" y2="808.872" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
+  <line x1="189.440" y1="512.000" x2="92.160" y2="512.000" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
+  <line x1="283.916" y1="283.916" x2="215.128" y2="215.128" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
+</svg>
