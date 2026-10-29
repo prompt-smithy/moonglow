@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../../resources/Moonglow.png" alt="Moonglow logo" width="160" height="160">
+  <img src="../../resources/Moonglow-option-e-amber-noring.png" alt="Moonglow logo" width="160" height="160">
 </p>
 
 <h1 align="center">Moonglow</h1>
