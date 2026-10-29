@@ -1,15 +1,30 @@
 import AppKit
 import MoonglowKit
 
-/// Draws the shared Moonglow crescent: a black moon with a white keyline, the same
-/// two-tone mark as the packaged icon, in every appearance.
+/// The menu-bar tray image: a raster of the SVG logo master, in every appearance.
 ///
-/// The outline comes from `CrescentGeometry`, the single definition of the mark for
-/// this app; this factory only scales it and paints the two tones.
+/// Master artwork is `resources/Moonglow-option-e-amber-noring.svg` at the repository
+/// root; `Resources/TrayIcon.png` is its 1024 px render. macOS cannot rasterize SVG at
+/// runtime, so the PNG is bundled and this factory only scales it to status-item size.
+/// If the resource is ever missing, the factory falls back to the drawn crescent below.
 enum StatusIconFactory {
 
-    /// The crescent at `size` points, ready for a status-bar button.
-    static func trayImage(size: CGFloat = 18) -> NSImage { // Keyline mirrors tools/generate-logo-assets.ps1.
+    /// The logo at `size` points, ready for a status-bar button.
+    static func trayImage(size: CGFloat = 18) -> NSImage {
+        if let url = Bundle.module.url(forResource: "TrayIcon", withExtension: "png"),
+           let image = NSImage(contentsOf: url)
+        {
+            image.size = NSSize(width: size, height: size)
+            image.isTemplate = false
+            image.accessibilityDescription = "Moonglow"
+            return image
+        }
+        return fallbackTrayImage(size: size)
+    }
+
+    /// The old two-tone crescent, drawn from `CrescentGeometry`. Resource-missing
+    /// fallback only; the shipped icon is the bundled logo above.
+    private static func fallbackTrayImage(size: CGFloat) -> NSImage {
         let scale = Double(size) / CrescentGeometry.design
         let lineWidth = CGFloat(2.5 * max(CrescentGeometry.keylineDesign * Double(size) / CrescentGeometry.design, 1.15))
         let path = NSBezierPath()

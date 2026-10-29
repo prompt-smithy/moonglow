@@ -25,8 +25,12 @@ macOS blocks it.
 | `Tests/MoonglowKitTests/` | Swift Testing suite for everything in `MoonglowKit`. |
 | `Packaging/` | `Info.plist` and `build-app.sh` (app bundle, DMG, ZIP). |
 
-The app icon is generated from the shared [`resources/Moonglow.png`](../../resources/Moonglow.png)
-at the repository root, and the menu-bar button draws that same two-tone mark
+The app icon is generated from the 1024 px render
+[`resources/Moonglow-option-e-amber-noring.png`](../../resources/Moonglow-option-e-amber-noring.png)
+of the SVG logo master
+[`resources/Moonglow-option-e-amber-noring.svg`](../../resources/Moonglow-option-e-amber-noring.svg)
+at the repository root, and the menu-bar button shows that same raster bundled as
+`Sources/Moonglow/Resources/TrayIcon.png`
 ([`StatusIconFactory`](Sources/Moonglow/Shell/StatusIconFactory.swift)) in every appearance.
 
 

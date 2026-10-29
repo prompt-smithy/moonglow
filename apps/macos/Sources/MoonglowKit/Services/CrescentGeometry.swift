@@ -4,7 +4,8 @@ import Foundation
 ///
 /// Single definition of the mark's geometry for the macOS app. The constants mirror
 /// `tools/generate-logo-assets.ps1`, which renders the packaged icons from them; the
-/// menu-bar status item draws this same outline at runtime (see `StatusIconFactory`).
+/// menu-bar status item keeps this outline as a fallback when its bundled logo
+/// raster is missing (see `StatusIconFactory`).
 ///
 /// Coordinates are y-up in a 1024-unit design space, so they map directly onto AppKit
 /// paths. The outline is centred on its own bounding box and ordered as one continuous

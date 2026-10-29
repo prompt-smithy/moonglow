@@ -28,6 +28,7 @@ let package = Package(
         .executableTarget(
             name: "Moonglow",
             dependencies: ["MoonglowKit"],
+            resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

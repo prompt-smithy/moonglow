@@ -28,7 +28,8 @@ iconset_dir="$artifacts_dir/Moonglow.iconset"
 zip_path="$release_dir/Moonglow-macOS-universal.zip"
 dmg_path="$release_dir/Moonglow-macOS-universal.dmg"
 # Shared artwork lives at the repository root so every app consumes one master.
-icon_source="$repo_dir/../../resources/Moonglow.png"
+# The Mac icon follows the new SVG logo; the raster below is its 1024 px render.
+icon_source="$repo_dir/../../resources/Moonglow-option-e-amber-noring.png"
 configuration="${MOONGLOW_CONFIGURATION:-release}"
 # Single source for the release version, stamped into the built plist below.
 moonglow_version="${MOONGLOW_VERSION:-0.2.0}"
@@ -89,6 +90,15 @@ lipo -create \
     "$x86_64_bin_dir/Moonglow" \
     -output "$app_dir/Contents/MacOS/Moonglow"
 chmod +x "$app_dir/Contents/MacOS/Moonglow"
+# SwiftPM resource bundle (the menu-bar tray icon raster). Both architectures
+# produce the same bundle, so one copy ships in the app. Without it the running
+# app falls back to the drawn crescent in StatusIconFactory.
+resource_bundle="$arm64_bin_dir/Moonglow_Moonglow.bundle"
+if [ ! -d "$resource_bundle" ]; then
+    echo "error: expected SwiftPM resource bundle at $resource_bundle" >&2
+    exit 1
+fi
+ditto "$resource_bundle" "$app_dir/Contents/Resources/Moonglow_Moonglow.bundle"
 cp "$script_dir/Info.plist" "$app_dir/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$moonglow_version" "$app_dir/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$moonglow_build" "$app_dir/Contents/Info.plist"
