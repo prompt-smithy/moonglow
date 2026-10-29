@@ -88,17 +88,17 @@ bash Packaging/build-app.sh   # app bundle, DMG, and ZIP
 apps/windows/     C# / WPF application, net48 core library + tests, and installer
 apps/linux/       Rust workspace: moonglow-core (logic) and moonglow (GUI)
 apps/macos/       Swift package: MoonglowKit (logic) and Moonglow (SwiftUI app)
-resources/        Shared logo artwork: two-tone master PNG (black crescent with
-                  a white keyline), Windows ICO, and the Linux hicolor set (all
-                  written by tools/generate-logo-assets.ps1)
+resources/        Shared logo artwork: amber-tile master SVG/PNG (black crescent
+                  with rays), Windows ICO, and the Linux hicolor set
 spec/             Settings schema and golden vectors shared by all apps
 .github/          Path-filtered CI for each platform
 ```
 
-The mark is a crescent moon: a black crescent with a white keyline.
-`tools/generate-logo-assets.ps1` holds the single geometry definition and writes every file in
-`resources/`, and every app shows that same two-tone mark in both light and dark modes. Re-run
-the script after any artwork tweak and commit the results.
+The mark is a crescent moon with rays on an amber tile. The master artwork is
+`resources/Moonglow-option-e-amber-noring.svg` (with its 1024 px PNG render beside it), and
+every app shows that same mark in both light and dark modes. Note that
+`tools/generate-logo-assets.ps1` still draws the previous two-tone mark — do not re-run it
+until it is updated for the amber tile.
 
 ## Licence
 

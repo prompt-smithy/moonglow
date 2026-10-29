@@ -3,6 +3,11 @@
     Generates every Moonglow logo asset from one geometry definition.
 
 .DESCRIPTION
+    STALE: this script still draws the previous two-tone mark (black crescent with a white
+    keyline). The current artwork is the amber tile in resources/
+    (Moonglow-option-e-amber-noring.svg); do not re-run this script until it is updated,
+    or it will overwrite the new ICO/hicolor set with the old mark.
+
     The mark is a crescent moon. All three apps consume the files written here, so the artwork
     only ever needs editing in one place.
 
