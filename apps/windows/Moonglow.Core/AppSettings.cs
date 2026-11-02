@@ -18,9 +18,8 @@ public sealed class AppSettings
     /// <summary>Brightness points per shortcut press, mirroring the Linux build.</summary>
     public const int HotkeyBrightnessStep = 5;
 
-    /// <summary>Kelvin per temperature shortcut press. Deliberately off the 100 K
-    /// slider grid: shortcuts jump while the slider stays fine-grained.</summary>
-    public const int HotkeyTemperatureStep = 250;
+    /// <summary>Kelvin per temperature shortcut press, on the shared step grid.</summary>
+    public const int HotkeyTemperatureStep = KelvinStep;
 
     public const string DefaultMorningStart = "06:00";
     public const string DefaultMorningEnd = "07:00";
@@ -98,19 +97,33 @@ public sealed class AppSettings
         var copy = (AppSettings)MemberwiseClone();
 
         copy.ManualBrightness = ClampBrightness(copy.ManualBrightness);
-        copy.ManualColorTempK = ClampKelvin(copy.ManualColorTempK);
-        copy.DayColorTempK = ClampKelvin(copy.DayColorTempK);
-        copy.NightColorTempK = ClampKelvin(copy.NightColorTempK);
+        copy.ManualColorTempK = TemperatureRange.Snap(copy.ManualColorTempK);
+        var targets = TemperatureRange.FromSettings(copy);
+        copy.DayColorTempK = targets.Day;
+        copy.NightColorTempK = targets.Night;
 
         copy.MorningStart = NormalizeTime(copy.MorningStart, DefaultMorningStart);
         copy.MorningEnd = NormalizeTime(copy.MorningEnd, DefaultMorningEnd);
         copy.EveningStart = NormalizeTime(copy.EveningStart, DefaultEveningStart);
         copy.EveningEnd = NormalizeTime(copy.EveningEnd, DefaultEveningEnd);
+        if (!(copy.MorningStartTime < copy.MorningEndTime && copy.MorningEndTime <= copy.EveningStartTime && copy.EveningStartTime < copy.EveningEndTime))
+        {
+            copy.MorningStart = DefaultMorningStart;
+            copy.MorningEnd = DefaultMorningEnd;
+            copy.EveningStart = DefaultEveningStart;
+            copy.EveningEnd = DefaultEveningEnd;
+        }
 
         copy.IncreaseBrightnessShortcut = Hotkey.Normalize(copy.IncreaseBrightnessShortcut, DefaultIncreaseBrightnessShortcut);
         copy.DecreaseBrightnessShortcut = Hotkey.Normalize(copy.DecreaseBrightnessShortcut, DefaultDecreaseBrightnessShortcut);
         copy.IncreaseTemperatureShortcut = Hotkey.Normalize(copy.IncreaseTemperatureShortcut, DefaultIncreaseTemperatureShortcut);
         copy.DecreaseTemperatureShortcut = Hotkey.Normalize(copy.DecreaseTemperatureShortcut, DefaultDecreaseTemperatureShortcut);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        string? Unique(string? gesture) => gesture is null || seen.Add(gesture) ? gesture : null;
+        copy.IncreaseBrightnessShortcut = Unique(copy.IncreaseBrightnessShortcut);
+        copy.DecreaseBrightnessShortcut = Unique(copy.DecreaseBrightnessShortcut);
+        copy.IncreaseTemperatureShortcut = Unique(copy.IncreaseTemperatureShortcut);
+        copy.DecreaseTemperatureShortcut = Unique(copy.DecreaseTemperatureShortcut);
 
         return copy;
     }

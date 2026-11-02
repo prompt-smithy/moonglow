@@ -1,0 +1,106 @@
+name: Release artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macOs
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate release tag
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "${GITHUB_REF#refs/tags/v}" = "$(tr -d '[:space:]' < VERSION)"
+          fi
+      - uses: actions/setup-dotnet@v4
+        if: matrix.platform == 'windows'
+        with:
+          dotnet-version: '8.0.x'
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.platform == 'linux'
+      - name: Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev
+      - name: Test Linux
+        if: matrix.platform == 'linux'
+        run: cargo test --manifest-path apps/linux/Cargo.toml --workspace --locked
+      - name: Test Windows
+        if: matrix.platform == 'windows'
+        run: |
+          dotnet test apps/windows/Moonglow.Core.Tests/Moonglow.Core.Tests.csproj -c Release
+          dotnet test apps/windows/Moonglow.Platform.Tests/Moonglow.Platform.Tests.csproj -c Release
+      - name: Test macOS
+        if: matrix.platform == 'macOs'
+        run: swift test --package-path apps/macos
+      - name: Package
+        run: python tools/build-release.py --platform ${{ matrix.platform }}
+      - name: Verify artifact checksums
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          manifests = list(Path('release').rglob('SHA256SUMS'))
+          assert manifests, 'No release checksum manifests'
+          for manifest in manifests:
+              for line in manifest.read_text().splitlines():
+                  digest, name = line.split('  ', 1)
+                  artifact = manifest.parent / name
+                  assert hashlib.sha256(artifact.read_bytes()).hexdigest() == digest, str(artifact)
+          PY
+      - name: Verify Debian package and executable
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess, tempfile
+          version = Path('VERSION').read_text().strip()
+          for package in Path('release').rglob('*.deb'):
+              subprocess.run(['dpkg-deb', '--info', str(package)], check=True)
+              with tempfile.TemporaryDirectory() as directory:
+                  subprocess.run(['dpkg-deb', '--extract', str(package), directory], check=True)
+                  result = subprocess.check_output([str(Path(directory) / 'usr/bin/moonglow'), '--version'], text=True)
+                  assert result.strip() == f'moonglow {version}', result
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonglow-${{ matrix.platform }}
+          path: release/
+          if-no-files-found: error
+  collect:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: moonglow-*
+          merge-multiple: true
+          path: release/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonglow-release
+          path: release/
+          if-no-files-found: error

@@ -11,7 +11,7 @@
     <RootNamespace>Moonglow</RootNamespace>
     <AssemblyName>Moonglow</AssemblyName>
     <ApplicationIcon>..\..\resources\Moonglow.ico</ApplicationIcon>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Product>Moonglow</Product>
     <AssemblyTitle>Moonglow</AssemblyTitle>
     <!-- AnyCPU runs 64-bit on 64-bit Windows (as the old win-x64 build did) and still runs on
@@ -33,6 +33,7 @@
     <!-- Separate projects: the default glob would otherwise compile them into the app too. -->
     <Compile Remove="Moonglow.Core\**\*.cs" />
     <Compile Remove="Moonglow.Core.Tests\**\*.cs" />
+    <Compile Remove="Moonglow.Platform.Tests\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>

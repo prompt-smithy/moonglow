@@ -161,11 +161,28 @@ def check_temperature_range() -> None:
                  f"{row['nightOut']} > {row['dayOut']}")
 
 
+def check_settings() -> None:
+    data = load(VECTORS / "settings.json")
+    if data is None:
+        return
+    for row in data["cases"]:
+        expected = row["expected"]
+        for key in ("manualColorTempK", "dayColorTempK", "nightColorTempK"):
+            if not 900 <= expected[key] <= 6600 or expected[key] % 100:
+                fail(f"settings.json: {row['name']} has an invalid {key}")
+        times = [expected[key] for key in ("morningStart", "morningEnd", "eveningStart", "eveningEnd")]
+        if not times[0] < times[1] <= times[2] < times[3]:
+            fail(f"settings.json: {row['name']} has an invalid schedule order")
+        if expected["nightColorTempK"] > expected["dayColorTempK"]:
+            fail(f"settings.json: {row['name']} has inverted targets")
+
+
 def main() -> int:
     check_schema()
     check_kelvin()
     check_schedule()
     check_temperature_range()
+    check_settings()
 
     if errors:
         for error in errors:

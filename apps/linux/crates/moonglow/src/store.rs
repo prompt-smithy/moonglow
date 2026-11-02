@@ -1,12 +1,14 @@
 //! Loads and persists [`AppSettings`] as JSON under the XDG config directory.
 //!
 //! Mirrors Swift `SettingsStore`: a pure persistence adapter where the shared
-//! copy of settings is owned by [`StateManager`]. Writes are small,
-//! synchronous, and best effort — a filesystem failure must never crash the app.
+//! copy of settings is owned by [`StateManager`]. A background worker coalesces
+//! writes and flushes before exit; filesystem failures never crash the app.
 
 use moonglow_core::settings::AppSettings;
 use moonglow_core::traits::SettingsPersistence;
 use std::path::PathBuf;
+use std::sync::mpsc;
+use std::time::Duration;
 
 /// `~/.config/moonglow/settings.json` (or
 /// `$XDG_CONFIG_HOME/moonglow/settings.json`).
@@ -21,11 +23,64 @@ pub fn default_file_path() -> PathBuf {
 
 pub struct SettingsStore {
     pub file_path: PathBuf,
+    writer: Option<mpsc::Sender<WriteRequest>>,
+}
+
+enum WriteRequest {
+    Save(AppSettings),
+    Flush(mpsc::Sender<()>),
+}
+
+fn write_settings(path: &std::path::Path, settings: &AppSettings) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let text = serde_json::to_string_pretty(&settings.normalized())?;
+    let temporary = path.with_extension("json.tmp");
+    std::fs::write(&temporary, text)?;
+    std::fs::rename(temporary, path)
+}
+
+fn run_writer(path: PathBuf, receiver: mpsc::Receiver<WriteRequest>) {
+    let mut pending = None;
+    loop {
+        let request = if pending.is_some() {
+            receiver.recv_timeout(Duration::from_millis(250))
+        } else {
+            receiver
+                .recv()
+                .map_err(|_| mpsc::RecvTimeoutError::Disconnected)
+        };
+        match request {
+            Ok(WriteRequest::Save(settings)) => pending = Some(settings),
+            Ok(WriteRequest::Flush(reply)) => {
+                if let Some(settings) = pending.take() {
+                    let _ = write_settings(&path, &settings);
+                }
+                let _ = reply.send(());
+            }
+            Err(error) => {
+                if let Some(settings) = pending.take() {
+                    let _ = write_settings(&path, &settings);
+                }
+                if error == mpsc::RecvTimeoutError::Disconnected {
+                    return;
+                }
+            }
+        }
+    }
 }
 
 impl SettingsStore {
     pub fn new(file_path: PathBuf) -> Self {
-        Self { file_path }
+        let (sender, receiver) = mpsc::channel();
+        let path = file_path.clone();
+        let writer = std::thread::Builder::new()
+            .name("moonglow-settings".into())
+            .spawn(move || run_writer(path, receiver))
+            .ok()
+            .map(|_| sender);
+        Self { file_path, writer }
     }
 
     pub fn default_path() -> Self {
@@ -46,6 +101,7 @@ impl SettingsPersistence for SettingsStore {
     /// corrupt file falls back to defaults; a corrupt one is first moved aside
     /// to `settings.json.corrupt` so the next save does not destroy it.
     fn load(&self) -> AppSettings {
+        self.flush();
         let data = match std::fs::read(&self.file_path) {
             Ok(data) => data,
             Err(_) => return AppSettings::default(),
@@ -62,18 +118,26 @@ impl SettingsPersistence for SettingsStore {
     /// Persists settings, normalizing them first so out-of-range values never
     /// reach disk.
     fn save(&self, settings: &AppSettings) {
-        // Best effort by design.
-        let _ = (|| -> std::io::Result<()> {
-            if let Some(parent) = self.file_path.parent() {
-                std::fs::create_dir_all(parent)?;
+        if let Some(writer) = &self.writer {
+            let _ = writer.send(WriteRequest::Save(settings.normalized()));
+        } else {
+            let _ = write_settings(&self.file_path, settings);
+        }
+    }
+
+    fn flush(&self) {
+        if let Some(writer) = &self.writer {
+            let (reply, done) = mpsc::channel();
+            if writer.send(WriteRequest::Flush(reply)).is_ok() {
+                let _ = done.recv_timeout(Duration::from_secs(2));
             }
-            let text = serde_json::to_string_pretty(&settings.normalized())?;
-            // Atomic write: temp file + rename.
-            let tmp = self.file_path.with_extension("json.tmp");
-            std::fs::write(&tmp, text)?;
-            std::fs::rename(&tmp, &self.file_path)?;
-            Ok(())
-        })();
+        }
+    }
+}
+
+impl Drop for SettingsStore {
+    fn drop(&mut self) {
+        self.flush();
     }
 }
 
@@ -99,6 +163,23 @@ mod tests {
     fn missing_file_loads_defaults() {
         let (store, _dir) = temp_store("missing");
         assert_eq!(store.load(), AppSettings::default());
+    }
+
+    #[test]
+    fn dropping_the_store_flushes_the_latest_pending_value() {
+        let (store, dir) = temp_store("flush-before-exit");
+        let path = store.file_path.clone();
+        for manual_brightness in 20..=60 {
+            store.save(&AppSettings {
+                manual_brightness,
+                ..AppSettings::default()
+            });
+        }
+        drop(store);
+        let restarted = SettingsStore::new(path);
+        assert_eq!(restarted.load().manual_brightness, 60);
+        drop(restarted);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

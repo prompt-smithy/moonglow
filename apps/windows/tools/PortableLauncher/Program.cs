@@ -26,6 +26,10 @@ internal static class Program
                 WorkingDirectory = extractionDirectory,
                 UseShellExecute = true,
             };
+            // The extracted child must register the stable launcher for startup.
+            startInfo.UseShellExecute = false;
+            startInfo.EnvironmentVariables["MOONGLOW_PORTABLE_LAUNCHER"] =
+                Assembly.GetExecutingAssembly().Location;
 
             using Process app = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Windows could not start Moonglow.");

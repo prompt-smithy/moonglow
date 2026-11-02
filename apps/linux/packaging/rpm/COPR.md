@@ -19,7 +19,7 @@ Build directly from git — COPR fetches the tag tarball itself:
 ```bash
 copr-cli buildscm moonglow \
     --clone-url https://github.com/prompt-smithy/moonglow.git \
-    --commit linux-v1.0.0 \
+    --commit v1.0.1 \
     --spec packaging/rpm/moonglow.spec
 ```
 

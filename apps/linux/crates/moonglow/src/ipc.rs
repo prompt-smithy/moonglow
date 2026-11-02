@@ -6,10 +6,11 @@
 //! instance instead of starting a second schedule loop and window.
 
 use crate::commands::{AppCommand, SharedState};
-use moonglow_core::state::ScheduleTime;
+use moonglow_core::state::{ScheduleTime, ScheduleWindow};
 use moonglow_core::time_of_day::TimeOfDay;
 use moonglow_core::traits::SettingsPersistence;
 use std::io::{BufRead, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,6 +31,36 @@ pub fn socket_path() -> PathBuf {
 
 fn rustix_user() -> u32 {
     rustix::process::getuid().as_raw()
+}
+
+/// Held before probing or changing hardware, including during one-shot commands.
+/// The lock file stays in place: unlinking it could create two independent locks.
+pub struct InstanceLock {
+    _file: std::fs::File,
+}
+
+impl InstanceLock {
+    pub fn try_acquire() -> std::io::Result<Option<Self>> {
+        Self::at_path(&socket_path().with_extension("lock"))
+    }
+
+    fn at_path(path: &std::path::Path) -> std::io::Result<Option<Self>> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(path)?;
+        match rustix::fs::flock(&file, rustix::fs::FlockOperation::NonBlockingLockExclusive) {
+            Ok(()) => Ok(Some(Self { _file: file })),
+            Err(rustix::io::Errno::WOULDBLOCK) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
 }
 
 /// Whether a live instance answers at the socket.
@@ -55,7 +86,12 @@ pub fn send(cmd: &serde_json::Value) -> Result<serde_json::Value, String> {
     let mut reader = std::io::BufReader::new(stream);
     let mut response = String::new();
     reader.read_line(&mut response).map_err(|e| e.to_string())?;
-    serde_json::from_str(&response).map_err(|e| format!("bad response: {e}"))
+    let response: serde_json::Value =
+        serde_json::from_str(&response).map_err(|e| format!("bad response: {e}"))?;
+    if let Some(error) = response.get("error").and_then(|v| v.as_str()) {
+        return Err(error.to_string());
+    }
+    Ok(response)
 }
 
 /// Handle to the running IPC server thread.
@@ -269,6 +305,40 @@ fn dispatch<S: SettingsPersistence>(
             },
             None => serde_json::json!({"error": "missing integer 'kelvin'"}),
         },
+        "set_schedule_window" => {
+            let window = match request.get("window").and_then(|v| v.as_str()) {
+                Some("morning") => ScheduleWindow::Morning,
+                Some("evening") => ScheduleWindow::Evening,
+                _ => return serde_json::json!({"error": "expected window=morning|evening"}),
+            };
+            let parse = |key| {
+                request
+                    .get(key)
+                    .and_then(|v| v.as_str())
+                    .and_then(|raw| raw.parse::<TimeOfDay>().ok())
+            };
+            let (Some(from), Some(to)) = (parse("from"), parse("to")) else {
+                return serde_json::json!({"error": "expected from/to in HH:MM format"});
+            };
+            if from >= to {
+                return serde_json::json!({"error": "transition start must precede its end"});
+            }
+            match state.lock() {
+                Ok(mut s) => {
+                    s.set_schedule_window(window, from, to);
+                    let (start, end) = match window {
+                        ScheduleWindow::Morning => {
+                            (ScheduleTime::MorningStart, ScheduleTime::MorningEnd)
+                        }
+                        ScheduleWindow::Evening => {
+                            (ScheduleTime::EveningStart, ScheduleTime::EveningEnd)
+                        }
+                    };
+                    serde_json::json!({"ok": true, "from": s.schedule_time(start).to_string(), "to": s.schedule_time(end).to_string()})
+                }
+                Err(_) => serde_json::json!({"error": "state locked"}),
+            }
+        }
         "set_schedule" => {
             let field = request.get("field").and_then(|v| v.as_str()).unwrap_or("");
             let which = match field {
@@ -538,5 +608,41 @@ mod tests {
     fn socket_path_is_per_user() {
         let path = socket_path();
         assert!(path.to_string_lossy().contains("moonglow"));
+    }
+
+    #[test]
+    fn instance_lock_excludes_a_racing_start_before_socket_exists() {
+        let path = std::env::temp_dir().join(format!("moonglow-lock-test-{}", std::process::id()));
+        let first = InstanceLock::at_path(&path).unwrap().unwrap();
+        assert!(InstanceLock::at_path(&path).unwrap().is_none());
+        drop(first);
+        assert!(InstanceLock::at_path(&path).unwrap().is_some());
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn schedule_window_moves_atomically_and_rejects_invalid_pairs() {
+        let state = test_state();
+        let (tx, _rx) = mpsc::channel();
+        let result = dispatch(
+            &serde_json::json!({"cmd":"set_schedule_window", "window":"morning", "from":"08:00", "to":"09:00"}),
+            &state,
+            &tx,
+        );
+        assert_eq!(result["from"], "08:00");
+        assert_eq!(result["to"], "09:00");
+        let invalid = dispatch(
+            &serde_json::json!({"cmd":"set_schedule_window", "window":"morning", "from":"10:00", "to":"07:00"}),
+            &state,
+            &tx,
+        );
+        assert!(invalid.get("error").is_some());
+        assert_eq!(
+            state
+                .lock()
+                .unwrap()
+                .schedule_time(ScheduleTime::MorningStart),
+            TimeOfDay::new(8, 0)
+        );
     }
 }

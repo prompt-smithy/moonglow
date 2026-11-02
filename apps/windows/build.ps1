@@ -23,7 +23,7 @@
     .\build.ps1
 #>
 [CmdletBinding()]
-param()
+param([switch]$SkipInstaller)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -33,6 +33,13 @@ $project   = Join-Path $root 'Moonglow.csproj'
 $issScript = Join-Path $root 'installer\Moonglow.iss'
 $binDir    = Join-Path $root 'bin'
 $appExe    = 'Moonglow.exe'
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $root '../..'))
+$releaseVersion = (Get-Content (Join-Path $repoRoot 'VERSION') -Raw).Trim()
+$versionDir = Join-Path $repoRoot "release/$releaseVersion"
+$releaseDir = Join-Path $versionDir 'windows'
+foreach ($platform in @('linux', 'windows', 'macOs')) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $versionDir $platform) | Out-Null
+}
 
 # Output folders.
 $portableDir  = Join-Path $binDir 'Portable'
@@ -65,7 +72,7 @@ function Invoke-Checked([string]$file, [string[]]$arguments) {
 function Get-AppVersion {
     $content = Get-Content $project -Raw
     if ($content -match '<Version>\s*([^<]+?)\s*</Version>') { return $Matches[1] }
-    return '1.0.0'
+    return $releaseVersion
 }
 
 function Resolve-Iscc {
@@ -98,6 +105,7 @@ function Resolve-Iscc {
 }
 
 $version = Get-AppVersion
+if ($version -ne $releaseVersion) { throw "Moonglow.csproj version must match root VERSION ($releaseVersion)." }
 Write-Host "Moonglow packaging - version $version (.NET Framework 4.8)" -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
@@ -123,7 +131,9 @@ Invoke-Checked 'dotnet' @(
     'publish', $project,
     '-c', 'Release',
     '--nologo',
+    "-p:Version=$version",
     '-p:DebugType=none',
+    '-p:EnableWindowsTargeting=true',
     '-p:DebugSymbols=false',
     '-o', $portableDir
 )
@@ -136,6 +146,7 @@ Invoke-Checked 'dotnet' @(
     '-c', 'Release',
     '--nologo',
     "-p:PayloadDir=$payloadPath",
+    "-p:Version=$version",
     "-p:OutputPath=$launcherOutput"
 )
 $builtLauncher = Join-Path $launcherOutput 'Moonglow_Portable.exe'
@@ -145,7 +156,10 @@ Copy-Item $builtLauncher $portableExe -Force
 # ---------------------------------------------------------------------------
 # 2. Installer via Inno Setup, wrapping the portable build.
 # ---------------------------------------------------------------------------
-$iscc = Resolve-Iscc
+$iscc = $null
+if (-not $SkipInstaller -and [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    $iscc = Resolve-Iscc
+}
 if (-not $iscc) {
     Write-Warning 'Inno Setup (ISCC.exe) was not found and could not be installed automatically.'
     Write-Warning 'The portable build completed. To build the installer, install Inno Setup 6'
@@ -162,6 +176,19 @@ if (-not $iscc) {
         $issScript
     )
 }
+
+# Collect distributables in the shared versioned release tree.
+Copy-Item $portableExe (Join-Path $releaseDir 'Moonglow_Portable.exe') -Force
+$portableZip = Join-Path $releaseDir 'Moonglow-windows-portable.zip'
+Compress-Archive -Path (Join-Path $portableDir '*') -DestinationPath $portableZip -Force
+$installer = Join-Path $installerDir $appExe
+if (Test-Path $installer) { Copy-Item $installer (Join-Path $releaseDir 'Moonglow-Setup.exe') -Force }
+elseif (Test-Path (Join-Path $releaseDir 'Moonglow-Setup.exe')) { Remove-Item (Join-Path $releaseDir 'Moonglow-Setup.exe') }
+$checksums = Get-ChildItem $releaseDir -File | Where-Object { $_.Name -ne 'SHA256SUMS' } | Sort-Object Name | ForEach-Object {
+    $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    "$hash  $($_.Name)"
+}
+[System.IO.File]::WriteAllLines((Join-Path $releaseDir 'SHA256SUMS'), [string[]]$checksums, [System.Text.UTF8Encoding]::new($false))
 
 Write-Step 'Build summary'
 $outputs = [ordered]@{

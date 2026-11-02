@@ -14,6 +14,8 @@ pub trait SettingsPersistence: Send {
     /// Persists settings, normalizing them first. Best effort: a filesystem
     /// failure must never crash the app.
     fn save(&self, settings: &AppSettings);
+    /// Commits any deferred writes before exit. In-memory stores need no flush.
+    fn flush(&self) {}
 }
 
 /// Enumerates displays and reports what the app can control on each one.
@@ -37,6 +39,10 @@ pub trait BrightnessService: Send {
     /// (hotplug, sleep/wake, KVM switch). Backends without hardware to
     /// rediscover keep the default no-op.
     fn reprobe(&mut self) {}
+    /// Whether hardware detection should be retried even with an unchanged display list.
+    fn needs_reprobe(&self) -> bool {
+        false
+    }
 }
 
 /// Uses hardware brightness when its DDC/CI probe succeeds, otherwise software
@@ -112,6 +118,13 @@ impl BrightnessService for BrightnessFallbackService {
         if let Ok(mut h) = self.hardware.lock() {
             h.reprobe();
         }
+    }
+
+    fn needs_reprobe(&self) -> bool {
+        self.hardware
+            .lock()
+            .map(|h| h.needs_reprobe())
+            .unwrap_or(false)
     }
 
     fn status_detail(&self) -> Option<String> {

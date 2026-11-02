@@ -1708,7 +1708,7 @@ dependencies = [
 
 [[package]]
 name = "moonglow"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "chrono",
  "clap",
@@ -1731,7 +1731,7 @@ dependencies = [
 
 [[package]]
 name = "moonglow-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "chrono",
  "serde",

@@ -20,6 +20,19 @@ struct SettingsStoreTests {
         try Data(json.utf8).write(to: store.fileURL)
     }
 
+    @Test("Deferred saves flush the latest slider value before restart")
+    func deferredSavesFlushLatestSnapshot() {
+        let store = Self.makeStore()
+        var settings = AppSettings.default
+        for value in 20...60 {
+            settings.manualBrightness = value
+            store.scheduleSave(settings)
+        }
+        store.flush()
+        let restarted = SettingsStore(fileURL: store.fileURL)
+        #expect(restarted.load().manualBrightness == 60)
+    }
+
     @Test("Defaults match the documented values")
     func defaultsMatchDocumentation() {
         let settings = AppSettings.default

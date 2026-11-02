@@ -31,6 +31,7 @@ public readonly struct TemperatureRange
     /// <summary>Snaps a raw value to the nearest kelvin step and clamps it to range.</summary>
     public static int Snap(int value)
     {
+        value = AppSettings.ClampKelvin(value);
         int snapped = (int)Math.Round(
             value / (double)AppSettings.KelvinStep,
             MidpointRounding.AwayFromZero) * AppSettings.KelvinStep;

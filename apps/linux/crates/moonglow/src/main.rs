@@ -27,6 +27,7 @@ mod x11;
 use clap::Parser;
 use commands::{AppCommand, SharedState};
 use moonglow_core::schedule::TICK_INTERVAL_SECS;
+use moonglow_core::settings::KELVIN_STEP;
 use moonglow_core::state::{ScheduleTime, ScheduleWindow, StateManager};
 use moonglow_core::time_of_day::TimeOfDay;
 use moonglow_core::traits::{
@@ -61,10 +62,10 @@ struct Cli {
     /// Set colour temperature in kelvin (manual mode).
     #[arg(long, value_name = "KELVIN")]
     set_temp: Option<i32>,
-    /// Warm the temperature by 250 K (manual mode).
+    /// Warm the temperature by 100 K (manual mode).
     #[arg(long)]
     warmer: bool,
-    /// Cool the temperature by 250 K (manual mode).
+    /// Cool the temperature by 100 K (manual mode).
     #[arg(long)]
     cooler: bool,
     /// Turn automatic temperature on or off.
@@ -239,16 +240,35 @@ fn compose_backends() -> Composed {
     };
     let _ = backend_name;
 
-    let gamma_supported = color.lock().map(|c| c.is_supported()).unwrap_or(false);
-    let software_supported = software.lock().map(|s| s.is_supported()).unwrap_or(false);
+    let display_hardware = hardware.clone();
+    let display_software = software.clone();
+    let display_color = color.clone();
     let display: Box<dyn DisplayService> = match session_kind {
         session::SessionKind::X11 | session::SessionKind::XWayland => {
-            Box::new(x11::X11DisplayService::new(ddc_supported))
+            Box::new(x11::X11DisplayService::new(move || {
+                display_hardware
+                    .lock()
+                    .map(|h| h.is_supported())
+                    .unwrap_or(false)
+            }))
         }
-        _ => Box::new(displays::SysfsDisplayService::new(
-            ddc_supported,
-            software_supported,
-            gamma_supported,
+        _ => Box::new(displays::SysfsDisplayService::with_live_capabilities(
+            move || {
+                (
+                    display_hardware
+                        .lock()
+                        .map(|h| h.is_supported())
+                        .unwrap_or(false),
+                    display_software
+                        .lock()
+                        .map(|s| s.is_supported())
+                        .unwrap_or(false),
+                    display_color
+                        .lock()
+                        .map(|c| c.is_supported())
+                        .unwrap_or(false),
+                )
+            },
         )),
     };
 
@@ -309,7 +329,7 @@ fn parse_window(flag: &str, pair: &[String]) -> Result<(TimeOfDay, TimeOfDay), i
     let from = from.parse::<TimeOfDay>();
     let to = to.parse::<TimeOfDay>();
     match (from, to) {
-        (Ok(from), Ok(to)) => Ok((from, to)),
+        (Ok(from), Ok(to)) if from < to => Ok((from, to)),
         _ => {
             eprintln!("{flag} expects 24h \"HH:MM\" times.");
             Err(2)
@@ -430,7 +450,11 @@ fn direct_command(cli: &Cli) -> i32 {
                 "note: automatic mode is on; the schedule will override this on the next tick."
             );
         }
-        let delta = if cli.warmer { -250 } else { 250 };
+        let delta = if cli.warmer {
+            -KELVIN_STEP
+        } else {
+            KELVIN_STEP
+        };
         state.set_color_temperature(state.color_temperature() + delta);
         println!("temperature: {} K", state.color_temperature());
     }
@@ -626,7 +650,11 @@ fn forward_command(cli: &Cli) -> i32 {
     }
     if cli.warmer || cli.cooler {
         acted = true;
-        let delta = if cli.warmer { -250 } else { 250 };
+        let delta = if cli.warmer {
+            -KELVIN_STEP
+        } else {
+            KELVIN_STEP
+        };
         match ipc::send(&serde_json::json!({"cmd": "adjust_temp", "delta": delta})) {
             Ok(response) => println!("temperature: {} K", response["temperature"]),
             Err(e) => {
@@ -673,65 +701,22 @@ fn forward_command(cli: &Cli) -> i32 {
             }
         }
     }
-    if let Some(pair) = &cli.morning {
-        acted = true;
-        let (from, to) = match parse_window("--morning", pair) {
-            Ok(times) => times,
-            Err(code) => return code,
-        };
-        match (
-            ipc::send(&serde_json::json!({
-                "cmd": "set_schedule",
-                "field": "morning_start",
-                "value": from.to_string(),
-            })),
-            ipc::send(&serde_json::json!({
-                "cmd": "set_schedule",
-                "field": "morning_end",
-                "value": to.to_string(),
-            })),
-        ) {
-            (Ok(from_resp), Ok(to_resp)) => {
-                println!(
-                    "morning: {} - {}",
-                    from_resp["value"].as_str().unwrap_or("?"),
-                    to_resp["value"].as_str().unwrap_or("?")
-                )
-            }
-            (Err(e), _) | (_, Err(e)) => {
-                eprintln!("{e}");
-                return 1;
-            }
-        }
-    }
-    if let Some(pair) = &cli.evening {
-        acted = true;
-        let (from, to) = match parse_window("--evening", pair) {
-            Ok(times) => times,
-            Err(code) => return code,
-        };
-        match (
-            ipc::send(&serde_json::json!({
-                "cmd": "set_schedule",
-                "field": "evening_start",
-                "value": from.to_string(),
-            })),
-            ipc::send(&serde_json::json!({
-                "cmd": "set_schedule",
-                "field": "evening_end",
-                "value": to.to_string(),
-            })),
-        ) {
-            (Ok(from_resp), Ok(to_resp)) => {
-                println!(
-                    "evening: {} - {}",
-                    from_resp["value"].as_str().unwrap_or("?"),
-                    to_resp["value"].as_str().unwrap_or("?")
-                )
-            }
-            (Err(e), _) | (_, Err(e)) => {
-                eprintln!("{e}");
-                return 1;
+    for (window, pair) in [("morning", &cli.morning), ("evening", &cli.evening)] {
+        if let Some(pair) = pair {
+            acted = true;
+            let (from, to) = match parse_window(window, pair) {
+                Ok(times) => times,
+                Err(code) => return code,
+            };
+            match ipc::send(&serde_json::json!({
+                "cmd": "set_schedule_window", "window": window,
+                "from": from.to_string(), "to": to.to_string(),
+            })) {
+                Ok(response) => println!("{window}: {} - {}", response["from"], response["to"]),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 1;
+                }
             }
         }
     }
@@ -788,6 +773,7 @@ fn forward_command(cli: &Cli) -> i32 {
 /// Owned shutdown resources: worker stops/joins plus the backends whose
 /// pre-launch state must be restored (gamma ramps, Night Light, DDC).
 struct Shutdown {
+    flush_settings: Option<Box<dyn FnOnce() + Send>>,
     sched_stop: Arc<AtomicBool>,
     sched_thread: Option<std::thread::JoinHandle<()>>,
     shortcut_handle: Option<shortcuts::ShortcutHandle>,
@@ -808,6 +794,9 @@ impl Shutdown {
         }
         if let Some(handle) = self.ipc_handle {
             handle.stop();
+        }
+        if let Some(flush) = self.flush_settings {
+            flush();
         }
         if let Ok(color) = self.color.lock() {
             color.reset();
@@ -876,6 +865,25 @@ pub fn request_quit() {
 fn main() {
     let cli = Cli::parse();
 
+    // Serialize startup before any backend can capture or change global display state.
+    let _instance_lock = match ipc::InstanceLock::try_acquire() {
+        Ok(Some(lock)) => lock,
+        Ok(None) => {
+            let deadline = std::time::Instant::now() + Duration::from_secs(30);
+            while std::time::Instant::now() < deadline {
+                if ipc::ping() {
+                    std::process::exit(forward_command(&cli));
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            eprintln!("another Moonglow instance is starting or busy; try again shortly");
+            std::process::exit(1);
+        }
+        Err(error) => {
+            eprintln!("cannot acquire Moonglow instance lock: {error}");
+            std::process::exit(1);
+        }
+    };
     if ipc::ping() {
         std::process::exit(forward_command(&cli));
     }
@@ -981,7 +989,15 @@ fn main() {
         .ok();
 
     // IPC always runs on the primary so later invocations forward.
-    let ipc_handle = ipc::spawn_ipc(state.clone(), cmd_tx.clone()).ok();
+    let ipc_handle = Some(
+        ipc::spawn_ipc(state.clone(), cmd_tx.clone()).unwrap_or_else(|error| {
+            eprintln!("{error}");
+            if let Ok(color) = color.lock() {
+                color.reset();
+            }
+            std::process::exit(1);
+        }),
+    );
 
     // Global shortcuts: registered by the desktop or grabbed on X11, then
     // re-registered whenever the bindings change.
@@ -1003,6 +1019,14 @@ fn main() {
     // Quit owns this bundle: out-of-loop requests take and run it, so the
     // event loop is never on the shutdown path (see `quit_now`).
     let shutdown: SharedShutdown = Arc::new(Mutex::new(Some(Shutdown {
+        flush_settings: Some(Box::new({
+            let state = state.clone();
+            move || {
+                if let Ok(state) = state.lock() {
+                    state.flush_settings();
+                }
+            }
+        })),
         sched_stop,
         sched_thread,
         shortcut_handle,
@@ -1155,6 +1179,7 @@ mod tests {
             resets: resets.clone(),
         }));
         let shutdown: SharedShutdown = Arc::new(Mutex::new(Some(Shutdown {
+            flush_settings: None,
             sched_stop: Arc::new(AtomicBool::new(false)),
             sched_thread: None,
             shortcut_handle: None,

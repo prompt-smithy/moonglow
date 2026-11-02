@@ -19,8 +19,12 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd "$script_dir/.." && pwd)"
+monorepo_dir="$(cd "$repo_dir/../.." && pwd)"
+moonglow_version="${MOONGLOW_VERSION:-$(tr -d '[:space:]' < "$monorepo_dir/VERSION")}"
+moonglow_build="${MOONGLOW_BUILD:-3}"
+version_dir="$monorepo_dir/release/$moonglow_version"
 artifacts_dir="${MOONGLOW_ARTIFACTS_DIR:-$repo_dir/artifacts}"
-release_dir="${MOONGLOW_RELEASE_DIR:-$repo_dir/release}"
+release_dir="${MOONGLOW_RELEASE_DIR:-$version_dir/macOs}"
 build_dir="${MOONGLOW_BUILD_DIR:-$repo_dir/.build/universal}"
 app_dir="$artifacts_dir/Moonglow.app"
 dmg_staging_dir="$artifacts_dir/dmg"
@@ -32,8 +36,6 @@ dmg_path="$release_dir/Moonglow-macOS-universal.dmg"
 icon_source="$repo_dir/../../resources/Moonglow-option-e-amber-noring.png"
 configuration="${MOONGLOW_CONFIGURATION:-release}"
 # Single source for the release version, stamped into the built plist below.
-moonglow_version="${MOONGLOW_VERSION:-0.2.0}"
-moonglow_build="${MOONGLOW_BUILD:-2}"
 deployment_target="12.0"
 arm64_triple="arm64-apple-macosx$deployment_target"
 x86_64_triple="x86_64-apple-macosx$deployment_target"
@@ -76,6 +78,7 @@ rm -rf \
     "$app_dir" \
     "$dmg_staging_dir" \
     "$iconset_dir"
+mkdir -p "$version_dir/linux" "$version_dir/windows" "$version_dir/macOs"
 mkdir -p "$release_dir" "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" "$iconset_dir"
 rm -f \
     "$release_dir/Night-Mode-Controller-macOS-universal.zip" \
@@ -128,15 +131,12 @@ mkdir -p "$dmg_staging_dir"
 cp -R "$app_dir" "$dmg_staging_dir/"
 ln -s /Applications "$dmg_staging_dir/Applications"
 
-diskutil image create from \
-    --format UDZO \
-    --volumeName "Moonglow" \
-    "$dmg_staging_dir" \
-    "$dmg_path"
+hdiutil create -format UDZO -volname "Moonglow" -srcfolder "$dmg_staging_dir" "$dmg_path"
 
 # The image is signed like the app: an unsigned DMG can be neither submitted nor stapled.
 codesign --force --sign - "$dmg_path"
 codesign --verify --strict "$dmg_path"
+(cd "$release_dir" && shasum -a 256 "$(basename "$zip_path")" "$(basename "$dmg_path")" > SHA256SUMS)
 
 echo "Created $zip_path"
 echo "Created $dmg_path"

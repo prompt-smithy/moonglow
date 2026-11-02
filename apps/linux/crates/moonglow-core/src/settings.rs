@@ -177,9 +177,11 @@ impl AppSettings {
     pub fn normalized(&self) -> Self {
         let mut copy = self.clone();
         copy.manual_brightness = Self::clamp_brightness(copy.manual_brightness);
-        copy.manual_color_temp_k = Self::clamp_kelvin(copy.manual_color_temp_k);
-        copy.day_color_temp_k = Self::clamp_kelvin(copy.day_color_temp_k);
-        copy.night_color_temp_k = Self::clamp_kelvin(copy.night_color_temp_k);
+        copy.manual_color_temp_k =
+            crate::temperature_range::TemperatureRange::snap(copy.manual_color_temp_k);
+        let targets = crate::temperature_range::TemperatureRange::from_settings(&copy);
+        copy.day_color_temp_k = targets.day();
+        copy.night_color_temp_k = targets.night();
         if !copy.morning_start.valid() {
             copy.morning_start = Self::default_morning_start();
         }
@@ -190,6 +192,15 @@ impl AppSettings {
             copy.evening_start = Self::default_evening_start();
         }
         if !copy.evening_end.valid() {
+            copy.evening_end = Self::default_evening_end();
+        }
+        if !(copy.morning_start < copy.morning_end
+            && copy.morning_end <= copy.evening_start
+            && copy.evening_start < copy.evening_end)
+        {
+            copy.morning_start = Self::default_morning_start();
+            copy.morning_end = Self::default_morning_end();
+            copy.evening_start = Self::default_evening_start();
             copy.evening_end = Self::default_evening_end();
         }
         // One key combination must never fire two actions, even if the file
@@ -299,7 +310,8 @@ mod tests {
         bad.morning_start = TimeOfDay::new(25, 0);
         let fixed = bad.normalized();
         assert_eq!(fixed.manual_brightness, 100);
-        assert_eq!(fixed.day_color_temp_k, 900);
+        assert_eq!(fixed.day_color_temp_k, 1200);
+        assert_eq!(fixed.night_color_temp_k, 900);
         assert_eq!(fixed.morning_start, AppSettings::default_morning_start());
     }
 

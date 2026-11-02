@@ -12,7 +12,8 @@ spec/
 ├── vectors/
 │   ├── kelvin.json               kelvin → normalized RGB channel scale
 │   ├── schedule.json             schedule evaluation at fixed times
-│   └── temperature-range.json    snapping and clamping
+│   ├── temperature-range.json    snapping and clamping
+│   └── settings.json             normalization on load
 └── learnings/
     └── windows-popup-color-slider.md   post-merge Windows slider bugs and the
                                         rules that stop them coming back
@@ -44,6 +45,11 @@ stores `{keyCode, modifiers}`, while Linux stores a readable `"Ctrl+Alt+Up"`
 string. Both are documented by the `hotKey` definition in the schema, are
 platform-specific, and are not portable between operating systems. `null`
 disables one action without disturbing the others.
+
+Persisted settings are normalized before use: temperatures snap to 100 K, targets are
+ordered, and an inverted or overlapping schedule falls back to the four default times.
+`vectors/settings.json` pins these rules across all three apps. Disabling automatic mode
+persists the temperature currently held on screen so it survives a restart.
 
 ## Conformance
 

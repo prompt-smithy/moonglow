@@ -59,15 +59,18 @@ dotnet build Moonglow.csproj -c Release
 
 # Run the shared spec conformance suite
 dotnet test Moonglow.Core.Tests/Moonglow.Core.Tests.csproj -c Release
+dotnet test Moonglow.Platform.Tests/Moonglow.Platform.Tests.csproj -c Release
 
 # Build both distributables
 dotnet build Moonglow.csproj -t:PackageAll
 ```
 
-The package command produces:
+The package command collects distributables under repository-root `release/<VERSION>/windows`:
 
-- `bin\Moonglow_Portable.exe` — one portable launcher file with the application and dependencies embedded. It extracts them to a temporary directory while running, then cleans up when Moonglow exits.
-- `bin\Installer\Moonglow.exe` — the Inno Setup installer.
+- `Moonglow_Portable.exe` — one portable launcher with the application and dependencies embedded. It extracts them while running and cleans up on exit. Start-at-login registers the stable launcher.
+- `Moonglow-windows-portable.zip` — the application and its dependencies, ready to extract and run.
+- `Moonglow-Setup.exe` — the Inno Setup installer, when Inno Setup is available.
+- `SHA256SUMS` — checksums for the distributables.
 
 Both artifacts require the .NET Framework 4.8 runtime on the target PC; the portable launcher is a single-file package, not a self-contained .NET runtime.
 

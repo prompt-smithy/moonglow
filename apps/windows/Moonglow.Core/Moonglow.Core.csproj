@@ -4,7 +4,7 @@
        net48 class library lets the test project load the golden vectors in
        spec/vectors without starting WPF or touching display hardware. -->
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFrameworks>net48;net8.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

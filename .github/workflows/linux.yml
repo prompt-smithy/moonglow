@@ -7,12 +7,18 @@ on:
       - 'apps/linux/**'
       - 'resources/**'
       - 'spec/**'
+      - 'VERSION'
+      - 'tools/build-release.py'
+      - 'tools/package-linux.py'
       - '.github/workflows/linux.yml'
   pull_request:
     paths:
       - 'apps/linux/**'
       - 'resources/**'
       - 'spec/**'
+      - 'VERSION'
+      - 'tools/build-release.py'
+      - 'tools/package-linux.py'
       - '.github/workflows/linux.yml'
 
 concurrency:

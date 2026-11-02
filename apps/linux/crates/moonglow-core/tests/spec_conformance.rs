@@ -224,3 +224,15 @@ fn range_ordering_vectors_match_exactly() {
         );
     }
 }
+
+#[test]
+fn settings_normalization_vectors_match() {
+    let document: serde_json::Value = load("settings.json");
+    for row in document["cases"].as_array().unwrap() {
+        let actual: AppSettings = serde_json::from_value(row["input"].clone()).unwrap();
+        let actual = serde_json::to_value(actual.normalized()).unwrap();
+        for (key, expected) in row["expected"].as_object().unwrap() {
+            assert_eq!(&actual[key], expected, "{}: {}", row["name"], key);
+        }
+    }
+}

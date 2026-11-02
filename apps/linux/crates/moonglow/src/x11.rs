@@ -192,14 +192,14 @@ impl moonglow_core::traits::BrightnessService for X11SoftwareBrightnessService {
 
 /// Enumerates displays through RandR outputs.
 pub struct X11DisplayService {
-    ddc_brightness_supported: bool,
+    ddc_brightness_supported: Box<dyn Fn() -> bool + Send>,
     displays: Vec<DisplayInfo>,
 }
 
 impl X11DisplayService {
-    pub fn new(ddc_brightness_supported: bool) -> Self {
+    pub fn new(ddc_brightness_supported: impl Fn() -> bool + Send + 'static) -> Self {
         Self {
-            ddc_brightness_supported,
+            ddc_brightness_supported: Box::new(ddc_brightness_supported),
             displays: Vec::new(),
         }
     }
@@ -211,7 +211,7 @@ impl DisplayService for X11DisplayService {
     }
 
     fn refresh(&mut self) -> Vec<DisplayInfo> {
-        self.displays = enumerate(&self.ddc_brightness_supported).unwrap_or_default();
+        self.displays = enumerate(&(self.ddc_brightness_supported)()).unwrap_or_default();
         self.displays.clone()
     }
 }

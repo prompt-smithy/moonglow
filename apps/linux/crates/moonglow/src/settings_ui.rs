@@ -49,6 +49,7 @@ pub struct SettingsApp<S: SettingsPersistence> {
     vis: VisibilityController,
     theme_reported: bool,
     last_system_theme: Option<egui::Theme>,
+    applied_dark: Option<bool>,
     gsettings_dark: bool,
     gsettings_checked: Instant,
     // Local control state, re-synced whenever settings change elsewhere.
@@ -88,6 +89,7 @@ impl<S: SettingsPersistence> SettingsApp<S> {
             vis: VisibilityController::new(visible),
             theme_reported: false,
             last_system_theme: None,
+            applied_dark: None,
             gsettings_dark: gsettings_dark().unwrap_or(true),
             gsettings_checked: Instant::now(),
             last_seen: settings.clone(),
@@ -253,31 +255,6 @@ impl<S: SettingsPersistence> SettingsApp<S> {
 impl<S: SettingsPersistence + 'static> eframe::App for SettingsApp<S> {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_commands(ctx);
-        // Follow the desktop appearance. The winit report wins where the
-        // backend provides it; otherwise the GNOME fallback below, which is
-        // re-polled so live theme flips still apply within seconds.
-        let system = ctx.system_theme();
-        if self.gsettings_checked.elapsed() > Duration::from_secs(5) {
-            self.gsettings_checked = Instant::now();
-            if let Some(dark) = gsettings_dark() {
-                self.gsettings_dark = dark;
-            }
-        }
-        if !self.theme_reported || system != self.last_system_theme {
-            self.theme_reported = true;
-            self.last_system_theme = system;
-            eprintln!(
-                "theme: system reports {system:?}, fallback dark={}",
-                self.gsettings_dark
-            );
-        }
-        let dark = system
-            .map(|theme| theme == egui::Theme::Dark)
-            .unwrap_or(self.gsettings_dark);
-        configure_style(ctx, dark);
-        // Stay alive while hidden so IPC commands still land.
-        ctx.request_repaint_after(Duration::from_millis(500));
-
         let (os_focused, focus_event) = ctx.input(|input| {
             let focus_event = input
                 .events
@@ -298,6 +275,34 @@ impl<S: SettingsPersistence + 'static> eframe::App for SettingsApp<S> {
         if !self.vis.visible() {
             return;
         }
+
+        // Follow the desktop appearance. The winit report wins where the
+        // backend provides it; otherwise the GNOME fallback below, which is
+        // re-polled so live theme flips still apply within seconds.
+        let system = ctx.system_theme();
+        if system.is_none() && self.gsettings_checked.elapsed() > Duration::from_secs(5) {
+            self.gsettings_checked = Instant::now();
+            if let Some(dark) = gsettings_dark() {
+                self.gsettings_dark = dark;
+            }
+        }
+        if !self.theme_reported || system != self.last_system_theme {
+            self.theme_reported = true;
+            self.last_system_theme = system;
+            eprintln!(
+                "theme: system reports {system:?}, fallback dark={}",
+                self.gsettings_dark
+            );
+        }
+        let dark = system
+            .map(|theme| theme == egui::Theme::Dark)
+            .unwrap_or(self.gsettings_dark);
+        if self.applied_dark != Some(dark) {
+            configure_style(ctx, dark);
+            self.applied_dark = Some(dark);
+        }
+        // Visible controls follow background state; hidden windows are woken by IPC.
+        ctx.request_repaint_after(Duration::from_millis(500));
 
         // Re-sync local controls when settings changed elsewhere (CLI, IPC).
         let settings = self.state.lock().ok().map(|state| state.settings().clone());
@@ -1031,12 +1036,12 @@ pub const CLI_COMMANDS: &[CliCommand] = &[
     CliCommand {
         name: "warmer",
         usage: "--warmer",
-        desc: "Warm by 250 K (manual mode).",
+        desc: "Warm by 100 K (manual mode).",
     },
     CliCommand {
         name: "cooler",
         usage: "--cooler",
-        desc: "Cool by 250 K (manual mode).",
+        desc: "Cool by 100 K (manual mode).",
     },
     CliCommand {
         name: "temperature-up",

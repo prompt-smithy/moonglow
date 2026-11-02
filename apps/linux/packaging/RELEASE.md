@@ -1,12 +1,11 @@
 # Release checklist (Linux)
 
-Single source of truth for the version: `Cargo.toml`
-`[workspace.package]`. Tags look like `linux-v1.0.0` (the `linux-`
-prefix keeps Linux releases distinct from macOS tags in this repo).
+Release version: repository-root `VERSION`, kept aligned with `Cargo.toml`
+`[workspace.package]`. Distributables are written to `release/<VERSION>/linux` at the repository root. Tags look like `v1.0.1` and build all three operating systems in the shared release workflow.
 
 ## 1. Prepare
 
-1. Bump `version` in `Cargo.toml`.
+1. Bump root `VERSION` and the native app version manifests together.
 2. Add a `<release>` entry to
    `packaging/moonglow.metainfo.xml`.
 3. Add a `%changelog` entry to `packaging/rpm/moonglow.spec`.
@@ -17,8 +16,8 @@ prefix keeps Linux releases distinct from macOS tags in this repo).
 ## 2. Tag + GitHub release
 
 ```bash
-git tag linux-v1.0.0
-git push origin linux-v1.0.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 Create the GitHub release from the tag and attach the `.deb` built in
@@ -27,13 +26,13 @@ step 3 (users on Mint/Pop/Zorin install the same file).
 ## 3. Debian / Ubuntu (.deb)
 
 ```bash
-bash packaging/build-deb.sh   # → dist/moonglow_*_amd64.deb
+bash packaging/build-deb.sh   # → ../../release/<VERSION>/linux/moonglow_*_amd64.deb
 ```
 
 Smoke-test in a container or VM (never `--force` anything):
 
 ```bash
-sudo dpkg -i dist/moonglow_*_amd64.deb
+sudo dpkg -i ../../release/<VERSION>/linux/moonglow_*_amd64.deb
 sudo apt-get install -f          # pulls Recommends if wanted
 moonglow --version
 man moonglow        # renders

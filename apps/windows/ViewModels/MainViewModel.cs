@@ -95,7 +95,7 @@ public sealed class MainViewModel : ObservableObject
                 return;
 
             Settings.ManualBrightness = _brightnessValue;
-            _settingsService.Save();
+            _settingsService.ScheduleSave();
 
             // The setting persists regardless; hardware only moves with a capable display.
             if (HasBrightnessSupport)
@@ -118,7 +118,7 @@ public sealed class MainViewModel : ObservableObject
                 return;
 
             Settings.ManualColorTempK = _colorTemp;
-            _settingsService.Save();
+            _settingsService.ScheduleSave();
 
             if (HasColorSupport)
                 _color.Apply(_colorTemp);
@@ -134,6 +134,8 @@ public sealed class MainViewModel : ObservableObject
                 return;
 
             Settings.AutoColorTemperature = value;
+            if (!value)
+                Settings.ManualColorTempK = _colorTemp;
             _settingsService.Save();
             OnPropertyChanged(nameof(ManualColorEnabled));
 
@@ -143,8 +145,7 @@ public sealed class MainViewModel : ObservableObject
             }
             else if (HasColorSupport)
             {
-                // Keep showing the temperature that was on screen. The manual preference is
-                // left untouched, so turning automatic mode back on does not forget it.
+                // Hold the displayed temperature, including after the app restarts.
                 _color.Apply(_colorTemp);
             }
         }
@@ -324,7 +325,7 @@ public sealed class MainViewModel : ObservableObject
 
         Settings.NightColorTempK = range.Night;
         Settings.DayColorTempK = range.Day;
-        _settingsService.Save();
+        _settingsService.ScheduleSave();
         OnPropertyChanged(nameof(NightColorTemp));
         OnPropertyChanged(nameof(DayColorTemp));
         RetickIfAuto();

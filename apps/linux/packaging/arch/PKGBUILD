@@ -1,8 +1,8 @@
 # Maintainer: Thomas Martin <tmmuttathara@gmail.com>
-# Release flow: tag linux-v$pkgver upstream, then refresh the checksum with
+# Release flow: tag v$pkgver upstream, then refresh the checksum with
 # `updpkgsums` (or `makepkg -g`) and regenerate .SRCINFO before pushing to AUR.
 pkgname=moonglow
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc="Desktop app for external-display DDC/CI brightness and scheduled colour temperature"
 arch=('x86_64' 'aarch64')
@@ -12,16 +12,16 @@ depends=('gcc-libs')
 makedepends=('cargo')
 optdepends=('i2c-tools: DDC/CI brightness debugging (i2cdetect)')
 install=moonglow.install
-source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/linux-v$pkgver.tar.gz")
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('REPLACE_AFTER_TAG')
 
 build() {
-    cd "moonglow-linux-v$pkgver/apps/linux"
+    cd "moonglow-$pkgver/apps/linux"
     cargo build --release --locked -p moonglow
 }
 
 package() {
-    cd "moonglow-linux-v$pkgver/apps/linux"
+    cd "moonglow-$pkgver/apps/linux"
     install -Dm755 "target/release/moonglow" "$pkgdir/usr/bin/moonglow"
     install -Dm644 "packaging/moonglow.desktop" "$pkgdir/usr/share/applications/moonglow.desktop"
     install -Dm644 "packaging/moonglow.metainfo.xml" "$pkgdir/usr/share/metainfo/io.github.prompt-smithy.moonglow.metainfo.xml"

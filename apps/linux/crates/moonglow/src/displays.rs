@@ -8,6 +8,8 @@ use moonglow_core::traits::DisplayService;
 use moonglow_core::DisplayInfo;
 use std::path::PathBuf;
 
+type CapabilityProvider = Box<dyn Fn() -> (bool, bool, bool) + Send>;
+
 /// Enumerates connected DRM connectors.
 pub struct SysfsDisplayService {
     drm_dir: PathBuf,
@@ -15,9 +17,17 @@ pub struct SysfsDisplayService {
     software_brightness_supported: bool,
     gamma_supported: bool,
     displays: Vec<DisplayInfo>,
+    live_capabilities: Option<CapabilityProvider>,
 }
 
 impl SysfsDisplayService {
+    pub fn with_live_capabilities(
+        provider: impl Fn() -> (bool, bool, bool) + Send + 'static,
+    ) -> Self {
+        let mut service = Self::new(false, false, false);
+        service.live_capabilities = Some(Box::new(provider));
+        service
+    }
     /// `software_brightness` is separate from `gamma`: GNOME/KDE night lights
     /// drive temperature with no brightness channel, so gamma support must
     /// not imply software dimming.
@@ -46,6 +56,7 @@ impl SysfsDisplayService {
             software_brightness_supported: software_brightness,
             gamma_supported: gamma,
             displays: Vec::new(),
+            live_capabilities: None,
         }
     }
 }
@@ -56,6 +67,12 @@ impl DisplayService for SysfsDisplayService {
     }
 
     fn refresh(&mut self) -> Vec<DisplayInfo> {
+        if let Some(provider) = &self.live_capabilities {
+            let (ddc, software, gamma) = provider();
+            self.ddc_brightness_supported = ddc;
+            self.software_brightness_supported = software;
+            self.gamma_supported = gamma;
+        }
         let mut connectors = connected_connectors(&self.drm_dir);
         connectors.sort();
         self.displays = connectors
@@ -169,5 +186,24 @@ mod tests {
         let mut service =
             SysfsDisplayService::with_drm_dir(PathBuf::from("/nonexistent-drm"), true, true, true);
         assert!(service.refresh().is_empty());
+    }
+
+    #[test]
+    fn capability_changes_are_visible_without_reconnecting_the_display() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        let dir = fake_drm("late-hardware", &[("DP-1", "connected")]);
+        let supported = Arc::new(AtomicBool::new(false));
+        let live = supported.clone();
+        let mut service = SysfsDisplayService::with_drm_dir(dir.clone(), false, false, true);
+        service.live_capabilities = Some(Box::new(move || {
+            (live.load(Ordering::Relaxed), false, true)
+        }));
+        assert!(!service.refresh()[0].supports_brightness);
+        supported.store(true, Ordering::Relaxed);
+        assert!(service.refresh()[0].supports_brightness);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

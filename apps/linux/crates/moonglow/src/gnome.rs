@@ -48,6 +48,28 @@ struct OriginalState {
     schedule_temperature: u32,
     last_applied: Option<u32>,
     touched: bool,
+    ownership_ready: bool,
+}
+
+impl OriginalState {
+    fn ensure_ownership(&mut self, configure: impl FnOnce() -> bool) -> bool {
+        if self.ownership_ready {
+            return true;
+        }
+        // Even a partially failed configuration must be restored on quit.
+        self.touched = true;
+        self.ownership_ready = configure();
+        self.ownership_ready
+    }
+
+    fn apply_temperature(&mut self, temp: u32, apply: impl FnOnce() -> bool) -> bool {
+        if self.last_applied == Some(temp) {
+            return true;
+        }
+        let applied = apply();
+        self.last_applied = applied.then_some(temp);
+        applied
+    }
 }
 
 impl GnomeNightLightService {
@@ -80,6 +102,7 @@ impl GnomeNightLightService {
                 schedule_temperature: snapshot.temperature,
                 last_applied: None,
                 touched: false,
+                ownership_ready: false,
             }),
             supported: true,
         })
@@ -107,17 +130,15 @@ impl GnomeNightLightService {
             Ok(o) => o,
             Err(_) => return false,
         };
-        if original.touched {
-            return true;
-        }
-        original.touched = true;
-        // No short-circuit: attempt every write even if one fails.
-        let mut ok = true;
-        ok &= gsettings_set("night-light-enabled", "true").is_ok();
-        ok &= gsettings_set("night-light-schedule-automatic", "false").is_ok();
-        ok &= gsettings_set("night-light-schedule-from", &ALWAYS_ON_FROM.to_string()).is_ok();
-        ok &= gsettings_set("night-light-schedule-to", &ALWAYS_ON_TO.to_string()).is_ok();
-        ok
+        original.ensure_ownership(|| {
+            // Attempt every write: a partial change still needs restoration.
+            let mut ok = true;
+            ok &= gsettings_set("night-light-enabled", "true").is_ok();
+            ok &= gsettings_set("night-light-schedule-automatic", "false").is_ok();
+            ok &= gsettings_set("night-light-schedule-from", &ALWAYS_ON_FROM.to_string()).is_ok();
+            ok &= gsettings_set("night-light-schedule-to", &ALWAYS_ON_TO.to_string()).is_ok();
+            ok
+        })
     }
 }
 
@@ -138,20 +159,16 @@ impl ColorTemperatureService for GnomeNightLightService {
         if !self.ensure_enabled() {
             return false;
         }
-        {
-            let mut original = match self.original.lock() {
-                Ok(o) => o,
-                Err(_) => return false,
-            };
-            if original.last_applied == Some(temp) {
-                return true;
-            }
-            original.last_applied = Some(temp);
-        }
-        // Mirror into the schedule temperature so a daemon re-evaluation
-        // (resume, settings touch) rewrites our value, never a stale one.
-        let _ = gsettings_set("night-light-temperature", &temp.to_string());
-        self.set_temperature_live(temp)
+        let mut original = match self.original.lock() {
+            Ok(original) => original,
+            Err(_) => return false,
+        };
+        original.apply_temperature(temp, || {
+            // Both the persisted schedule and live daemon must accept the target.
+            let mirrored = gsettings_set("night-light-temperature", &temp.to_string()).is_ok();
+            let applied = self.set_temperature_live(temp);
+            mirrored && applied
+        })
     }
 
     fn reset(&self) {
@@ -163,6 +180,7 @@ impl ColorTemperatureService for GnomeNightLightService {
             return;
         }
         original.last_applied = None;
+        original.ownership_ready = false;
         let _ = self.set_temperature_live(original.temperature);
         if !original.enabled {
             let _ = gsettings_set("night-light-enabled", "false");
@@ -187,6 +205,7 @@ impl ColorTemperatureService for GnomeNightLightService {
             "night-light-temperature",
             &original.schedule_temperature.to_string(),
         );
+        original.touched = false;
     }
 
     fn invalidate(&self) {
@@ -271,6 +290,31 @@ fn gsettings_set(key: &str, value: &str) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_writes_are_retried_and_partial_ownership_is_restored() {
+        let mut state = OriginalState {
+            temperature: 6500,
+            enabled: false,
+            schedule_automatic: true,
+            schedule_from: 18.0,
+            schedule_to: 6.0,
+            schedule_temperature: 2700,
+            last_applied: None,
+            touched: false,
+            ownership_ready: false,
+        };
+        assert!(!state.ensure_ownership(|| false));
+        assert!(state.touched);
+        assert!(!state.ownership_ready);
+        assert!(state.ensure_ownership(|| true));
+        assert!(!state.apply_temperature(3200, || false));
+        assert_eq!(state.last_applied, None);
+        assert!(state.apply_temperature(3200, || true));
+        assert!(state.apply_temperature(3200, || panic!("successful target should be cached")));
+        assert!(!state.apply_temperature(3300, || false));
+        assert_eq!(state.last_applied, None);
+    }
 
     #[test]
     fn probe_fails_without_session_bus() {

@@ -11,7 +11,7 @@ namespace Moonglow.Services;
 /// moved aside as <c>settings.json.corrupt</c> before defaults are used, so the next save
 /// cannot silently destroy it.
 /// </remarks>
-public sealed class SettingsService
+public sealed class SettingsService : IDisposable
 {
     private static readonly string Dir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Moonglow");
@@ -32,6 +32,10 @@ public sealed class SettingsService
 
     private readonly string _filePath;
     private readonly string _legacyFilePath;
+    private readonly object _saveGate = new();
+    private readonly System.Threading.Timer _saveTimer;
+    private AppSettings? _pendingSettings;
+    private bool _disposed;
 
     public AppSettings Settings { get; private set; } = new();
 
@@ -45,10 +49,12 @@ public sealed class SettingsService
     {
         _filePath = filePath;
         _legacyFilePath = legacyFilePath ?? string.Empty;
+        _saveTimer = new System.Threading.Timer(_ => Flush(), null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
     }
 
     public void Load()
     {
+        Flush();
         // A file preserved as "corrupt" may still be readable; a transient failure is not
         // corruption. Fall back to it when the canonical file is gone so the user is not
         // stranded on defaults.
@@ -97,6 +103,50 @@ public sealed class SettingsService
 
     public void Save()
     {
+        lock (_saveGate)
+        {
+            if (_disposed) return;
+            _pendingSettings = Settings.Normalized();
+            Flush();
+        }
+    }
+
+    public void ScheduleSave()
+    {
+        lock (_saveGate)
+        {
+            if (_disposed) return;
+            _pendingSettings = Settings.Normalized();
+            _saveTimer.Change(250, System.Threading.Timeout.Infinite);
+        }
+    }
+
+    public void Flush()
+    {
+        lock (_saveGate)
+        {
+            if (_disposed) return;
+            _saveTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+            if (_pendingSettings is null) return;
+            var settings = _pendingSettings;
+            _pendingSettings = null;
+            Write(settings);
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (_saveGate)
+        {
+            if (_disposed) return;
+            Flush();
+            _disposed = true;
+            _saveTimer.Dispose();
+        }
+    }
+
+    private void Write(AppSettings settings)
+    {
         try
         {
             string? directory = Path.GetDirectoryName(_filePath);
@@ -106,7 +156,7 @@ public sealed class SettingsService
             // Write through a temporary file so a crash or a concurrent reader never sees a
             // half-written settings file.
             string tempPath = _filePath + ".tmp";
-            File.WriteAllText(tempPath, JsonSerializer.Serialize(Settings.Normalized(), Options));
+            File.WriteAllText(tempPath, JsonSerializer.Serialize(settings, Options));
 
             if (File.Exists(_filePath))
                 File.Replace(tempPath, _filePath, destinationBackupFileName: null);

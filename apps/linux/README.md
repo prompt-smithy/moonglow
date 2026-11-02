@@ -47,14 +47,14 @@ Light settings, KWin preview stopped).
 Debian / Ubuntu / Mint / Pop!_OS (from the GitHub release `.deb`):
 
 ```bash
-sudo apt install ./moonglow_1.0.0_amd64.deb
+sudo apt install ./moonglow_1.0.1_amd64.deb
 ```
 
 Or build it yourself (version comes from `Cargo.toml`):
 
 ```bash
-bash packaging/build-deb.sh        # → dist/moonglow_*_amd64.deb
-sudo apt install ./dist/moonglow_*_amd64.deb
+bash packaging/build-deb.sh        # → ../../release/1.0.1/linux/moonglow_*_amd64.deb
+sudo apt install ./../../release/1.0.1/linux/moonglow_*_amd64.deb
 ```
 
 Arch (AUR):
@@ -135,7 +135,7 @@ desktop-level keyboard shortcuts:
 
 ```bash
 moonglow --brighter   # or --dimmer (5%)
-moonglow --warmer     # or --cooler (250 K, manual mode)
+moonglow --warmer     # or --cooler (100 K, manual mode)
 moonglow --brightness-up     # shortcut semantics: +5%
 moonglow --brightness-down   # shortcut semantics: -5%
 moonglow --temperature-up    # +100 K; turns automatic off first

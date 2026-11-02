@@ -41,6 +41,7 @@ impl TemperatureRange {
 
     /// Snaps a raw value to the nearest kelvin step and clamps it to range.
     pub fn snap(value: i32) -> i32 {
+        let value = AppSettings::clamp_kelvin(value);
         let step = KELVIN_STEP as f64;
         let rounded = ((value as f64 / step).round() as i32) * KELVIN_STEP;
         AppSettings::clamp_kelvin(rounded)

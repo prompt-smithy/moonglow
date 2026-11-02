@@ -152,7 +152,12 @@ impl<S: SettingsPersistence> StateManager<S> {
     /// level is re-applied to whatever answered.
     pub fn refresh_displays(&mut self) -> bool {
         let fresh = self.display.refresh();
-        if fresh == self.displays {
+        let retry_hardware = self
+            .brightness
+            .lock()
+            .map(|b| b.needs_reprobe())
+            .unwrap_or(false);
+        if fresh == self.displays && !retry_hardware {
             return false;
         }
         self.displays = fresh;
@@ -166,6 +171,14 @@ impl<S: SettingsPersistence> StateManager<S> {
             brightness.reprobe();
             if brightness.is_supported() {
                 brightness.set_brightness(self.settings.manual_brightness);
+            }
+        }
+        // Capabilities are read again after probing, so newly discovered hardware
+        // is immediately available to controls as well as to the backend.
+        self.displays = self.display.refresh();
+        if !self.settings.auto_color_temperature && self.has_color_support() {
+            if let Ok(color) = self.color.lock() {
+                color.apply(self.displayed_temperature);
             }
         }
         true
@@ -217,7 +230,7 @@ impl<S: SettingsPersistence> StateManager<S> {
     }
 
     pub fn set_color_temperature(&mut self, value: i32) {
-        let clamped = AppSettings::clamp_kelvin(value);
+        let clamped = TemperatureRange::snap(value);
         if clamped == self.displayed_temperature {
             return;
         }
@@ -244,7 +257,13 @@ impl<S: SettingsPersistence> StateManager<S> {
         if value == self.settings.auto_color_temperature {
             return;
         }
-        self.mutate_settings(|s| s.auto_color_temperature = value);
+        let held_temperature = self.displayed_temperature;
+        self.mutate_settings(|s| {
+            s.auto_color_temperature = value;
+            if !value {
+                s.manual_color_temp_k = held_temperature;
+            }
+        });
         if value {
             self.tick_schedule();
         } else if self.has_color_support() {
@@ -622,6 +641,10 @@ impl<S: SettingsPersistence> StateManager<S> {
         }
     }
 
+    pub fn flush_settings(&self) {
+        self.store.flush();
+    }
+
     // MARK: - Private
 
     fn mutate_settings(&mut self, change: impl FnOnce(&mut AppSettings)) {
@@ -935,6 +958,62 @@ mod tests {
         h.state.set_auto_color_temperature(false);
         assert!(!h.store.load().auto_color_temperature);
         assert_eq!(*h.color_applied.lock().unwrap(), [displayed]);
+    }
+
+    #[test]
+    fn held_temperature_survives_restart() {
+        let settings = AppSettings {
+            day_color_temp_k: 3700,
+            night_color_temp_k: 3700,
+            ..AppSettings::default()
+        };
+        let mut h = make_harness(settings, true, true, None, true, false, false);
+        h.state.set_auto_color_temperature(false);
+        let restarted = make_harness(h.store.load(), true, true, None, true, false, false);
+        assert_eq!(restarted.state.color_temperature(), 3700);
+        assert!(!restarted.state.auto_color_temperature());
+    }
+
+    #[test]
+    fn hotplug_reapplies_manual_temperature() {
+        let settings = AppSettings {
+            auto_color_temperature: false,
+            manual_color_temp_k: 3400,
+            ..AppSettings::default()
+        };
+        let mut h = make_harness(settings, true, true, None, true, false, false);
+        h.display_inner
+            .lock()
+            .unwrap()
+            .displays
+            .push(DisplayInfo::new("2", "New display", "2", false, true, true));
+        assert!(h.state.refresh_displays());
+        assert_eq!(*h.color_applied.lock().unwrap(), [3400]);
+    }
+
+    #[test]
+    fn unavailable_hardware_is_retried_with_an_unchanged_display_list() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        struct LateBrightness(Arc<AtomicBool>);
+        impl BrightnessService for LateBrightness {
+            fn is_supported(&self) -> bool {
+                self.0.load(Ordering::Relaxed)
+            }
+            fn set_brightness(&self, _percent: i32) {}
+            fn needs_reprobe(&self) -> bool {
+                !self.is_supported()
+            }
+            fn reprobe(&mut self) {
+                self.0.store(true, Ordering::Relaxed);
+            }
+        }
+        let mut h = default_harness();
+        h.state.brightness = Arc::new(StdMutex::new(LateBrightness(Arc::new(AtomicBool::new(
+            false,
+        )))));
+        assert!(!h.state.has_brightness_support());
+        h.state.refresh_displays();
+        assert!(h.state.has_brightness_support());
     }
 
     #[test]

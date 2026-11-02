@@ -7,12 +7,18 @@ on:
       - 'apps/macos/**'
       - 'resources/**'
       - 'spec/**'
+      - 'VERSION'
+      - 'tools/build-release.py'
+      - 'tools/package-linux.py'
       - '.github/workflows/macos.yml'
   pull_request:
     paths:
       - 'apps/macos/**'
       - 'resources/**'
       - 'spec/**'
+      - 'VERSION'
+      - 'tools/build-release.py'
+      - 'tools/package-linux.py'
       - '.github/workflows/macos.yml'
 
 concurrency:

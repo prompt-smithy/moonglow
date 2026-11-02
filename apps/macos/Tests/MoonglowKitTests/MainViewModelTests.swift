@@ -135,6 +135,35 @@ struct MainViewModelTests {
         #expect(harness.color.applied == [displayed])
     }
 
+    @Test("Turning automatic off preserves the held temperature across a restart")
+    func heldTemperatureSurvivesRestart() {
+        var settings = AppSettings.default
+        settings.dayColorTempK = 3700
+        settings.nightColorTempK = 3700
+        let harness = makeHarness(settings: settings)
+        harness.viewModel.autoColorTemperature = false
+        let restarted = makeHarness(settings: harness.store.load())
+        #expect(restarted.viewModel.colorTemperature == 3700)
+        #expect(!restarted.viewModel.autoColorTemperature)
+    }
+
+    @Test("Display refresh restores manual temperature and brightness")
+    func refreshRestoresManualControls() {
+        var settings = AppSettings.default
+        settings.autoColorTemperature = false
+        settings.manualColorTempK = 3400
+        settings.manualBrightness = 47
+        let harness = makeHarness(settings: settings)
+        harness.viewModel.applyInitialState()
+        let previousWrites = harness.color.applied.count
+        let previousBrightnessWrites = harness.brightness.applied.count
+        harness.viewModel.refreshDisplays()
+        #expect(harness.color.applied.count == previousWrites + 1)
+        #expect(harness.color.applied.last == 3400)
+        #expect(harness.brightness.applied.count == previousBrightnessWrites + 1)
+        #expect(harness.brightness.applied.last == 47)
+    }
+
     @Test("The manual slider is disabled without colour support")
     func manualSliderNeedsSupport() {
         var settings = AppSettings.default

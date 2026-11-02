@@ -36,6 +36,7 @@ public final class MainViewModel: ObservableObject {
     /// The temperature currently on screen. In automatic mode this tracks the schedule
     /// rather than the saved manual value, which is why it is stored separately.
     @Published private var displayedTemperature: Int
+    private var hasLoadedDisplays = false
 
     // MARK: - Callbacks
 
@@ -123,6 +124,7 @@ public final class MainViewModel: ObservableObject {
     /// support, the displays are enumerated again (the brightness flags read the live DDC
     /// state) and the persisted values are pushed to the now-available hardware.
     public func refreshDisplays() {
+        let shouldReapply = hasLoadedDisplays
         brightnessService.refreshSupportAsync { [weak self] newlyAvailable in
             guard newlyAvailable else { return }
             Task { @MainActor [weak self] in
@@ -133,6 +135,11 @@ public final class MainViewModel: ObservableObject {
             }
         }
         reloadDisplays()
+        hasLoadedDisplays = true
+        if shouldReapply {
+            applyInitialState()
+            if autoColorTemperature { schedule.tick() }
+        }
     }
 
     /// Re-enumerates the displays and drops the cached gamma ramp.
@@ -171,7 +178,7 @@ public final class MainViewModel: ObservableObject {
     public var colorTemperature: Int {
         get { displayedTemperature }
         set {
-            let clamped = AppSettings.clampKelvin(newValue)
+            let clamped = TemperatureRange.snap(newValue)
             guard clamped != displayedTemperature else { return }
 
             displayedTemperature = clamped
@@ -187,7 +194,10 @@ public final class MainViewModel: ObservableObject {
         set {
             guard newValue != settings.autoColorTemperature else { return }
 
-            mutateSettings { $0.autoColorTemperature = newValue }
+            mutateSettings {
+                $0.autoColorTemperature = newValue
+                if !newValue { $0.manualColorTempK = displayedTemperature }
+            }
             if newValue {
                 schedule.tick()
             } else {
@@ -460,6 +470,7 @@ public final class MainViewModel: ObservableObject {
     public func showSettings() { onShowSettings?() }
 
     public func quit() { onQuit?() }
+    public func flushSettings() { store.flush() }
 
     // MARK: - Private
 
@@ -467,7 +478,7 @@ public final class MainViewModel: ObservableObject {
         var copy = settings
         change(&copy)
         settings = copy.normalized()
-        store.save(settings)
+        store.scheduleSave(settings)
     }
 
     private func setTemperatureTarget(_ value: Int, isDay: Bool) {

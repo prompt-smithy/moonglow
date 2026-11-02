@@ -7,12 +7,18 @@ on:
       - 'apps/windows/**'
       - 'resources/**'
       - 'spec/**'
+      - 'VERSION'
+      - 'tools/build-release.py'
+      - 'tools/package-linux.py'
       - '.github/workflows/windows.yml'
   pull_request:
     paths:
       - 'apps/windows/**'
       - 'resources/**'
       - 'spec/**'
+      - 'VERSION'
+      - 'tools/build-release.py'
+      - 'tools/package-linux.py'
       - '.github/workflows/windows.yml'
 
 concurrency:
@@ -46,6 +52,9 @@ jobs:
       # Loads spec/vectors and asserts the shared contract; see spec/README.md.
       - name: Test
         run: dotnet test Moonglow.Core.Tests/Moonglow.Core.Tests.csproj -c Release
+
+      - name: Test display worker and settings persistence
+        run: dotnet test Moonglow.Platform.Tests/Moonglow.Platform.Tests.csproj -c Release
 
       - name: Upload build output
         uses: actions/upload-artifact@v4

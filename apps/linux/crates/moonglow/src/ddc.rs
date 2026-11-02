@@ -290,6 +290,13 @@ impl BrightnessService for LinuxDdcService {
     fn reprobe(&mut self) {
         self.reprobe_under(Path::new("/dev"));
     }
+
+    fn needs_reprobe(&self) -> bool {
+        self.inner
+            .lock()
+            .map(|i| !i.supported && !i.disposed)
+            .unwrap_or(false)
+    }
 }
 
 #[cfg(test)]

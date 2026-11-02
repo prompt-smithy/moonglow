@@ -26,6 +26,20 @@ public sealed class SpecConformanceTests
     }
 
     [Fact]
+    public void SettingsNormalizationVectorsMatch()
+    {
+        using var document = Load("settings.json");
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        foreach (var row in document.RootElement.GetProperty("cases").EnumerateArray())
+        {
+            var settings = JsonSerializer.Deserialize<AppSettings>(row.GetProperty("input").GetRawText(), options)!.Normalized();
+            using var actual = JsonDocument.Parse(JsonSerializer.Serialize(settings, options));
+            foreach (var expected in row.GetProperty("expected").EnumerateObject())
+                Assert.Equal(expected.Value.GetRawText(), actual.RootElement.GetProperty(expected.Name).GetRawText());
+        }
+    }
+
+    [Fact]
     public void KelvinVectorsMatchWithinTolerance()
     {
         using JsonDocument document = Load("kelvin.json");

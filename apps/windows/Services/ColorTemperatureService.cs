@@ -36,7 +36,10 @@ public sealed class ColorTemperatureService : IDisposable
     /// <summary>True when the last successful write went through the composition
     /// fallback. Worker thread only.</summary>
     private bool _lastApplyWasMagnification;
+    private bool _preferMagnification;
     private bool _disposed;
+    private bool _restoreRequested;
+    private bool _invalidateRequested;
     private bool _magnificationInitialized;
     private bool _magnificationApplied;
     private readonly HashSet<int> _magInitThreads = new();
@@ -68,13 +71,15 @@ public sealed class ColorTemperatureService : IDisposable
         }
     }
 
-    /// <summary>Restores the gamma ramps captured before Moonglow changed them.</summary>
+    /// <summary>Queues restoration of the original gamma ramps on the display worker.</summary>
     public void RestoreOriginalGammaRamps()
     {
-        lock (_gammaGate)
+        lock (_applyGate)
         {
-            RestoreOriginalGammaRampsLocked();
-            ClearMagnification();
+            if (_disposed) return;
+            _restoreRequested = true;
+            _targetKelvin = -1;
+            _workAvailable.Set();
         }
     }
 
@@ -114,8 +119,19 @@ public sealed class ColorTemperatureService : IDisposable
     /// </summary>
     public void Invalidate()
     {
+        lock (_applyGate)
+        {
+            if (_disposed) return;
+            _invalidateRequested = true;
+            _workAvailable.Set();
+        }
+    }
+
+    private void InvalidateOnWorker()
+    {
         lock (_gammaGate)
         {
+            _preferMagnification = false;
             var present = new HashSet<string>(
                 _monitors.Snapshot().Select(m => m.DeviceName),
                 StringComparer.OrdinalIgnoreCase);
@@ -133,23 +149,27 @@ public sealed class ColorTemperatureService : IDisposable
     {
         lock (_applyGate)
         {
+            if (_disposed) return;
             _disposed = true;
+            _workAvailable.Set();
         }
+        // Native calls cannot be cancelled. Cleanup belongs to the same worker
+        // that initialized Magnification; a stuck driver gets a bounded grace.
+        if (!_workerThread.Join(TimeSpan.FromSeconds(2)))
+            LogColorApply("display worker did not stop within the shutdown grace period");
+    }
 
-        // Wake the worker so it observes disposal and ends. It is a background thread
-        // and is never joined: a hung driver call must not block application exit.
-        _workAvailable.Set();
-
-        RestoreOriginalGammaRamps();
-
+    private void CleanupOnWorker()
+    {
         lock (_gammaGate)
         {
+            RestoreOriginalGammaRampsLocked();
+            ClearMagnification();
             if (_magnificationInitialized)
             {
                 MagUninitialize();
                 _magnificationInitialized = false;
             }
-
             foreach (IntPtr hdc in _deviceContexts.Values)
                 DeleteDC(hdc);
             _deviceContexts.Clear();
@@ -166,6 +186,16 @@ public sealed class ColorTemperatureService : IDisposable
 
     private void ApplyLoop()
     {
+        try { RunApplyLoop(); }
+        finally
+        {
+            try { CleanupOnWorker(); }
+            catch (Exception error) { LogColorApply("display cleanup failed: " + error.Message); }
+        }
+    }
+
+    private void RunApplyLoop()
+    {
         // Stall episodes are keyed by target value: each new value gets its own episode.
         // (Keying by time alone let a fresh value inherit an expired episode and give up
         // almost immediately after a long warm drag.)
@@ -177,9 +207,37 @@ public sealed class ColorTemperatureService : IDisposable
             _workAvailable.Wait();
 
             int target;
+            bool restore;
+            bool invalidate;
             lock (_applyGate)
             {
+                if (_disposed) return;
                 target = _targetKelvin;
+                restore = _restoreRequested;
+                invalidate = _invalidateRequested;
+                _restoreRequested = false;
+                _invalidateRequested = false;
+            }
+            if (restore)
+            {
+                lock (_gammaGate)
+                {
+                    RestoreOriginalGammaRampsLocked();
+                    ClearMagnification();
+                    _displayedKelvin = -1;
+                    _preferMagnification = false;
+                }
+            }
+            if (invalidate) InvalidateOnWorker();
+            if (target < 0)
+            {
+                lock (_applyGate)
+                {
+                    if (_disposed) return;
+                    if (_targetKelvin < 0 && !_restoreRequested && !_invalidateRequested)
+                        _workAvailable.Reset();
+                }
+                continue;
             }
 
             bool freshEpisode = episodeTarget != target;
@@ -196,7 +254,7 @@ public sealed class ColorTemperatureService : IDisposable
             catch
             {
                 // Display drivers can transiently reject a ramp; keep serving the latest value.
-                result = ApplyResult.Applied;
+                result = ApplyResult.RetryLater;
             }
             watch.Stop();
             if (result == ApplyResult.Applied)
@@ -212,7 +270,7 @@ public sealed class ColorTemperatureService : IDisposable
                 if (_disposed)
                     return;
 
-                if (_targetKelvin != target)
+                if (_targetKelvin != target || _restoreRequested || _invalidateRequested)
                 {
                     // A newer value arrived while applying: serve it immediately.
                     continue;
@@ -261,7 +319,12 @@ public sealed class ColorTemperatureService : IDisposable
             if (_disposed)
                 return ApplyResult.Applied;
 
-            bool gammaApplied = ApplyToMonitors(ramp) || ApplyToDesktop(ramp);
+            bool anyMonitorApplied = false;
+            bool gammaApplied = !_preferMagnification && ApplyToMonitors(ramp, out anyMonitorApplied);
+            // The desktop DC can only be trusted when no individual panel took a
+            // ramp. Partial success needs one global fallback after restoring ramps.
+            if (!_preferMagnification && !gammaApplied && !anyMonitorApplied)
+                gammaApplied = ApplyToDesktop(ramp);
             if (gammaApplied)
             {
                 // The ramp works again (e.g. Night Light was switched off); drop the
@@ -271,6 +334,7 @@ public sealed class ColorTemperatureService : IDisposable
                     return ApplyResult.RetryLater;
                 LogColorApply($"apply {kelvin}K rgb=({redScale:F3},{greenScale:F3},{blueScale:F3}) via=gamma");
                 _lastApplyWasMagnification = false;
+                _preferMagnification = false;
                 return ApplyResult.Applied;
             }
 
@@ -283,6 +347,7 @@ public sealed class ColorTemperatureService : IDisposable
                 RestoreOriginalGammaRampsLocked();
                 LogColorApply($"apply {kelvin}K rgb=({redScale:F3},{greenScale:F3},{blueScale:F3}) via=magnification");
                 _lastApplyWasMagnification = true;
+                _preferMagnification = true;
                 return ApplyResult.Applied;
             }
 
@@ -295,31 +360,22 @@ public sealed class ColorTemperatureService : IDisposable
     /// <remarks>Best effort; written to <c>%Temp%\Moonglow-color.log</c>. It tells a
     /// dropped/stale apply inside the app apart from a driver that ignores the ramp.
     /// </remarks>
-    private static readonly int ProcessId = System.Diagnostics.Process.GetCurrentProcess().Id;
+    private static void LogColorApply(string message) => DiagnosticLog.Write(message);
 
-    private static void LogColorApply(string message)
+    private bool ApplyToMonitors(RAMP ramp, out bool anyApplied)
     {
-        try
-        {
-            System.IO.File.AppendAllText(
-                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Moonglow-color.log"),
-                $"{System.DateTime.Now:HH:mm:ss.fff} [p{ProcessId}/t{System.Environment.CurrentManagedThreadId}] {message}{System.Environment.NewLine}");
-        }
-        catch
-        {
-            // Diagnostics must never break the apply path.
-        }
-    }
+        anyApplied = false;
+        var monitors = _monitors.Snapshot();
+        bool allApplied = monitors.Count > 0;
 
-    private bool ApplyToMonitors(RAMP ramp)
-    {
-        bool appliedToMonitor = false;
-
-        foreach (var monitor in _monitors.Snapshot())
+        foreach (var monitor in monitors)
         {
             IntPtr hdc = GetDeviceContext(monitor.DeviceName);
             if (hdc == IntPtr.Zero)
+            {
+                allApplied = false;
                 continue;
+            }
 
             bool captured = _savedGammaRamps.TryGetValue(monitor.DeviceName, out RAMP originalRamp);
             if (!captured)
@@ -332,16 +388,17 @@ public sealed class ColorTemperatureService : IDisposable
             {
                 if (!_savedGammaRamps.ContainsKey(monitor.DeviceName))
                     _savedGammaRamps[monitor.DeviceName] = originalRamp;
-                appliedToMonitor = true;
+                anyApplied = true;
             }
             else
             {
+                allApplied = false;
                 // A DC can go stale after a driver reset; recreate it on the next write.
                 ReleaseDeviceContext(monitor.DeviceName);
             }
         }
 
-        return appliedToMonitor;
+        return allApplied;
     }
 
     private bool ApplyToDesktop(RAMP ramp)

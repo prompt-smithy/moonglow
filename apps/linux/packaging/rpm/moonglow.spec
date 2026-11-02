@@ -1,10 +1,10 @@
 Name:           moonglow
-Version:        1.0.0
+Version:        1.0.1
 Release:        1%{?dist}
 Summary:        Desktop app for external-display DDC/CI brightness and scheduled colour temperature
 License:        MIT AND Apache-2.0
 URL:            https://github.com/prompt-smithy/moonglow
-Source0:        %{url}/archive/refs/tags/linux-v%{version}.tar.gz
+Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz
 BuildRequires:  cargo
 BuildRequires:  rustc
 BuildRequires:  gcc
@@ -21,7 +21,7 @@ has brightness and colour-temperature sliders, a day/night range, global
 keyboard shortcuts, and a full command-line interface.
 
 %prep
-%autosetup -n moonglow-linux-v%{version}
+%autosetup -n moonglow-%{version}
 
 %build
 # COPR builders have network access for the crates.io fetch. For Koji or
@@ -62,5 +62,8 @@ EOF
 %{_mandir}/man1/moonglow.1*
 
 %changelog
+* Fri Oct 30 2026 Thomas Martin <tmmuttathara@gmail.com> - 1.0.1-1
+- Fix startup ownership, schedule editing, display recovery, and deferred settings writes.
+
 * Thu Oct 08 2026 Thomas Martin <tmmuttathara@gmail.com> - 1.0.0-1
 - First stable Linux release.

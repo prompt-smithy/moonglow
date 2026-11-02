@@ -1,0 +1,76 @@
+{
+  "description": "Normalize persisted settings: clamp before snapping, order targets, reset an invalid schedule to defaults.",
+  "cases": [
+    {
+      "name": "snap-and-order",
+      "input": {
+        "manualColorTempK": 3150,
+        "dayColorTempK": 5555,
+        "nightColorTempK": 6299
+      },
+      "expected": {
+        "dayColorTempK": 6300,
+        "nightColorTempK": 5600,
+        "manualColorTempK": 3200,
+        "manualBrightness": 80,
+        "morningStart": "06:00",
+        "morningEnd": "07:00",
+        "eveningStart": "17:30",
+        "eveningEnd": "18:30"
+      }
+    },
+    {
+      "name": "inverted-morning",
+      "input": {
+        "morningStart": "09:00",
+        "morningEnd": "07:00"
+      },
+      "expected": {
+        "dayColorTempK": 6500,
+        "nightColorTempK": 1200,
+        "manualColorTempK": 6500,
+        "manualBrightness": 80,
+        "morningStart": "06:00",
+        "morningEnd": "07:00",
+        "eveningStart": "17:30",
+        "eveningEnd": "18:30"
+      }
+    },
+    {
+      "name": "overlapping-transitions",
+      "input": {
+        "morningEnd": "18:00",
+        "eveningStart": "17:30"
+      },
+      "expected": {
+        "dayColorTempK": 6500,
+        "nightColorTempK": 1200,
+        "manualColorTempK": 6500,
+        "manualBrightness": 80,
+        "morningStart": "06:00",
+        "morningEnd": "07:00",
+        "eveningStart": "17:30",
+        "eveningEnd": "18:30"
+      }
+    },
+    {
+      "name": "integer-limits",
+      "input": {
+        "manualColorTempK": 2147483647,
+        "dayColorTempK": 2147483647,
+        "nightColorTempK": -2147483648,
+        "manualBrightness": -2147483648
+      },
+      "expected": {
+        "dayColorTempK": 6600,
+        "nightColorTempK": 900,
+        "manualColorTempK": 6600,
+        "manualBrightness": 1,
+        "morningStart": "06:00",
+        "morningEnd": "07:00",
+        "eveningStart": "17:30",
+        "eveningEnd": "18:30"
+      }
+    }
+  ]
+}

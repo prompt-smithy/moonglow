@@ -4,8 +4,8 @@ import Foundation
 ///
 /// Ported from `Services/SettingsService.cs`, minus the legacy import path. This is a
 /// pure persistence adapter: the observable copy of settings is owned by the view model.
-/// Writes are small, synchronous, and best effort — a filesystem failure must never
-/// crash the app.
+/// Slider writes are coalesced on a serial queue and flushed before quit.
+/// Filesystem failures are best effort and never crash the app.
 public final class SettingsStore {
 
     /// `~/Library/Application Support/Moonglow/settings.json`
@@ -21,6 +21,9 @@ public final class SettingsStore {
     public let fileURL: URL
 
     private let fileManager: FileManager
+    private let writeQueue = DispatchQueue(label: "com.prompt-smithy.Moonglow.settings")
+    private var pendingSettings: AppSettings?
+    private var pendingWrite: DispatchWorkItem?
 
     public init(fileURL: URL = SettingsStore.defaultFileURL(), fileManager: FileManager = .default) {
         self.fileURL = fileURL
@@ -31,6 +34,7 @@ public final class SettingsStore {
     /// defaults; an unreadable or corrupt one does the same, but is first moved aside to
     /// `settings.json.corrupt` so the next save does not silently destroy it.
     public func load() -> AppSettings {
+        flush()
         guard fileManager.fileExists(atPath: fileURL.path) else { return .default }
         guard let data = try? Data(contentsOf: fileURL),
               let decoded = try? JSONDecoder().decode(AppSettings.self, from: data)
@@ -60,6 +64,39 @@ public final class SettingsStore {
     /// Writes first and creates the directory only when the write fails for want of it,
     /// so the slider hot path pays for one atomic write instead of a mkdir on every tick.
     public func save(_ settings: AppSettings) {
+        writeQueue.sync {
+            pendingWrite?.cancel()
+            pendingWrite = nil
+            pendingSettings = nil
+            write(settings)
+        }
+    }
+
+    /// Coalesces slider updates without doing filesystem work on the main thread.
+    public func scheduleSave(_ settings: AppSettings) {
+        writeQueue.async { [self] in
+            pendingSettings = settings
+            pendingWrite?.cancel()
+            let work = DispatchWorkItem { [self] in writePending() }
+            pendingWrite = work
+            writeQueue.asyncAfter(deadline: .now() + 0.25, execute: work)
+        }
+    }
+
+    /// Commits the most recent snapshot before quit or an explicit read.
+    public func flush() {
+        writeQueue.sync { writePending() }
+    }
+
+    private func writePending() {
+        pendingWrite?.cancel()
+        pendingWrite = nil
+        guard let settings = pendingSettings else { return }
+        pendingSettings = nil
+        write(settings)
+    }
+
+    private func write(_ settings: AppSettings) {
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -74,7 +111,7 @@ public final class SettingsStore {
                 try data.write(to: fileURL, options: .atomic)
             }
         } catch {
-            // Best effort by design.
+            AppLog.shared.log(.settings, "settings save failed: \(error.localizedDescription)")
         }
     }
 }

@@ -22,6 +22,12 @@
     <binary>moonglow</binary>
   </provides>
   <releases>
+    <release version="1.0.1" date="2026-10-30">
+      <description>
+        <p>Fix startup ownership, schedule editing, display recovery, and settings
+        persistence. Reduce background redraws and disk writes.</p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-10-08">
       <description>
         <p>First stable Linux release: DDC/CI brightness, scheduled colour

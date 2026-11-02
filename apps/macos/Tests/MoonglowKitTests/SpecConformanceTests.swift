@@ -24,6 +24,22 @@ struct SpecConformanceTests {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+    @Test("Settings normalization vectors match on load")
+    func settingsNormalizationVectorsMatch() throws {
+        let document: SettingsDocument = try Self.load("settings.json")
+        for row in document.cases {
+            let actual = row.input.normalized()
+            #expect(actual.manualBrightness == row.expected.manualBrightness, "\(row.name)")
+            #expect(actual.manualColorTempK == row.expected.manualColorTempK, "\(row.name)")
+            #expect(actual.dayColorTempK == row.expected.dayColorTempK, "\(row.name)")
+            #expect(actual.nightColorTempK == row.expected.nightColorTempK, "\(row.name)")
+            #expect(actual.morningStart == row.expected.morningStart, "\(row.name)")
+            #expect(actual.morningEnd == row.expected.morningEnd, "\(row.name)")
+            #expect(actual.eveningStart == row.expected.eveningStart, "\(row.name)")
+            #expect(actual.eveningEnd == row.expected.eveningEnd, "\(row.name)")
+        }
+    }
+
     // MARK: - Kelvin
 
     @Test("Kelvin vectors match within 1e-6")
@@ -158,4 +174,13 @@ private extension TimeOfDay {
     init(_ pair: [Int]) {
         self.init(hour: pair.first ?? 0, minute: pair.count > 1 ? pair[1] : 0)
     }
+}
+
+private struct SettingsDocument: Decodable {
+    struct Row: Decodable {
+        let name: String
+        let input: AppSettings
+        let expected: AppSettings
+    }
+    let cases: [Row]
 }

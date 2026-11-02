@@ -39,6 +39,7 @@ schema, the drift that already exists between platforms, and the conformance mat
 spec/vectors/kelvin.json
 spec/vectors/schedule.json
 spec/vectors/temperature-range.json
+spec/vectors/settings.json
 ```
 
 All three implementations load these vectors in their test suites, so a change to the
@@ -46,7 +47,47 @@ contract that is not mirrored in an implementation fails CI.
 
 ## Building
 
-Each app builds only on its own platform. There is no umbrella build command.
+Release artifacts live at the repository root, grouped by version and operating system:
+
+```text
+release/
+  1.0.1/
+    linux/    moonglow_1.0.1_amd64.deb, moonglow-1.0.1-linux-amd64.tar.gz, SHA256SUMS
+    windows/  Moonglow_Portable.exe, Moonglow-windows-portable.zip, SHA256SUMS
+    macOs/    Moonglow-macOS-universal.dmg, Moonglow-macOS-universal.zip, SHA256SUMS
+```
+
+`VERSION` selects the release version. Keep the native version in the Linux Cargo workspace,
+Windows project, and macOS packaging plist aligned with it; the release builder checks these
+values. Builds preserve other version folders. Windows native builds also include
+`Moonglow-Setup.exe` when Inno Setup is installed.
+
+```bash
+python3 tools/build-release.py                   # package the current OS
+python3 tools/build-release.py --platform linux  # select an OS
+python3 tools/build-release.py --all             # all three on a configured Mac
+```
+
+The Mac build host can cross-build the Linux amd64 binary and Windows portable artifacts.
+For that, install PowerShell, the .NET SDK, Zig, and cargo-zigbuild, then add the Linux Rust target:
+
+```bash
+brew install powershell dotnet zig
+cargo install cargo-zigbuild --locked
+rustup target add x86_64-unknown-linux-gnu
+```
+
+Linux archives contain the executable, desktop entry, icons, manual, and udev rule. The `.deb`
+installs these files; for a portable archive, extract it and run `usr/bin/moonglow` from its
+versioned directory. Linux cross-builds target glibc 2.31 or later. Windows portable builds
+require .NET Framework 4.8. macOS artifacts are universal Intel/Apple Silicon, ad-hoc signed
+for local distribution as described in the macOS README.
+
+The **Release artifacts** workflow builds and tests on all three native runners. Run it manually
+or push a tag matching `VERSION` (for example `v1.0.1`); its `moonglow-release` artifact contains
+the same version/OS directory tree. It does not publish a GitHub release.
+
+Each native app has its own build command. The root release builder orchestrates packaging and supports the cross-builds above.
 
 ### Windows
 

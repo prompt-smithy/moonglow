@@ -33,6 +33,7 @@ public struct TemperatureRange: Equatable, Sendable {
     /// Integer division rounds toward zero, so the halves are handled explicitly to match
     /// round-half-away-from-zero on both sides of it.
     public static func snap(_ value: Int) -> Int {
+        let value = AppSettings.clampKelvin(value)
         let step = AppSettings.kelvinStep
         let quotient = value / step
         let remainder = value % step

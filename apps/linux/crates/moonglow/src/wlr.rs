@@ -249,12 +249,14 @@ fn ramps_fd(ramp: &moonglow_core::kelvin::GammaRamp) -> WlrResult<std::os::fd::O
 
     let fd = rustix::fs::memfd_create("moonglow-gamma", rustix::fs::MemfdFlags::CLOEXEC)?;
     let mut file = std::fs::File::from(fd);
+    let mut bytes = Vec::with_capacity((ramp.red.len() + ramp.green.len() + ramp.blue.len()) * 2);
     for channel in [&ramp.red, &ramp.green, &ramp.blue] {
         for v in channel {
             let entry = (v.clamp(0.0, 1.0) as f64 * 65535.0).round() as u16;
-            file.write_all(&entry.to_ne_bytes())?;
+            bytes.extend_from_slice(&entry.to_ne_bytes());
         }
     }
+    file.write_all(&bytes)?;
     file.seek(SeekFrom::Start(0))?;
     // Re-wrap as a std fd (rustix and std fd types are distinct) through a
     // raw transfer with exactly one owner.

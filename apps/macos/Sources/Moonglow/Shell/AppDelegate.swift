@@ -164,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         AppLog.shared.log(.lifecycle, "quitting")
         schedule?.stop()
+        viewModel?.flushSettings()
         colorService?.reset()
         brightnessService?.dispose()
         for observer in displayObservers {

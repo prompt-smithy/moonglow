@@ -341,7 +341,7 @@ public partial class App : Application
         SystemEvents.SessionSwitch -= OnSessionSwitch;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         _schedule?.Stop();
-        _color?.Reset();
+        _settingsService?.Dispose();
         _color?.Dispose();
         _monitors?.Dispose();
         _hotkeys?.Dispose();

@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using Microsoft.Win32;
+using Moonglow.Core;
 
 namespace Moonglow.Infrastructure;
 
@@ -20,8 +21,7 @@ internal static class StartupManager
             if (key is null)
                 return false;
 
-            Process process = Process.GetCurrentProcess();
-            string? exe = NormalizeExecutablePath(process.MainModule == null ? null : process.MainModule.FileName);
+            string? exe = NormalizeExecutablePath(StartupExecutable());
             foreach (string valueName in new[] { ValueName })
             {
                 string? value = key.GetValue(valueName) as string;
@@ -63,8 +63,7 @@ internal static class StartupManager
 
             if (enabled)
             {
-                Process process = Process.GetCurrentProcess();
-                string? exe = process.MainModule == null ? null : process.MainModule.FileName;
+                string? exe = StartupExecutable();
                 if (string.IsNullOrEmpty(exe))
                     return false;
 
@@ -105,6 +104,13 @@ internal static class StartupManager
         {
             return trimmed;
         }
+    }
+
+    private static string? StartupExecutable()
+    {
+        string? launcher = Environment.GetEnvironmentVariable("MOONGLOW_PORTABLE_LAUNCHER");
+        using Process process = Process.GetCurrentProcess();
+        return StartupPaths.Resolve(process.MainModule?.FileName, launcher, File.Exists);
     }
 }
 

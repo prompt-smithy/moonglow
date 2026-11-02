@@ -60,8 +60,8 @@ swift test  --scratch-path .build-run
 The packaging script creates:
 
 - `artifacts/Moonglow.app`
-- `release/Moonglow-macOS-universal.dmg`
-- `release/Moonglow-macOS-universal.zip`
+- `../../release/<VERSION>/macOs/Moonglow-macOS-universal.dmg`
+- `../../release/<VERSION>/macOs/Moonglow-macOS-universal.zip`
 
 It builds a universal (`arm64` and `x86_64`) app for macOS 12 or later. Hardware DDC/CI
 brightness targets the main display, and only when it is an external panel: on a MacBook whose

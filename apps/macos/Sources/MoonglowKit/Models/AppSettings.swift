@@ -79,14 +79,21 @@ public struct AppSettings: Equatable, Sendable {
         var copy = self
 
         copy.manualBrightness = AppSettings.clampBrightness(manualBrightness)
-        copy.manualColorTempK = AppSettings.clampKelvin(manualColorTempK)
-        copy.dayColorTempK = AppSettings.clampKelvin(dayColorTempK)
-        copy.nightColorTempK = AppSettings.clampKelvin(nightColorTempK)
+        copy.manualColorTempK = TemperatureRange.snap(manualColorTempK)
+        let targets = TemperatureRange(night: nightColorTempK, day: dayColorTempK)
+        copy.dayColorTempK = targets.day
+        copy.nightColorTempK = targets.night
 
         if !morningStart.isValid { copy.morningStart = AppSettings.defaultMorningStart }
         if !morningEnd.isValid { copy.morningEnd = AppSettings.defaultMorningEnd }
         if !eveningStart.isValid { copy.eveningStart = AppSettings.defaultEveningStart }
         if !eveningEnd.isValid { copy.eveningEnd = AppSettings.defaultEveningEnd }
+        if !(copy.morningStart < copy.morningEnd && copy.morningEnd <= copy.eveningStart && copy.eveningStart < copy.eveningEnd) {
+            copy.morningStart = Self.defaultMorningStart
+            copy.morningEnd = Self.defaultMorningEnd
+            copy.eveningStart = Self.defaultEveningStart
+            copy.eveningEnd = Self.defaultEveningEnd
+        }
 
         // A modifier-less shortcut (a hand edit; the recorder refuses these) would hijack
         // typing if registered, so it is dropped rather than kept.
@@ -94,6 +101,16 @@ public struct AppSettings: Equatable, Sendable {
         if copy.decreaseBrightnessShortcut?.isValid == false { copy.decreaseBrightnessShortcut = nil }
         if copy.increaseTemperatureShortcut?.isValid == false { copy.increaseTemperatureShortcut = nil }
         if copy.decreaseTemperatureShortcut?.isValid == false { copy.decreaseTemperatureShortcut = nil }
+        let paths: [WritableKeyPath<AppSettings, HotKeyShortcut?>] = [
+            \.increaseBrightnessShortcut, \.decreaseBrightnessShortcut,
+            \.increaseTemperatureShortcut, \.decreaseTemperatureShortcut,
+        ]
+        var seen: [HotKeyShortcut] = []
+        for path in paths {
+            guard let shortcut = copy[keyPath: path] else { continue }
+            if seen.contains(shortcut) { copy[keyPath: path] = nil }
+            else { seen.append(shortcut) }
+        }
 
         return copy
     }
