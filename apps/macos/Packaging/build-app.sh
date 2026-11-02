@@ -6,16 +6,9 @@ set -euo pipefail
 # SwiftPM produces separate architecture binaries; this script combines them into one universal
 # app bundle for Intel and Apple Silicon Macs.
 #
-# Distribution signing is not performed here. Ad-hoc signing makes the bundle locally
-# runnable; a real release needs, in this order:
-#   codesign --force --options runtime --sign "Developer ID Application: ..." "$app_dir/Contents/MacOS/Moonglow"
-#   codesign --force --options runtime --sign "Developer ID Application: ..." "$app_dir"
-#   ... build the DMG as below, then:
-#   codesign --force --sign "Developer ID Application: ..." "$dmg_path"
-#   xcrun notarytool submit "$dmg_path" --keychain-profile <profile> --wait
-#   xcrun stapler staple "$dmg_path"
-#
-# The image itself must be signed: notarytool cannot staple an unsigned DMG.
+# If a Developer ID Application identity is installed, it is selected automatically. Set
+# MOONGLOW_SIGNING_IDENTITY to override that choice, or set it to an empty value to force an
+# ad-hoc local build. Notarization is opt-in through MOONGLOW_NOTARIZE=1.
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd "$script_dir/.." && pwd)"
@@ -35,12 +28,44 @@ dmg_path="$release_dir/Moonglow-macOS-universal.dmg"
 # The Mac icon follows the new SVG logo; the raster below is its 1024 px render.
 icon_source="$repo_dir/../../resources/Moonglow-option-e-amber-noring.png"
 configuration="${MOONGLOW_CONFIGURATION:-release}"
+signing_identity="${MOONGLOW_SIGNING_IDENTITY:-}"
+notarize="${MOONGLOW_NOTARIZE:-0}"
+notary_keychain_profile="${MOONGLOW_NOTARY_KEYCHAIN_PROFILE:-}"
 # Single source for the release version, stamped into the built plist below.
 deployment_target="12.0"
 arm64_triple="arm64-apple-macosx$deployment_target"
 x86_64_triple="x86_64-apple-macosx$deployment_target"
 arm64_scratch_path="$build_dir/arm64"
 x86_64_scratch_path="$build_dir/x86_64"
+
+if [ -z "${MOONGLOW_SIGNING_IDENTITY+x}" ]; then
+    signing_identity="$(security find-identity -v -p codesigning 2>/dev/null \
+        | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' \
+        | head -n 1 || true)"
+fi
+
+if [ -n "$signing_identity" ]; then
+    echo "Signing with $signing_identity"
+else
+    echo "No Developer ID Application identity found; using ad-hoc signing for local testing."
+fi
+
+sign_app() {
+    local path="$1"
+    if [ -n "$signing_identity" ]; then
+        codesign --force --options runtime --timestamp --sign "$signing_identity" "$path"
+    else
+        codesign --force --sign - "$path"
+    fi
+}
+
+sign_disk_image() {
+    if [ -n "$signing_identity" ]; then
+        codesign --force --timestamp --sign "$signing_identity" "$1"
+    else
+        codesign --force --sign - "$1"
+    fi
+}
 
 # Fail early and explain, rather than emitting a half-built bundle. A broken active developer
 # directory (mismatched SwiftPM, compiler, or SDK) makes every SwiftPM command fail, including
@@ -119,11 +144,11 @@ sips -z 512 512 "$icon_source" --out "$iconset_dir/icon_512x512.png" >/dev/null
 cp "$icon_source" "$iconset_dir/icon_512x512@2x.png"
 iconutil -c icns "$iconset_dir" -o "$app_dir/Contents/Resources/Moonglow.icns"
 
-# Ad-hoc signing is for local testing only. It does not replace Developer ID signing or
-# notarization. Each level is signed explicitly: --deep is deprecated for signing.
-codesign --force --sign - "$app_dir/Contents/MacOS/Moonglow"
-codesign --force --sign - "$app_dir"
-codesign --verify --strict "$app_dir"
+# Sign the executable first, then the containing bundle. --deep is intentionally avoided for
+# signing because it can hide incorrectly signed nested code.
+sign_app "$app_dir/Contents/MacOS/Moonglow"
+sign_app "$app_dir"
+codesign --verify --strict --verbose=2 "$app_dir"
 
 ditto -c -k --sequesterRsrc --keepParent "$app_dir" "$zip_path"
 
@@ -133,9 +158,25 @@ ln -s /Applications "$dmg_staging_dir/Applications"
 
 hdiutil create -format UDZO -volname "Moonglow" -srcfolder "$dmg_staging_dir" "$dmg_path"
 
-# The image is signed like the app: an unsigned DMG can be neither submitted nor stapled.
-codesign --force --sign - "$dmg_path"
+# The image is signed separately so it can be notarized as a release artifact.
+sign_disk_image "$dmg_path"
 codesign --verify --strict "$dmg_path"
+
+if [ "$notarize" = "1" ]; then
+    if [ -z "$signing_identity" ]; then
+        echo "error: notarization requires a Developer ID Application identity" >&2
+        exit 1
+    fi
+    if [ -z "$notary_keychain_profile" ]; then
+        echo "error: set MOONGLOW_NOTARY_KEYCHAIN_PROFILE for notarization" >&2
+        exit 1
+    fi
+    xcrun notarytool submit "$dmg_path" \
+        --keychain-profile "$notary_keychain_profile" \
+        --wait
+    xcrun stapler staple "$dmg_path"
+    xcrun stapler validate "$dmg_path"
+fi
 (cd "$release_dir" && shasum -a 256 "$(basename "$zip_path")" "$(basename "$dmg_path")" > SHA256SUMS)
 
 echo "Created $zip_path"

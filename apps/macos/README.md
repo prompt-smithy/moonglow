@@ -63,7 +63,19 @@ The packaging script creates:
 - `../../release/<VERSION>/macOs/Moonglow-macOS-universal.dmg`
 - `../../release/<VERSION>/macOs/Moonglow-macOS-universal.zip`
 
-It builds a universal (`arm64` and `x86_64`) app for macOS 12 or later. Hardware DDC/CI
+It builds a universal (`arm64` and `x86_64`) app for macOS 12 or later. If a Developer ID
+Application certificate is installed in the login keychain, the script detects and uses it
+automatically. Set `MOONGLOW_SIGNING_IDENTITY` to choose a specific identity. Set
+`MOONGLOW_NOTARIZE=1` and `MOONGLOW_NOTARY_KEYCHAIN_PROFILE=<profile>` after configuring an
+`xcrun notarytool` keychain profile to notarize and staple the DMG.
+
+For a local ad-hoc build, explicitly clear the identity:
+
+```bash
+MOONGLOW_SIGNING_IDENTITY='' bash Packaging/build-app.sh
+```
+
+The app targets macOS 12 or later. Hardware DDC/CI
 brightness targets the main display, and only when it is an external panel: on a MacBook whose
 main display is the built-in panel, or for any display that is not main, the brightness slider
 is unavailable and the Displays section says why. When DDC/CI cannot be used at all, brightness
