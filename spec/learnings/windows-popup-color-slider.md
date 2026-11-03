@@ -103,3 +103,25 @@ moon must be impossible.
 2. Drag the full range with the log running; every settled value must show an
    `apply … via=` line on one thread id.
 3. The gradient stops in `App.xaml` must still be the four values in §1.
+
+## 4. Fade timing and backend changes can create visible spikes (November 2026)
+
+The October fixes above kept the latest value from being lost, but did not make the
+display transition smooth. A regression run against that implementation reproduced two
+separate problems: a gamma fade was written in 0.7 ms, and a 6500 K → 1200 K compositor
+transition contained only two accepted frames. The compositor branch explicitly skipped
+fading and imposed a 400 ms throttle. Switching from an already tinted gamma ramp to a
+full compositor tint also briefly stacked both transforms before restoring gamma.
+
+The current worker uses composition from the first frame on Windows 8 and later, and
+keeps that backend through display invalidation. GDI remains the Windows 7 path. Both
+paths pause 16 ms before each frame and move at most 50 K from the last accepted value;
+a refused frame does not advance the fade. A newer target reverses or continues from
+that accepted value, with no backlog of intermediate requests. Retry backoff is
+interruptible by input or shutdown. Cleanup retries a transiently refused identity matrix.
+
+`ColorTemperatureServiceTests` now checks full-range monotonic warming, paced gamma
+frames, no gamma/compositor stacking, retargeting while an update is in flight, retries,
+and compositor cleanup. These fake-backend tests do not establish what a particular GPU
+shows: retain the real drag-log check above, including warm ramps, rapid reversals,
+Night Light/HDR, and sleep/unlock.

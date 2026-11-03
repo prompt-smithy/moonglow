@@ -11,7 +11,7 @@
     <RootNamespace>Moonglow</RootNamespace>
     <AssemblyName>Moonglow</AssemblyName>
     <ApplicationIcon>..\..\resources\Moonglow.ico</ApplicationIcon>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Product>Moonglow</Product>
     <AssemblyTitle>Moonglow</AssemblyTitle>
     <!-- AnyCPU runs 64-bit on 64-bit Windows (as the old win-x64 build did) and still runs on
@@ -37,6 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\..\resources\Moonglow.ico" LogicalName="Moonglow.Icon.ico" />
     <!-- Pure settings, schedule, kelvin, and range logic, shared with the conformance tests. -->
     <ProjectReference Include="Moonglow.Core\Moonglow.Core.csproj" />
   </ItemGroup>

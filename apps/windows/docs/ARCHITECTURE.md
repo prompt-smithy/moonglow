@@ -86,10 +86,10 @@ Implemented in [`BrightnessService`](../Services/BrightnessService.cs).
 Implemented in [`ColorTemperatureService`](../Services/ColorTemperatureService.cs).
 
 - Kelvin is converted to per-channel RGB scale factors by `KelvinConversion.RgbScale` in `Moonglow.Core`, using the **Tanner Helland** approximation normalized so ~6500 K is neutral.
-- **GPU gamma LUT** (`SetDeviceGammaRamp`): Kelvin becomes per-channel RGB scale factors, then a 256-entry ramp is built for each channel and applied per monitor (falling back to the whole-desktop DC if per-monitor DCs are unavailable). The original ramps are captured and restored on exit and around unlock. Device contexts are cached for the lifetime of the display set.
-- **Writes run on one dedicated background thread with latest-value-wins.** Slider events only record the target; dragging issues one driver write per settled value instead of one per pixel, and a slow driver can never block the UI thread. One thread (not pool workers) also keeps every Magnification call on the thread that initialized it, which the fullscreen effect requires.
-- **Composition fallback.** When the driver exposes no GDI gamma ramp — Windows Night Light and HDR both take ownership of the colour pipeline — the same scale factors are applied through `MagSetFullscreenColorEffect`. The effect is cleared as soon as a gamma write succeeds, so the two transforms never stack, and identity/`MagUninitialize` runs on exit. Exact temperatures still require Night Light/HDR to be off; the fallback keeps the schedule working rather than silently doing nothing.
-- **Driver support** – LUT application is driver-dependent. On one local machine, `SetDeviceGammaRamp` returned `true` without a visible change. The same LUT path is used on the desktop and after waking into a locked session; whether it affects the secure sign-in desktop depends on the display driver.
+- **Composition on Windows 8+.** Kelvin becomes per-channel RGB scales and is applied with `MagSetFullscreenColorEffect` before any gamma ramp is touched. This keeps one backend throughout the range: GDI can silently ignore warm ramps, and switching a tinted gamma ramp to a compositor transform briefly multiplies both tints. Transient compositor refusals retry on the same backend. Exit clears the effect and calls `MagUninitialize`.
+- **Writes run on one dedicated background thread with latest-value-wins.** Targets fade in at most 50 K steps with a 16 ms pause before each frame. Only accepted frames advance the fade; retargeting starts at the last accepted value. A busy backend retries without queuing old frames, and new input interrupts retry backoff. Display calls and cleanup stay on the thread that initialized Magnification.
+- **Windows 7 gamma path.** When fullscreen composition is unavailable, 256-entry gamma ramps are applied per monitor, with a whole-desktop DC used only if no individual panel accepted the ramp. Original ramps are captured and restored on exit and around unlock. Device contexts are cached for the display set. Warm-ramp support remains driver-dependent on this legacy path.
+- **Other colour adjustments.** Night Light and HDR transforms combine with Moonglow's tint. The secure sign-in/consent desktop is separate, so the normal desktop transform is not guaranteed there.
 - `Reset()` restores the captured original ramps rather than writing an identity ramp, avoiding overwriting another color calibration.
 - `App` re-applies on `SystemEvents.PowerModeChanged` (`Resume`), because resuming can reset display state. While locked, it retries for up to five seconds; on unlock it restores the original ramps and reapplies the selected temperature.
 
@@ -124,7 +124,7 @@ Implemented in [`MonitorService`](../Services/MonitorService.cs).
 - [`ThemeService`](../Services/ThemeService.cs) writes the active palette into **`Application.Current.Resources`** as `SolidColorBrush` values keyed `ThemeWindowBackground`, `ThemePrimaryText`, etc. UI uses `DynamicResource` against those keys, so a mode switch restyles everything live.
 - Because the brushes live at **application scope**, control styles and `UserControl`s (e.g. `TimePicker`) resolve them too. Shared control styles (buttons, checkboxes, radios, sliders, scrollbars, **combo boxes**) are defined in [App.xaml](../App.xaml); window-specific styles live in the window.
 - The app **follows Windows light/dark mode**: `IsWindowsLight()` reads the `Personalize` registry value, and `UserPreferenceChanged` re-applies the matching mode. The OS title bar is tinted to match via `DwmSetWindowAttribute`.
-- The **logo is monochrome**, so it cannot be one baked bitmap: [`IconFactory`](../Infrastructure/IconFactory.cs) draws the crescent at runtime in black for the light theme and white for the dark one, and `OnThemeChanged` redraws the tray and window icons when the mode flips. Geometry mirrors `tools/generate-logo-assets.ps1`, which produces the packaged `.ico`.
+- The **amber logo** is the same artwork as macOS: `tools/generate-logo-assets.ps1` resizes the shared master PNG into a multi-size ICO. [`IconFactory`](../Infrastructure/IconFactory.cs) selects a frame from that embedded ICO for the tray and WPF images; executable, launcher, and installer icons use the same file. The mark stays identical in light and dark modes.
 
 ---
 
@@ -185,6 +185,6 @@ All P/Invoke lives in [`NativeMethods`](../Native/NativeMethods.cs), grouped by 
 | Monitor enumeration | `user32` | `EnumDisplayMonitors`, `GetMonitorInfo` |
 | DDC/CI brightness | `dxva2` | `GetNumberOfPhysicalMonitorsFromHMONITOR`, `GetPhysicalMonitorsFromHMONITOR`, `GetMonitorBrightness`, `SetMonitorBrightness`, `DestroyPhysicalMonitors` |
 | Gamma control | `gdi32` | `CreateDC`, `GetDeviceGammaRamp`, `SetDeviceGammaRamp`, `DeleteDC` |
-| Colour fallback | `Magnification` | `MagInitialize`, `MagSetFullscreenColorEffect`, `MagUninitialize` |
+| Colour transform (Windows 8+) | `Magnification` | `MagInitialize`, `MagSetFullscreenColorEffect`, `MagUninitialize` |
 | Title-bar theming / styling | `dwmapi`, `user32` | `DwmSetWindowAttribute`, `GetWindowLong`/`SetWindowLong`, `SetWindowPos` |
 | Internal-panel brightness | WMI (`System.Management`) | `WmiMonitorBrightness`, `WmiMonitorBrightnessMethods.WmiSetBrightness` |

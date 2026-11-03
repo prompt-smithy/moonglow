@@ -8,10 +8,10 @@
     installed on Windows 7 SP1 and later. The portable launcher is one file, but it still
     requires the .NET Framework runtime on the target PC.
 
-    Produces two distributable artifacts under bin\:
+    Builds in bin\Package\<VERSION> and collects distributables in release\<VERSION>\windows:
 
-        bin\Moonglow_Portable.exe      (1) single-file self-extracting portable launcher
-        bin\Installer\Moonglow.exe    (2) single setup executable produced by Inno Setup
+        Moonglow_Portable.exe         (1) single-file self-extracting portable launcher
+        Moonglow-Setup.exe            (2) single setup executable produced by Inno Setup
 
     The portable launcher embeds the published app, extracts it to a temporary directory,
     runs Moonglow, and removes the extracted files when Moonglow exits.
@@ -31,10 +31,12 @@ Set-StrictMode -Version Latest
 $root      = $PSScriptRoot
 $project   = Join-Path $root 'Moonglow.csproj'
 $issScript = Join-Path $root 'installer\Moonglow.iss'
-$binDir    = Join-Path $root 'bin'
 $appExe    = 'Moonglow.exe'
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $root '../..'))
 $releaseVersion = (Get-Content (Join-Path $repoRoot 'VERSION') -Raw).Trim()
+if ($releaseVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'VERSION must contain numeric major.minor.patch.' }
+# Packaging a new release must not delete the launcher of an older copy still running.
+$binDir = Join-Path $root "bin\Package\$releaseVersion"
 $versionDir = Join-Path $repoRoot "release/$releaseVersion"
 $releaseDir = Join-Path $versionDir 'windows'
 foreach ($platform in @('linux', 'windows', 'macOs')) {
@@ -112,8 +114,18 @@ Write-Host "Moonglow packaging - version $version (.NET Framework 4.8)" -Foregro
 # Clean previous artifacts.
 # ---------------------------------------------------------------------------
 Write-Step 'Cleaning previous artifacts'
+$binBoundary = [System.IO.Path]::GetFullPath((Join-Path $root 'bin')) + [System.IO.Path]::DirectorySeparatorChar
 foreach ($dir in @($portableDir, $installerDir) + $legacyDirs) {
-    if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+    $resolvedDir = [System.IO.Path]::GetFullPath($dir)
+    if (-not $resolvedDir.StartsWith($binBoundary, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing build cleanup outside ${binBoundary}: $resolvedDir"
+    }
+    if ((Test-Path -LiteralPath $resolvedDir) -and ((Get-Item -LiteralPath $resolvedDir -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        throw "Refusing recursive cleanup of a reparse point: $resolvedDir"
+    }
+}
+foreach ($dir in @($portableDir, $installerDir) + $legacyDirs) {
+    if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
 }
 foreach ($legacyFile in @(
     (Join-Path $binDir 'Moonglow_Portable.exe'),

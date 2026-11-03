@@ -18,7 +18,7 @@ Moonglow keeps display controls close at hand without adding another window to y
 - Shares settings between a compact tray popup and the full settings window.
 - Follows Windows light/dark mode with a clean greyscale interface.
 - Refreshes connected displays and can run automatically at sign-in.
-- Runs as a single instance and restores the previous display gamma LUT on exit.
+- Runs as a single instance and removes its display tint on exit.
 
 ## Requirements
 
@@ -39,15 +39,17 @@ Choose the download that matches your system:
 
 Use an installer for a standard Windows installation, or a portable build to run Moonglow without installing it.
 
-Moonglow runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, time format, and startup options. The tray and window icons draw that same two-tone mark at runtime in every Windows light/dark mode.
+Moonglow runs in the system tray. Open the tray icon for quick controls or use **Settings** for scheduling, time format, and startup options. The tray, window, executable, and installer use the same amber logo as the macOS app in every Windows light/dark mode.
 
 ## Limitations
 
-Moonglow adjusts desktop colour temperature using a hardware gamma LUT (a 256-entry lookup table for each RGB channel). Gamma-LUT support varies by display driver; on at least one machine `SetDeviceGammaRamp` reported success without a visible change, so the effect is not guaranteed. Moonglow saves the existing ramp before changing it and restores it on exit.
+On Windows 8 and later, Moonglow applies a fullscreen colour matrix through the compositor. A single display worker fades toward the latest target in small, paced steps. It keeps that same backend throughout the temperature range, avoiding the brief double tint caused by switching between gamma and composition mid-drag.
 
-After waking from sleep while locked, Moonglow reapplies its gamma LUT because Windows may reset display state. The Windows password prompt and elevated consent prompts use a separate *secure desktop*, so tinting those screens remains driver-dependent.
+Windows 7 uses hardware gamma ramps. Driver support varies, and Windows can silently ignore warmer ramps even when `SetDeviceGammaRamp` reports success. Moonglow saves and restores the original ramps on this legacy path.
 
-Windows **Night Light** and **HDR** take ownership of the display colour pipeline, which disables the GDI gamma ramp. Moonglow detects that and applies the same colour transform through the composition path so the schedule still works, but the two tints combine. For an exact temperature, turn Night Light/HDR off while Moonglow controls the screen.
+After waking from sleep while locked, Moonglow reapplies its colour transform because Windows may reset display state. The Windows password prompt and elevated consent prompts use a separate *secure desktop*, so the desktop tint is not guaranteed on those screens.
+
+Moonglow's transform combines with other Windows colour adjustments, including **Night Light** and **HDR** tone mapping. For a predictable temperature, turn those off while Moonglow controls the screen.
 
 ## Build from source
 
@@ -64,6 +66,9 @@ dotnet test Moonglow.Platform.Tests/Moonglow.Platform.Tests.csproj -c Release
 # Build both distributables
 dotnet build Moonglow.csproj -t:PackageAll
 ```
+
+Packaging scratch files live in `bin/Package/<VERSION>` so a running copy from an older build
+does not block a new version's cleanup.
 
 The package command collects distributables under repository-root `release/<VERSION>/windows`:
 

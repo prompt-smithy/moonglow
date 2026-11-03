@@ -100,10 +100,9 @@ internal static class NativeMethods
     [DllImport("gdi32.dll")]
     public static extern bool DeleteDC(IntPtr hdc);
 
-    // ---------------------------------------------------------------- Colour fallback (Magnification)
-    // The GDI gamma ramp is unavailable when another component owns the display colour
-    // pipeline (Windows Night Light, HDR, some drivers). The Magnification API applies a
-    // colour matrix during composition instead, so the schedule still works there.
+    // ---------------------------------------------------------------- Colour transform (Magnification)
+    // Windows 8+ uses this compositor matrix throughout the temperature range. GDI ramps
+    // can silently ignore warm targets; switching backends mid-fade can stack their tints.
     [StructLayout(LayoutKind.Sequential)]
     public struct MAGCOLOREFFECT
     {

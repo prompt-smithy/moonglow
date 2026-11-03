@@ -77,6 +77,14 @@ $uploadPath = Join-Path $outputDir 'Moonglow-Store.msixupload'
 $uploadZip = Join-Path ([System.IO.Path]::GetTempPath()) "moonglow-store-upload-$([guid]::NewGuid().ToString('N')).zip"
 $cert = $null
 
+# The finally block recursively removes only these generated directories in the temp root.
+$tempBoundary = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+foreach ($directory in @($publishDir, $stageDir, $uploadStage)) {
+    if (-not [System.IO.Path]::GetFullPath($directory).StartsWith($tempBoundary, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing package cleanup outside the temp directory: $directory"
+    }
+}
+
 try {
     Add-Type -AssemblyName System.Drawing
     New-Item -ItemType Directory -Force -Path $outputDir, $stageDir, $uploadStage | Out-Null

@@ -18,7 +18,9 @@ namespace Moonglow.Native
         public struct RAMP { public ushort[] Red, Green, Blue; }
         public struct MAGCOLOREFFECT { public float[] Transform; }
         public static Func<IntPtr, bool> OnWrite = _ => true;
-        public static ConcurrentQueue<(IntPtr Device, ushort Blue)> Writes = new();
+        public static ConcurrentQueue<(IntPtr Device, ushort Blue, long Timestamp)> Writes = new();
+        public static Func<MAGCOLOREFFECT, bool> OnMagnificationWrite = _ => true;
+        public static ConcurrentQueue<(float Green, float Blue, long Timestamp, bool Applied)> ColorEffects = new();
         public static ConcurrentQueue<int> NativeThreads = new();
         public static int MagnificationWrites;
         public static int DeletedContexts;
@@ -26,7 +28,9 @@ namespace Moonglow.Native
         public static void Reset()
         {
             OnWrite = _ => true;
+            OnMagnificationWrite = _ => true;
             Writes.Clear();
+            ColorEffects.Clear();
             NativeThreads.Clear();
             MagnificationWrites = DeletedContexts = 0;
         }
@@ -43,11 +47,18 @@ namespace Moonglow.Native
         {
             NativeThreads.Enqueue(Environment.CurrentManagedThreadId);
             bool ok = OnWrite(device);
-            Writes.Enqueue((device, ramp.Blue[255]));
+            Writes.Enqueue((device, ramp.Blue[255], System.Diagnostics.Stopwatch.GetTimestamp()));
             return ok;
         }
         public static bool MagInitialize() { NativeThreads.Enqueue(Environment.CurrentManagedThreadId); return true; }
         public static bool MagUninitialize() { NativeThreads.Enqueue(Environment.CurrentManagedThreadId); return true; }
-        public static bool MagSetFullscreenColorEffect(ref MAGCOLOREFFECT effect) { Interlocked.Increment(ref MagnificationWrites); return true; }
+        public static bool MagSetFullscreenColorEffect(ref MAGCOLOREFFECT effect)
+        {
+            NativeThreads.Enqueue(Environment.CurrentManagedThreadId);
+            bool applied = OnMagnificationWrite(effect);
+            ColorEffects.Enqueue((effect.Transform[6], effect.Transform[12], System.Diagnostics.Stopwatch.GetTimestamp(), applied));
+            Interlocked.Increment(ref MagnificationWrites);
+            return applied;
+        }
     }
 }

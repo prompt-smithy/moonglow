@@ -51,8 +51,8 @@ Release artifacts live at the repository root, grouped by version and operating 
 
 ```text
 release/
-  1.0.1/
-    linux/    moonglow_1.0.1_amd64.deb, moonglow-1.0.1-linux-amd64.tar.gz, SHA256SUMS
+  1.0.2/
+    linux/    moonglow_1.0.2_amd64.deb, moonglow-1.0.2-linux-amd64.tar.gz, SHA256SUMS
     windows/  Moonglow-Setup.exe, Moonglow-Store.msix, Moonglow-Store.msixupload, portable builds, SHA256SUMS
     macOs/    Moonglow-macOS-universal.dmg, Moonglow-macOS-universal.zip, SHA256SUMS
 ```
@@ -86,7 +86,7 @@ release DMG is notarized and stapled. See the [macOS README](apps/macos/README.m
 packaging details.
 
 The **Release artifacts** workflow builds and tests on all three native runners. Run it manually
-or push a tag matching `VERSION` (for example `v1.0.1`); its `moonglow-release` artifact contains
+or push a tag matching `VERSION` (for example `v1.0.2`); its `moonglow-release` artifact contains
 the same version/OS directory tree. It does not publish a GitHub release.
 
 Each native app has its own build command. The root release builder orchestrates packaging and supports the cross-builds above.
@@ -156,9 +156,9 @@ spec/             Settings schema and golden vectors shared by all apps
 
 The mark is a crescent moon with rays on an amber tile. The master artwork is
 `resources/Moonglow-option-e-amber-noring.svg` (with its 1024 px PNG render beside it), and
-every app shows that same mark in both light and dark modes. Note that
-`tools/generate-logo-assets.ps1` still draws the previous two-tone mark — do not re-run it
-until it is updated for the amber tile.
+every app shows that same mark in both light and dark modes. `tools/generate-logo-assets.ps1`
+resizes that PNG into the Windows ICO and Linux hicolor assets. Pass `-WindowsOnly` to update
+just the Windows icon; the executable, launcher, tray, and installer all use it.
 
 ## Licence
 

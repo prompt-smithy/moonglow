@@ -5,18 +5,17 @@ using static Moonglow.Native.NativeMethods;
 namespace Moonglow.Services;
 
 /// <summary>
-/// Applies a color temperature to every display through its per-channel GPU gamma LUT.
+/// Applies a color temperature to the desktop through the compositor on Windows 8+, or
+/// through per-display gamma ramps on Windows 7.
 /// </summary>
 /// <remarks>
-/// Gamma-LUT support varies by display driver. The original ramp is captured before the first
-/// change and restored when Moonglow exits or when the session unlocks.
-///
 /// Writes happen on one dedicated background thread with latest-value-wins semantics:
 /// dragging a slider would otherwise issue a driver transaction for every pixel of
 /// movement on the UI thread. A single thread (rather than pool workers) also keeps
 /// every Magnification call on the thread that initialized it: the fullscreen effect
 /// only works there, and pool rotation starved the fallback with ERROR_NOT_READY.
-/// Device contexts are cached because recreating them hits the display driver on every write.
+/// All updates are paced and faded, including compositor updates. One backend owns the tint
+/// for the session: switching from gamma to composition mid-fade briefly stacks their effects.
 /// </remarks>
 public sealed class ColorTemperatureService : IDisposable
 {
@@ -26,29 +25,34 @@ public sealed class ColorTemperatureService : IDisposable
     private readonly object _applyGate = new();
     private readonly object _gammaGate = new();
     private readonly ManualResetEventSlim _workAvailable = new(false);
+    private readonly AutoResetEvent _stateChanged = new(false);
     private readonly Thread _workerThread;
     private RAMP? _savedDesktopGammaRamp;
     private int _targetKelvin = -1;
-    /// <summary>Fade granularity: large jumps glide through 25 K intermediates
-    /// instead of stepping. Last value actually written; worker thread only.</summary>
-    private const int FadeStepKelvin = 25;
-    private int _displayedKelvin = -1;
-    /// <summary>True when the last successful write went through the composition
-    /// fallback. Worker thread only.</summary>
-    private bool _lastApplyWasMagnification;
-    private bool _preferMagnification;
+    // About 60 frames/s and at most 50 K per accepted frame. A full-range move takes
+    // roughly 1.7 s; a 100 K schedule tick fades without changing the schedule itself.
+    private const int FrameIntervalMilliseconds = 16;
+    private const int FadeStepKelvin = 50;
+    private int _displayedKelvin = 6500;
+    private bool _useMagnification;
     private bool _disposed;
     private bool _restoreRequested;
     private bool _invalidateRequested;
     private bool _magnificationInitialized;
     private bool _magnificationApplied;
-    private readonly HashSet<int> _magInitThreads = new();
-    private DateTime _lastMagnifierSetUtc = DateTime.MinValue;
     private int _lastMagError;
 
     public ColorTemperatureService(MonitorService monitors)
+        : this(monitors, Environment.OSVersion.Version >= new Version(6, 2))
+    {
+    }
+
+    // Explicit backend selection lets the production worker's Windows 7 path be exercised
+    // by tests without changing the host OS or touching its real display.
+    internal ColorTemperatureService(MonitorService monitors, bool useMagnification)
     {
         _monitors = monitors;
+        _useMagnification = useMagnification;
         _workerThread = new Thread(ApplyLoop) { IsBackground = true, Name = "ColorApply" };
         _workerThread.Start();
     }
@@ -63,15 +67,16 @@ public sealed class ColorTemperatureService : IDisposable
             if (_disposed)
                 return;
 
-            _targetKelvin = kelvin;
+            _targetKelvin = MathUtil.Clamp(kelvin, KelvinConversion.MinKelvin, KelvinConversion.MaxKelvin);
 
             // Inside the same gate the worker resets under: a value arriving between
             // its drained-check and its reset re-wakes it instead of being lost.
             _workAvailable.Set();
+            _stateChanged.Set();
         }
     }
 
-    /// <summary>Queues restoration of the original gamma ramps on the display worker.</summary>
+    /// <summary>Queues removal of the compositor tint or restoration of legacy gamma ramps.</summary>
     public void RestoreOriginalGammaRamps()
     {
         lock (_applyGate)
@@ -80,6 +85,7 @@ public sealed class ColorTemperatureService : IDisposable
             _restoreRequested = true;
             _targetKelvin = -1;
             _workAvailable.Set();
+            _stateChanged.Set();
         }
     }
 
@@ -108,7 +114,7 @@ public sealed class ColorTemperatureService : IDisposable
         }
     }
 
-    /// <summary>Restores the original display gamma ramps.</summary>
+    /// <summary>Removes the app's display transform.</summary>
     public void Reset()
     {
         RestoreOriginalGammaRamps();
@@ -124,6 +130,7 @@ public sealed class ColorTemperatureService : IDisposable
             if (_disposed) return;
             _invalidateRequested = true;
             _workAvailable.Set();
+            _stateChanged.Set();
         }
     }
 
@@ -131,7 +138,6 @@ public sealed class ColorTemperatureService : IDisposable
     {
         lock (_gammaGate)
         {
-            _preferMagnification = false;
             var present = new HashSet<string>(
                 _monitors.Snapshot().Select(m => m.DeviceName),
                 StringComparer.OrdinalIgnoreCase);
@@ -152,6 +158,7 @@ public sealed class ColorTemperatureService : IDisposable
             if (_disposed) return;
             _disposed = true;
             _workAvailable.Set();
+            _stateChanged.Set();
         }
         // Native calls cannot be cancelled. Cleanup belongs to the same worker
         // that initialized Magnification; a stuck driver gets a bounded grace.
@@ -164,7 +171,10 @@ public sealed class ColorTemperatureService : IDisposable
         lock (_gammaGate)
         {
             RestoreOriginalGammaRampsLocked();
-            ClearMagnification();
+            // A busy compositor can refuse the first clear as well as an ordinary frame.
+            // Keep a short shutdown grace so a transient refusal does not leave the tint on.
+            for (int attempt = 0; !ClearMagnification() && attempt < 3; attempt++)
+                Thread.Sleep(50);
             if (_magnificationInitialized)
             {
                 MagUninitialize();
@@ -180,7 +190,7 @@ public sealed class ColorTemperatureService : IDisposable
     private enum ApplyResult
     {
         Applied,
-        /// <summary>The compositor refused a fallback update; retry the latest value.</summary>
+        /// <summary>The display backend refused an update; retry the latest value.</summary>
         RetryLater,
     }
 
@@ -205,6 +215,9 @@ public sealed class ColorTemperatureService : IDisposable
         while (true)
         {
             _workAvailable.Wait();
+            // Coalesce input before taking the target snapshot, and pace *every* successful
+            // frame. The old tight gamma loop could send an entire fade in under 1 ms.
+            Thread.Sleep(FrameIntervalMilliseconds);
 
             int target;
             bool restore;
@@ -218,17 +231,28 @@ public sealed class ColorTemperatureService : IDisposable
                 _restoreRequested = false;
                 _invalidateRequested = false;
             }
+            if (invalidate) InvalidateOnWorker();
             if (restore)
             {
                 lock (_gammaGate)
                 {
                     RestoreOriginalGammaRampsLocked();
-                    ClearMagnification();
-                    _displayedKelvin = -1;
-                    _preferMagnification = false;
+                    if (ClearMagnification())
+                        _displayedKelvin = 6500;
+                    else
+                    {
+                        lock (_applyGate) _restoreRequested = true;
+                    }
+                }
+                // Retry a refused clear before applying a new target. Advancing from an
+                // assumed neutral state while the old tint remains would cause a flash.
+                lock (_applyGate) restore = _restoreRequested;
+                if (restore)
+                {
+                    _stateChanged.WaitOne(50);
+                    continue;
                 }
             }
-            if (invalidate) InvalidateOnWorker();
             if (target < 0)
             {
                 lock (_applyGate)
@@ -245,7 +269,8 @@ public sealed class ColorTemperatureService : IDisposable
             if (freshEpisode)
                 pendingSince = DateTime.UtcNow;
 
-            int next = FadeNext(target); ApplyResult result;
+            int next = FadeNext(target);
+            ApplyResult result;
             var watch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
@@ -293,7 +318,9 @@ public sealed class ColorTemperatureService : IDisposable
             }
 
             TimeSpan age = DateTime.UtcNow - pendingSince;
-            System.Threading.Thread.Sleep(age < TimeSpan.FromSeconds(2) ? 200 : 2000);
+            // A new target or shutdown interrupts retry backoff. Never advance the fade on
+            // a refused frame, and never queue old intermediates behind a busy compositor.
+            _stateChanged.WaitOne(age < TimeSpan.FromSeconds(2) ? 50 : 250);
         }
     }
 
@@ -302,52 +329,42 @@ public sealed class ColorTemperatureService : IDisposable
     /// glide instead of jumping.</summary>
     private int FadeNext(int target)
     {
-        // The composition fallback throttles updates, so fading there only queues stale
-        // intermediates behind the throttle: jump straight to the latest target instead.
-        if (_displayedKelvin < 0 || _displayedKelvin == target || _lastApplyWasMagnification)
-            return target;
         return _displayedKelvin + Math.Sign(target - _displayedKelvin) * Math.Min(FadeStepKelvin, Math.Abs(target - _displayedKelvin));
     }
 
     private ApplyResult ApplySynchronously(int kelvin)
     {
         var (redScale, greenScale, blueScale) = KelvinConversion.RgbScale(kelvin);
-        RAMP ramp = BuildRamp(redScale, greenScale, blueScale);
-
         lock (_gammaGate)
         {
             if (_disposed)
                 return ApplyResult.Applied;
 
-            bool anyMonitorApplied = false;
-            bool gammaApplied = !_preferMagnification && ApplyToMonitors(ramp, out anyMonitorApplied);
+            // Select the compositor before touching gamma on modern Windows. GDI can
+            // silently ignore warm ramps while returning success, and handing a tinted
+            // ramp to the compositor would multiply both transforms for an intermediate frame.
+            if (_useMagnification)
+            {
+                try
+                {
+                    if (!ApplyMagnification(redScale, greenScale, blueScale))
+                        return ApplyResult.RetryLater;
+                    LogColorApply($"apply {kelvin}K rgb=({redScale:F3},{greenScale:F3},{blueScale:F3}) via=magnification");
+                    return ApplyResult.Applied;
+                }
+                catch (EntryPointNotFoundException) { _useMagnification = false; }
+                catch (DllNotFoundException) { _useMagnification = false; }
+            }
+
+            RAMP ramp = BuildRamp(redScale, greenScale, blueScale);
+            bool gammaApplied = ApplyToMonitors(ramp, out bool anyMonitorApplied);
             // The desktop DC can only be trusted when no individual panel took a
-            // ramp. Partial success needs one global fallback after restoring ramps.
-            if (!_preferMagnification && !gammaApplied && !anyMonitorApplied)
+            // ramp; a desktop write after partial success could overwrite accepted panels.
+            if (!gammaApplied && !anyMonitorApplied)
                 gammaApplied = ApplyToDesktop(ramp);
             if (gammaApplied)
             {
-                // The ramp works again (e.g. Night Light was switched off); drop the
-                // composition fallback so the two transforms cannot stack. A refused
-                // clear would leave them stacked, so it rejoins the retry loop instead.
-                if (!ClearMagnification())
-                    return ApplyResult.RetryLater;
                 LogColorApply($"apply {kelvin}K rgb=({redScale:F3},{greenScale:F3},{blueScale:F3}) via=gamma");
-                _lastApplyWasMagnification = false;
-                _preferMagnification = false;
-                return ApplyResult.Applied;
-            }
-
-            // The driver refused the ramp: tint during composition instead. The hardware
-            // ramp is restored only after the fallback takes over (a no-op while already
-            // on it), so a refused fallback leaves the last tint in place instead of
-            // flashing neutral.
-            if (ApplyMagnification(redScale, greenScale, blueScale))
-            {
-                RestoreOriginalGammaRampsLocked();
-                LogColorApply($"apply {kelvin}K rgb=({redScale:F3},{greenScale:F3},{blueScale:F3}) via=magnification");
-                _lastApplyWasMagnification = true;
-                _preferMagnification = true;
                 return ApplyResult.Applied;
             }
 
@@ -356,7 +373,7 @@ public sealed class ColorTemperatureService : IDisposable
     }
 
     /// <summary>Diagnostic trail for tint-vs-slider issues: what the app queued vs what
-    /// actually reached the screen (gamma ramp or composition fallback).</summary>
+    /// actually reached the screen (composition or legacy gamma ramp).</summary>
     /// <remarks>Best effort; written to <c>%Temp%\Moonglow-color.log</c>. It tells a
     /// dropped/stale apply inside the app apart from a driver that ignores the ramp.
     /// </remarks>
@@ -429,19 +446,12 @@ public sealed class ColorTemperatureService : IDisposable
     }
 
     /// <summary>
-    /// Applies the temperature as a fullscreen colour matrix during composition. Used when
-    /// the display driver exposes no GDI gamma ramp (Windows Night Light and HDR both take
-    /// the ramp away), so the schedule keeps working instead of silently doing nothing.
-    /// Returns whether the effect is active afterwards.
+    /// Initializes the magnification runtime on the dedicated display worker. Every effect
+    /// update and restoration stays on this same thread. Must hold <c>_gammaGate</c>.
     /// </summary>
-    /// <summary>Initializes the magnification runtime on the calling thread unless it
-    /// already has. The fullscreen effect only works on initialized threads: every
-    /// observed success ran on the first calling thread while all other pool threads
-    /// got ERROR_NOT_READY. Must be called under <c>_gammaGate</c>.</summary>
     private bool EnsureMagnifierInitialized()
     {
-        int here = System.Environment.CurrentManagedThreadId;
-        if (_magInitThreads.Contains(here))
+        if (_magnificationInitialized)
             return true;
 
         if (!MagInitialize())
@@ -450,7 +460,6 @@ public sealed class ColorTemperatureService : IDisposable
             return false;
         }
 
-        _magInitThreads.Add(here);
         _magnificationInitialized = true;
         return true;
     }
@@ -459,15 +468,6 @@ public sealed class ColorTemperatureService : IDisposable
     {
         if (!EnsureMagnifierInitialized())
             return false;
-
-        // Pace fullscreen effect updates: back-to-back sets are refused while a previous
-        // one is still going through. The worker loop retries the latest value and
-        // converges instead of hammering a busy compositor.
-        if ((DateTime.UtcNow - _lastMagnifierSetUtc).TotalMilliseconds < 400)
-        {
-            _lastMagError = 21;
-            return false;
-        }
 
         var effect = new MAGCOLOREFFECT
         {
@@ -481,7 +481,6 @@ public sealed class ColorTemperatureService : IDisposable
 
         if (MagSetFullscreenColorEffect(ref effect))
         {
-            _lastMagnifierSetUtc = DateTime.UtcNow;
             _magnificationApplied = true;
             return true;
         }
@@ -490,7 +489,7 @@ public sealed class ColorTemperatureService : IDisposable
         return false;
     }
 
-    /// <summary>Removes the composition fallback. Returns whether no effect is active
+    /// <summary>Removes the composition tint. Returns whether no effect is active
     /// afterwards; a refusal must rejoin the retry loop or the two transforms stack.
     /// </summary>
     private bool ClearMagnification()
@@ -519,7 +518,6 @@ public sealed class ColorTemperatureService : IDisposable
             return false;
         }
 
-        _lastMagnifierSetUtc = DateTime.UtcNow;
         _magnificationApplied = false;
         return true;
     }
