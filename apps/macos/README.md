@@ -8,12 +8,18 @@ for implementation status and platform details.
 
 ## Download
 
-[Download from GitHub Releases](https://github.com/prompt-smithy/Night_Mode_Controller-MacOS/releases).
+[Download from GitHub Releases](https://github.com/prompt-smithy/moonglow/releases).
 
 The packaging script produces `Moonglow-macOS-universal.dmg` and `Moonglow-macOS-universal.zip`:
-a universal (`arm64` and `x86_64`) build for macOS 12 or later. Published test builds are
-ad-hoc signed and not notarized; on first launch, Control-click the app and choose **Open** if
-macOS blocks it.
+a universal (`arm64` and `x86_64`) build for macOS 12 or later. Public releases are signed with
+Developer ID. The DMG is notarized and has its ticket stapled; the ZIP contains the signed app
+for Homebrew installation.
+
+Install with Homebrew:
+
+```bash
+brew install --cask prompt-smithy/apps/moonglow
+```
 
 ## Layout
 
@@ -81,9 +87,9 @@ main display is the built-in panel, or for any display that is not main, the bri
 is unavailable and the Displays section says why. When DDC/CI cannot be used at all, brightness
 falls back to software gamma dimming. Software dimming changes image output, not the display's
 backlight, and requires CoreGraphics gamma support. Login-item management requires macOS 13 or
-later. The app bundle is ad-hoc signed for local testing; it is not
-Developer ID signed or notarized. Users may need to Control-click the app and choose **Open** on
-first launch.
+later. Without a Developer ID identity, the build script uses an ad-hoc signature and does not
+notarize the app. For public releases, use a Developer ID identity and enable notarization as
+described above.
 
 To preserve the normal outputs when making a separate verification build, set alternate output
 directories:
@@ -125,9 +131,9 @@ container, matching the original design.
   I2C on Intel, with gamma dimming as the fallback when DDC/CI is unavailable.
 
 The private API is isolated in `Sources/MoonglowKit/Services/NativeBridge.swift`. The app is
-distributed directly rather than through the Mac App Store because of that dependency. The current
-packaging script applies only an ad-hoc signature; public distribution still requires Developer ID
-signing and notarization.
+distributed directly rather than through the Mac App Store because of that dependency. Public
+releases are Developer ID signed, and the release DMG is notarized and stapled. Builds made without
+a Developer ID identity use an ad-hoc signature for local testing.
 
 Startup is a login item registered through `SMAppService.mainApp`, which registers *the running
 bundle*: the toggle in the settings window does nothing when Moonglow is launched

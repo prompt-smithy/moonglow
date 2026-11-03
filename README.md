@@ -80,8 +80,10 @@ rustup target add x86_64-unknown-linux-gnu
 Linux archives contain the executable, desktop entry, icons, manual, and udev rule. The `.deb`
 installs these files; for a portable archive, extract it and run `usr/bin/moonglow` from its
 versioned directory. Linux cross-builds target glibc 2.31 or later. Windows portable builds
-require .NET Framework 4.8. macOS artifacts are universal Intel/Apple Silicon, ad-hoc signed
-for local distribution as described in the macOS README.
+require .NET Framework 4.8. macOS artifacts are universal Intel/Apple Silicon. The automated CI
+artifacts are ad-hoc signed for testing; public macOS releases are Developer ID signed, and the
+release DMG is notarized and stapled. See the [macOS README](apps/macos/README.md) for download and
+packaging details.
 
 The **Release artifacts** workflow builds and tests on all three native runners. Run it manually
 or push a tag matching `VERSION` (for example `v1.0.1`); its `moonglow-release` artifact contains
