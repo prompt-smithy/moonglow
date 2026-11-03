@@ -14,8 +14,8 @@
                    KeyDown="NightThumb_KeyDown">
                 <Thumb.Template>
                     <ControlTemplate TargetType="Thumb">
-                        <!-- Triangular head, apex up and nudged above the track centre. -->
-                        <Path Data="M 8,0 L 16,15 L 0,15 Z"
+                        <!-- Rounded triangle, nudged above the track centre. -->
+                        <Path Data="{StaticResource RoundedSliderPointerGeometry}"
                               Width="16" Height="16"
                               Stretch="Uniform"
                               VerticalAlignment="Top" Margin="0,-3,0,0"
@@ -30,8 +30,8 @@
                    KeyDown="DayThumb_KeyDown">
                 <Thumb.Template>
                     <ControlTemplate TargetType="Thumb">
-                        <!-- Triangular head, apex up and nudged above the track centre. -->
-                        <Path Data="M 8,0 L 16,15 L 0,15 Z"
+                        <!-- Rounded triangle, nudged above the track centre. -->
+                        <Path Data="{StaticResource RoundedSliderPointerGeometry}"
                               Width="16" Height="16"
                               Stretch="Uniform"
                               VerticalAlignment="Top" Margin="0,-3,0,0"

@@ -20,6 +20,11 @@
             <GradientStop Color="#9BB9D7" Offset="0.72" />
             <GradientStop Color="#5E91C2" Offset="1" />
         </LinearGradientBrush>
+        <!-- One triangle with 1.5-unit corner fillets for every slider pointer. -->
+        <PathGeometry x:Key="RoundedSliderPointerGeometry"
+                      Figures="M 6.6765,2.4816 A 1.5,1.5 0 0 1 9.3235,2.4816
+                               L 14.8235,12.7941 A 1.5,1.5 0 0 1 13.5,15
+                               L 2.5,15 A 1.5,1.5 0 0 1 1.1765,12.7941 Z" />
         <SolidColorBrush x:Key="ThemeOnAccentText" Color="#FFFFFFFF" />
         <SolidColorBrush x:Key="ThemeButtonHover" Color="#FFE8E8E8" />
         <SolidColorBrush x:Key="ThemeStrongText" Color="#FF111111" />
@@ -190,8 +195,8 @@
                                     <Thumb Width="16" Height="16">
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
-                                                <!-- Triangular head, apex up and nudged above the track centre. -->
-                                                <Path Data="M 8,0 L 16,15 L 0,15 Z"
+                                                <!-- Rounded triangle, nudged above the track centre. -->
+                                                <Path Data="{StaticResource RoundedSliderPointerGeometry}"
                                                       Width="16" Height="16"
                                                       Stretch="Uniform"
                                                       VerticalAlignment="Top" Margin="0,-3,0,0"
