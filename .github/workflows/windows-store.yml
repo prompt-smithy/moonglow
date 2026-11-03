@@ -1,0 +1,66 @@
+name: Windows Store MSIX
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_identity_name:
+        description: Exact Identity Name from the Partner Center app identity page
+        required: true
+        type: string
+      package_publisher:
+        description: Exact Publisher string from the Partner Center app identity page
+        required: true
+        type: string
+      publisher_display_name:
+        description: Exact PublisherDisplayName from the Partner Center app identity page
+        required: true
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - 'apps/windows/**'
+      - 'resources/Moonglow-option-e-amber-noring.png'
+      - 'VERSION'
+      - 'tools/package-windows-store.ps1'
+      - '.github/workflows/windows-store.yml'
+  pull_request:
+    paths:
+      - 'apps/windows/**'
+      - 'resources/Moonglow-option-e-amber-noring.png'
+      - 'VERSION'
+      - 'tools/package-windows-store.ps1'
+      - '.github/workflows/windows-store.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build Store MSIX package
+        shell: powershell
+        env:
+          STORE_PACKAGE_IDENTITY_NAME: ${{ github.event.inputs.package_identity_name || 'Moonglow.Local' }}
+          STORE_PACKAGE_PUBLISHER: ${{ github.event.inputs.package_publisher || 'CN=Moonglow Local' }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ github.event.inputs.publisher_display_name || 'Moonglow Local' }}
+        run: |
+          .\tools\package-windows-store.ps1 `
+            -PackageIdentityName $env:STORE_PACKAGE_IDENTITY_NAME `
+            -PackagePublisher $env:STORE_PACKAGE_PUBLISHER `
+            -PackagePublisherDisplayName $env:STORE_PUBLISHER_DISPLAY_NAME
+
+      - name: Upload Partner Center package
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: moonglow-store-msix-${{ github.run_number }}
+          path: release/*/windows/Moonglow-Store.*
+          if-no-files-found: error

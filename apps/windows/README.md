@@ -76,6 +76,25 @@ Both artifacts require the .NET Framework 4.8 runtime on the target PC; the port
 
 Packaging the installer requires [Inno Setup 6](https://jrsoftware.org/isdl.php). The build script checks common install locations and attempts to install it with `winget` if needed. If Inno Setup is unavailable, the portable launcher is still produced and the installer is skipped with a warning. See [Architecture](docs/ARCHITECTURE.md) for implementation details.
 
+### Microsoft Store
+
+The Store package uses MSIX. Pass the identity name, publisher, and publisher display name exactly
+as shown on the app's Product identity page in Partner Center:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ..\..\tools\package-windows-store.ps1 `
+  -PackageIdentityName "<Partner Center identity name>" `
+  -PackagePublisher "<Partner Center publisher>" `
+  -PackagePublisherDisplayName "<Partner Center publisher display name>"
+```
+
+The script writes `Moonglow-Store.msix` and `Moonglow-Store.msixupload` to the versioned release
+folder. The GitHub Actions workflow named **Windows Store MSIX** builds the package on Windows; a
+manual run with the Partner Center identity values uploads both files as a downloadable artifact.
+The package uses a temporary certificate whose subject matches the publisher. Microsoft signs the
+Store-distributed package after certification. Local packaging requires the Windows SDK's MakeAppx
+and SignTool utilities. The package targets Windows 10 version 1903 or later and Windows 11.
+
 ## Settings
 
 Settings are stored per user at `%APPDATA%\Moonglow\settings.json`. On first launch the app

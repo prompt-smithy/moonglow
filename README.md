@@ -53,7 +53,7 @@ Release artifacts live at the repository root, grouped by version and operating 
 release/
   1.0.1/
     linux/    moonglow_1.0.1_amd64.deb, moonglow-1.0.1-linux-amd64.tar.gz, SHA256SUMS
-    windows/  Moonglow_Portable.exe, Moonglow-windows-portable.zip, SHA256SUMS
+    windows/  Moonglow-Setup.exe, Moonglow-Store.msix, Moonglow-Store.msixupload, portable builds, SHA256SUMS
     macOs/    Moonglow-macOS-universal.dmg, Moonglow-macOS-universal.zip, SHA256SUMS
 ```
 
@@ -101,6 +101,23 @@ dotnet build Moonglow.csproj -c Release
 dotnet test Moonglow.Core.Tests/Moonglow.Core.Tests.csproj -c Release
 dotnet build Moonglow.csproj -t:PackageAll   # installer
 ```
+
+To build the Microsoft Store package, use the exact identity name, publisher, and publisher display
+name shown on the app's Product identity page in Partner Center:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ..\..\tools\package-windows-store.ps1 `
+  -PackageIdentityName "<Partner Center identity name>" `
+  -PackagePublisher "<Partner Center publisher>" `
+  -PackagePublisherDisplayName "<Partner Center publisher display name>"
+```
+
+This creates `Moonglow-Store.msix` and `Moonglow-Store.msixupload` under
+`release/<VERSION>/windows`. The **Windows Store MSIX** GitHub Actions workflow packages the app on
+Windows and attaches both files as a downloadable artifact when run manually with the Partner
+Center identity values. The package targets Windows 10 version 1903 or later and Windows 11. It
+runs as a full-trust desktop app to retain native display-control API access. Startup-at-sign-in
+still needs validation in a packaged install.
 
 ### Linux
 
