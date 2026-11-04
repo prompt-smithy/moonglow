@@ -14,10 +14,10 @@ public sealed class MainViewModel : ObservableObject
     private readonly ScheduleService _schedule;
     private readonly SettingsService _settingsService;
     private readonly MonitorService _monitors;
+    private readonly StartupController _startup;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
 
     private bool _applyingFromSchedule;
-    private bool _startupRegistrationFailed;
     private int _refreshInProgress;
 
     private int _brightnessValue;
@@ -47,6 +47,13 @@ public sealed class MainViewModel : ObservableObject
         _schedule = schedule;
         _settingsService = settingsService;
         _monitors = monitors;
+        _startup = new StartupController(StartupManager.Create(), Settings, _settingsService.Save);
+        _startup.PropertyChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(RunAtStartup));
+            OnPropertyChanged(nameof(CanChangeRunAtStartup));
+            OnPropertyChanged(nameof(RunAtStartupStatus));
+        };
 
         _brightnessValue = AppSettings.ClampBrightness(Settings.ManualBrightness);
         _auto = Settings.AutoColorTemperature;
@@ -423,64 +430,17 @@ public sealed class MainViewModel : ObservableObject
 
     public bool RunAtStartup
     {
-        get => Settings.LaunchAtLogin;
-        set
-        {
-            if (Settings.LaunchAtLogin == value)
-                return;
-
-            // A change Windows refuses is deliberately not recorded, so the toggle falls back
-            // to the truth instead of claiming a registration that was never made.
-            if (!StartupManager.Set(value))
-            {
-                _startupRegistrationFailed = true;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(RunAtStartupStatus));
-                return;
-            }
-
-            _startupRegistrationFailed = false;
-            Settings.LaunchAtLogin = value;
-            _settingsService.Save();
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(RunAtStartupStatus));
-        }
+        get => _startup.Enabled;
+        set => _ = _startup.SetEnabledAsync(value);
     }
 
-    /// <summary>Describes the startup state for the settings window.</summary>
-    public string RunAtStartupStatus
-    {
-        get
-        {
-            if (_startupRegistrationFailed)
-                return "Windows did not accept this startup entry. Check the registry permissions, then try again.";
-            if (StartupManager.IsEnabled())
-                return "Moonglow opens automatically when you sign in.";
-            if (Settings.LaunchAtLogin)
-                return "Could not register Moonglow as a startup app on this system.";
-            return "Moonglow opens only when you launch it.";
-        }
-    }
+    public bool CanChangeRunAtStartup => _startup.CanChange;
 
-    /// <summary>
-    /// Re-asserts the stored preference on Windows at launch, and adopts an entry the app did
-    /// not create instead of switching it off behind the user's back.
-    /// </summary>
-    public void ApplyStartupState()
-    {
-        if (Settings.LaunchAtLogin)
-        {
-            _startupRegistrationFailed = !StartupManager.Set(true);
-        }
-        else if (StartupManager.IsEnabled())
-        {
-            Settings.LaunchAtLogin = true;
-            _settingsService.Save();
-        }
+    public string RunAtStartupStatus => _startup.Status;
 
-        OnPropertyChanged(nameof(RunAtStartup));
-        OnPropertyChanged(nameof(RunAtStartupStatus));
-    }
+    public Task ApplyStartupStateAsync() => _startup.InitializeAsync();
+
+    public Task RefreshStartupStateAsync() => _startup.RefreshAsync();
 
     private void OnScheduleTemperatureApplied(int kelvin)
     {

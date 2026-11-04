@@ -1,25 +1,85 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Microsoft.Win32;
 using Moonglow.Core;
 
 namespace Moonglow.Infrastructure;
 
-/// <summary>Adds or removes the app from the per-user "run at sign-in" registry key.</summary>
+/// <summary>Selects startup registration using the running process's package identity.</summary>
 internal static class StartupManager
+{
+    public static IStartupRegistration Create()
+    {
+        try
+        {
+            return HasPackageIdentity() ? CreatePackagedRegistration() : new RegistryStartupRegistration();
+        }
+        catch
+        {
+            // An identity or API failure must not send a packaged app down the registry path.
+            return new UnavailableStartupRegistration();
+        }
+    }
+
+    // Keep WinRT type loading off the Windows 7 / unpackaged path, including during JIT.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static IStartupRegistration CreatePackagedRegistration() => new PackagedStartupRegistration();
+
+    private static bool HasPackageIdentity()
+    {
+        try
+        {
+            uint length = 0;
+            int result = GetCurrentPackageFullName(ref length, IntPtr.Zero);
+            if (result == 15700) // APPMODEL_ERROR_NO_PACKAGE
+                return false;
+            if (result == 122 || result == 0) // ERROR_INSUFFICIENT_BUFFER / ERROR_SUCCESS
+                return true;
+            throw new Win32Exception(result);
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false; // Package identity was introduced in Windows 8.
+        }
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int GetCurrentPackageFullName(ref uint packageFullNameLength, IntPtr packageFullName);
+
+    private sealed class UnavailableStartupRegistration : IStartupRegistration
+    {
+        public bool RestorePreferenceOnLaunch => false;
+        public Task<StartupState> ReadAsync() => Task.FromResult(StartupState.Unavailable);
+        public Task<StartupState> SetEnabledAsync(bool enabled) => ReadAsync();
+    }
+}
+
+/// <summary>Startup registration for installer and portable builds, including Windows 7.</summary>
+internal sealed class RegistryStartupRegistration : IStartupRegistration
 {
     private const string RunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "Moonglow";
     private static readonly string[] LegacyValueNames = { "Amber", "Amber.exe", "Night Mode Controller" };
 
-    public static bool IsEnabled()
+    public bool RestorePreferenceOnLaunch => true;
+
+    public Task<StartupState> ReadAsync() => Task.FromResult(ReadState());
+
+    public Task<StartupState> SetEnabledAsync(bool enabled)
+        => Task.FromResult(Set(enabled) ? ReadState() : StartupState.Unavailable);
+
+    private static StartupState ReadState()
     {
         try
         {
             using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKey, writable: false);
             if (key is null)
-                return false;
+                return StartupState.Disabled;
 
             string? exe = NormalizeExecutablePath(StartupExecutable());
             foreach (string valueName in new[] { ValueName })
@@ -29,7 +89,7 @@ internal static class StartupManager
                     continue;
 
                 if (string.Equals(NormalizeExecutablePath(value), exe, StringComparison.OrdinalIgnoreCase))
-                    return true;
+                    return StartupState.Enabled;
             }
 
             foreach (string legacyName in LegacyValueNames)
@@ -39,27 +99,29 @@ internal static class StartupManager
                     continue;
 
                 if (string.Equals(NormalizeExecutablePath(value), exe, StringComparison.OrdinalIgnoreCase))
-                    return true;
+                    return StartupState.Enabled;
             }
         }
         catch
         {
-            // Registry access can fail under locked-down policies; ignore.
+            return StartupState.Unavailable;
         }
 
-        return false;
+        return StartupState.Disabled;
     }
 
     /// <summary>Registers or removes the entry. Returns false when Windows refused the change
     /// (locked-down policy, unusable process path), so the caller never records intent that did
     /// not take effect.</summary>
-    public static bool Set(bool enabled)
+    private static bool Set(bool enabled)
     {
         try
         {
-            using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+            using RegistryKey? key = enabled
+                ? Registry.CurrentUser.CreateSubKey(RunKey, writable: true)
+                : Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
             if (key is null)
-                return false;
+                return !enabled;
 
             if (enabled)
             {

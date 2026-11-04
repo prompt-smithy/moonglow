@@ -29,8 +29,10 @@ Technical reference for **Moonglow** (`Moonglow`). For a user-facing overview se
 - **[Hardcodet.NotifyIcon.Wpf]** – system-tray icon, popup, and context menu.
 - **System.Management** – WMI access for internal-panel brightness (a framework assembly on
   `net48` rather than a NuGet package).
-- **System.Text.Json** – settings persistence, and the only NuGet runtime dependency besides the
-  tray icon.
+- **System.Text.Json** – settings persistence.
+- **Microsoft.Windows.SDK.Contracts** – WinRT references for the packaged startup task,
+  targeting the Store package's Windows 10 1903 minimum. WinRT calls are isolated from the
+  unpackaged path so older Windows versions continue to use registry-based startup.
 - No MVVM framework or DI container; composition is done by hand in `App`.
 
 .NET Framework 4.8 implements .NET Standard 2.0, so two small shims stand in for things it
@@ -133,7 +135,8 @@ Implemented in [`MonitorService`](../Services/MonitorService.cs).
 - [`SettingsService`](../Services/SettingsService.cs) serializes [`AppSettings`](../Moonglow.Core/AppSettings.cs) to `%APPDATA%\Moonglow\settings.json` (indented JSON). Load and save are best-effort and swallow I/O errors.
 - **Only malformed JSON** is moved aside as `settings.json.corrupt`; a transient read failure (antivirus, indexer, concurrent reader) leaves the file untouched so the next launch can read it, and a parseable `.corrupt` copy is used when the canonical file is missing. Saves go through a temporary file and `File.Replace`, so a reader never sees a half-written document.
 - Times are stored as 24-hour `HH:mm`; `AppSettings` exposes parsed `TimeSpan` helpers for the scheduler.
-- [`StartupManager`](../Infrastructure/StartupManager.cs) adds/removes the current executable path under `HKCU\...\CurrentVersion\Run` (value `Moonglow`).
+- [`StartupManager`](../Infrastructure/StartupManager.cs) detects the running process's package identity. MSIX uses the disabled-by-default `MoonglowStartup` task declared in the package manifest, through `Windows.ApplicationModel.StartupTask`; installer and portable builds use `HKCU\...\CurrentVersion\Run` (value `Moonglow`). A packaged API failure never falls back to the registry.
+- [`StartupController`](../Infrastructure/StartupController.cs) updates startup asynchronously on the UI context, saves only confirmed states, and refreshes when the settings window is activated. Windows startup-task state is authoritative for MSIX: launch never reasserts a saved preference, and user/policy overrides cannot be bypassed. Only unpackaged builds restore their saved startup preference at launch.
 
 ---
 

@@ -171,7 +171,7 @@ public partial class App : Application
             ContextMenu = BuildContextMenu(),
         };
 
-        _viewModel.ApplyStartupState();
+        _ = _viewModel.ApplyStartupStateAsync();
         _viewModel.ApplyInitialState();
         _schedule.Start();
 
@@ -298,6 +298,7 @@ public partial class App : Application
         }
 
         var window = new MainWindow { DataContext = _viewModel };
+        window.Activated += (_, _) => _ = _viewModel.RefreshStartupStateAsync();
         window.SourceInitialized += (_, _) => _theme.ApplyWindowTitleBar(window);
         window.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow = window;

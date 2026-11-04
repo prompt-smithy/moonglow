@@ -100,6 +100,12 @@ The package uses a temporary certificate whose subject matches the publisher. Mi
 Store-distributed package after certification. Local packaging requires the Windows SDK's MakeAppx
 and SignTool utilities. The package targets Windows 10 version 1903 or later and Windows 11.
 
+In the Store edition, **Run Moonglow when I sign in** controls a Windows startup task. It is
+off by default. Changes made in **Settings > Apps > Startup** or **Task Manager > Startup apps**
+are reflected when Moonglow's settings window is activated. If startup is disabled there,
+enable it there again; Moonglow respects that choice and any administrator policy.
+Installer and portable editions continue to use a per-user startup registry entry.
+
 ## Settings
 
 Settings are stored per user at `%APPDATA%\Moonglow\settings.json`. On first launch the app

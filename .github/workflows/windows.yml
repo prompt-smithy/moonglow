@@ -53,7 +53,7 @@ jobs:
       - name: Test
         run: dotnet test Moonglow.Core.Tests/Moonglow.Core.Tests.csproj -c Release
 
-      - name: Test display worker and settings persistence
+      - name: Test display worker, settings, and startup registration
         run: dotnet test Moonglow.Platform.Tests/Moonglow.Platform.Tests.csproj -c Release
 
       - name: Upload build output

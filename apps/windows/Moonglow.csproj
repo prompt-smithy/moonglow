@@ -11,7 +11,7 @@
     <RootNamespace>Moonglow</RootNamespace>
     <AssemblyName>Moonglow</AssemblyName>
     <ApplicationIcon>..\..\resources\Moonglow.ico</ApplicationIcon>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Product>Moonglow</Product>
     <AssemblyTitle>Moonglow</AssemblyTitle>
     <!-- AnyCPU runs 64-bit on 64-bit Windows (as the old win-x64 build did) and still runs on
@@ -45,6 +45,8 @@
   <ItemGroup>
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
     <PackageReference Include="System.Text.Json" Version="9.0.0" />
+    <!-- WinRT startup tasks for packaged apps. Matches the Store package's Windows 10 1903 minimum. -->
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.18362.2007" PrivateAssets="All" />
   </ItemGroup>
 
   <ItemGroup>

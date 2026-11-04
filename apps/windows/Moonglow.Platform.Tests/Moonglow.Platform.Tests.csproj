@@ -16,5 +16,8 @@
     <Compile Include="../Services/ColorTemperatureService.cs" Link="ColorTemperatureService.cs" />
     <Compile Include="../Services/DiagnosticLog.cs" Link="DiagnosticLog.cs" />
     <Compile Include="../Services/SettingsService.cs" Link="SettingsService.cs" />
+    <Compile Include="../Infrastructure/ObservableObject.cs" Link="ObservableObject.cs" />
+    <Compile Include="../Infrastructure/StartupController.cs" Link="StartupController.cs" />
+    <Compile Include="../Infrastructure/PackagedStartupRegistration.cs" Link="PackagedStartupRegistration.cs" />
   </ItemGroup>
 </Project>
