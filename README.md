@@ -13,6 +13,8 @@ apps share a product, a behavioural contract, and a release process, not source 
 | [`apps/linux`](apps/linux) | Rust (eframe) | `moonglow` + `moonglow-core` | Desktop app, global shortcuts, deb/rpm/AUR |
 | [`apps/macos`](apps/macos) | Swift / SwiftUI | `Moonglow` + `MoonglowKit` | Menu bar app, DMG/ZIP |
 
+The Windows app's data handling is described in the [privacy policy](PRIVACY.md).
+
 ## Why a monorepo
 
 The three apps were ports of each other and had silently drifted: different default night

@@ -108,3 +108,8 @@ imports an existing `%APPDATA%\Amber\settings.json` left by earlier versions.
 ## License
 
 Licensed under the [MIT License](LICENSE).
+
+## Privacy
+
+See the [Moonglow Windows privacy policy](../../PRIVACY.md) for information about local
+settings, diagnostic logs, and support reports.
