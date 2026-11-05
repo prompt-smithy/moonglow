@@ -16,7 +16,7 @@ use std::str::FromStr;
 /// One physical key in the shortcut table.
 ///
 /// A table index is used instead of one enum variant per key: every backend
-/// needs the same four spellings (settings, portal, GNOME, label), and a row
+/// needs the same spellings (settings, portal, GNOME, label), and a row
 /// per key keeps them from drifting apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ShortcutKey(u8);
@@ -388,14 +388,16 @@ pub enum ShortcutAction {
     DecreaseBrightness,
     IncreaseTemperature,
     DecreaseTemperature,
+    ShowSettings,
 }
 
 impl ShortcutAction {
-    pub const ALL: [ShortcutAction; 4] = [
+    pub const ALL: [ShortcutAction; 5] = [
         ShortcutAction::IncreaseBrightness,
         ShortcutAction::DecreaseBrightness,
         ShortcutAction::IncreaseTemperature,
         ShortcutAction::DecreaseTemperature,
+        ShortcutAction::ShowSettings,
     ];
 
     pub const fn id(self) -> &'static str {
@@ -404,6 +406,7 @@ impl ShortcutAction {
             ShortcutAction::DecreaseBrightness => "decrease-brightness",
             ShortcutAction::IncreaseTemperature => "increase-temperature",
             ShortcutAction::DecreaseTemperature => "decrease-temperature",
+            ShortcutAction::ShowSettings => "show-settings",
         }
     }
 
@@ -414,6 +417,7 @@ impl ShortcutAction {
             ShortcutAction::DecreaseBrightness => "Decrease brightness",
             ShortcutAction::IncreaseTemperature => "Increase temperature (cooler)",
             ShortcutAction::DecreaseTemperature => "Decrease temperature (warmer)",
+            ShortcutAction::ShowSettings => "Show settings",
         }
     }
 
@@ -435,6 +439,9 @@ impl ShortcutAction {
             }
             ShortcutAction::DecreaseTemperature => {
                 Shortcut::new(ShortcutKey(17), true, true, false, false)
+            }
+            ShortcutAction::ShowSettings => {
+                Shortcut::new(ShortcutKey(50), true, true, false, false)
             }
         }
     }

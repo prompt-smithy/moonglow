@@ -349,12 +349,13 @@ impl<S: SettingsPersistence> StateManager<S> {
             ShortcutAction::DecreaseBrightness => self.settings.decrease_brightness_shortcut,
             ShortcutAction::IncreaseTemperature => self.settings.increase_temperature_shortcut,
             ShortcutAction::DecreaseTemperature => self.settings.decrease_temperature_shortcut,
+            ShortcutAction::ShowSettings => self.settings.show_settings_shortcut,
         }
     }
 
     /// Assigns or clears one shortcut.
     ///
-    /// The same key combination is stolen from the other three actions so one
+    /// The same key combination is stolen from other actions so one
     /// press can never fire two things. A modifier-less shortcut is refused;
     /// `None` clears the action.
     pub fn set_shortcut(&mut self, action: ShortcutAction, value: Option<Shortcut>) {
@@ -683,6 +684,7 @@ fn shortcut_of(settings: &AppSettings, action: ShortcutAction) -> Option<Shortcu
         ShortcutAction::DecreaseBrightness => settings.decrease_brightness_shortcut,
         ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut,
         ShortcutAction::DecreaseTemperature => settings.decrease_temperature_shortcut,
+        ShortcutAction::ShowSettings => settings.show_settings_shortcut,
     }
 }
 
@@ -692,6 +694,7 @@ fn set_shortcut(settings: &mut AppSettings, action: ShortcutAction, value: Optio
         ShortcutAction::DecreaseBrightness => settings.decrease_brightness_shortcut = value,
         ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut = value,
         ShortcutAction::DecreaseTemperature => settings.decrease_temperature_shortcut = value,
+        ShortcutAction::ShowSettings => settings.show_settings_shortcut = value,
     }
 }
 

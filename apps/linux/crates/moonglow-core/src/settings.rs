@@ -57,6 +57,8 @@ pub struct AppSettings {
     pub increase_temperature_shortcut: Option<Shortcut>,
     #[serde(default = "default_decrease_temperature_shortcut")]
     pub decrease_temperature_shortcut: Option<Shortcut>,
+    #[serde(default = "default_show_settings_shortcut")]
+    pub show_settings_shortcut: Option<Shortcut>,
 }
 
 fn default_day() -> i32 {
@@ -92,6 +94,7 @@ fn shortcut_of(settings: &AppSettings, action: ShortcutAction) -> Option<Shortcu
         ShortcutAction::DecreaseBrightness => settings.decrease_brightness_shortcut,
         ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut,
         ShortcutAction::DecreaseTemperature => settings.decrease_temperature_shortcut,
+        ShortcutAction::ShowSettings => settings.show_settings_shortcut,
     }
 }
 
@@ -101,6 +104,7 @@ fn set_shortcut(settings: &mut AppSettings, action: ShortcutAction, value: Optio
         ShortcutAction::DecreaseBrightness => settings.decrease_brightness_shortcut = value,
         ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut = value,
         ShortcutAction::DecreaseTemperature => settings.decrease_temperature_shortcut = value,
+        ShortcutAction::ShowSettings => settings.show_settings_shortcut = value,
     }
 }
 
@@ -115,6 +119,9 @@ fn default_increase_temperature_shortcut() -> Option<Shortcut> {
 }
 fn default_decrease_temperature_shortcut() -> Option<Shortcut> {
     Some(ShortcutAction::DecreaseTemperature.default_shortcut())
+}
+fn default_show_settings_shortcut() -> Option<Shortcut> {
+    Some(ShortcutAction::ShowSettings.default_shortcut())
 }
 
 impl Default for AppSettings {
@@ -134,6 +141,7 @@ impl Default for AppSettings {
             decrease_brightness_shortcut: default_decrease_brightness_shortcut(),
             increase_temperature_shortcut: default_increase_temperature_shortcut(),
             decrease_temperature_shortcut: default_decrease_temperature_shortcut(),
+            show_settings_shortcut: default_show_settings_shortcut(),
         }
     }
 }
@@ -284,6 +292,10 @@ impl<'de> Deserialize<'de> for AppSettings {
             decrease_temperature_shortcut: shortcut(
                 get("decreaseTemperatureShortcut"),
                 defaults.decrease_temperature_shortcut,
+            ),
+            show_settings_shortcut: shortcut(
+                get("showSettingsShortcut"),
+                defaults.show_settings_shortcut,
             ),
         })
     }

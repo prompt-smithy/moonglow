@@ -44,7 +44,8 @@ Light settings, KWin preview stopped).
   Fedora/openSUSE). The UI only uses APIs available in GTK 4.8 / libadwaita
   1.2, so Debian 12 stays supported.
 - For DDC/CI: the `i2c-dev` module, membership in the `i2c` group, and the
-  shipped udev rule (installed by both packages).
+  shipped udev rule. Packages install the rule automatically; portable and
+  source builds need the one-time manual setup below.
 - No tray host or GNOME extension is needed.
 
 ## Install
@@ -82,21 +83,55 @@ Or run from source:
 cargo run --release -p moonglow
 ```
 
-DDC/CI permission (all distros — the installers print this too):
+### Enable DDC/CI brightness
+
+The `.deb`, RPM, and AUR packages install the udev rule and create the `i2c`
+group. Packaged installs still require adding your account to the group and
+then logging out and back in. For a portable archive or a source build, install
+the rule manually first.
+
+From an extracted portable archive's version directory:
+
+```bash
+sudo install -Dm644 usr/lib/udev/rules.d/51-moonglow-i2c.rules \
+  /usr/lib/udev/rules.d/51-moonglow-i2c.rules
+```
+
+Or, from the source repository root:
+
+```bash
+sudo install -Dm644 apps/linux/packaging/51-moonglow-i2c.rules \
+  /usr/lib/udev/rules.d/51-moonglow-i2c.rules
+```
+
+Then run these commands for any install type:
 
 ```bash
 sudo modprobe i2c-dev
+# Ensure the group exists (the package normally creates it).
+if ! getent group i2c >/dev/null; then
+  sudo groupadd --system i2c
+fi
+# Add the current user; this is safe to repeat.
 sudo usermod -aG i2c "$USER"
-# log out and back in, then check:
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=i2c-dev --action=change
+```
+
+Log out and back in so desktop-launched apps inherit the new group membership.
+Then verify both the account and device permissions:
+
+```bash
+id -nG
+ls -l /dev/i2c-*
 moonglow --status
 ```
 
-If brightness reports "permission denied" naming your I2C buses, the step
-above is what is missing: `/dev/i2c-*` ships root-only, and your monitor
-working on Windows only proves the panel and cable are fine — Linux still
-needs the group + udev rule before any program may open the bus. (All three
-packages install the udev rule and create the `i2c` group; joining the group
-is always manual.)
+The nodes should show group `i2c` and permissions `crw-rw----`. If they still
+show `root root` and `crw-------`, the udev rule is missing or has not been
+applied. Restart Moonglow after fixing permissions so it reopens the I2C buses.
+If there are no `/dev/i2c-*` nodes, check that `i2c-dev` is loaded and that
+DDC/CI is enabled in the monitor's on-screen menu.
 
 ## Use
 
@@ -107,17 +142,20 @@ Launch `moonglow` (or the app launcher entry). The settings window opens with:
 - **Colour temperature** — a warm-to-cool slider, the automatic schedule
   switch, and the day/night range as one two-handle bar. The slider is
   disabled while Automatic is on; the schedule is driving the display.
-- **Shortcuts** — four global shortcuts: brightness up/down and temperature
-  up/down. Click a shortcut, press the new combination, and it is registered
+- **Shortcuts** — global shortcuts for brightness, temperature, and showing
+  Settings. Click a shortcut, press the new combination, and it is registered
   immediately. `Clear` removes one.
 - **Schedule** — morning and evening transition windows.
 - **Startup**, **Displays**, and **Command line** — secondary sections,
   collapsed until needed.
 
-Closing the window keeps Moonglow running in the background so the schedule
-and shortcuts stay active. Launch `moonglow --show-settings` (or simply
-`moonglow` again) to bring it back, and use **Quit Moonglow** in the footer to
-stop it completely. The autostart entry launches with `--hidden`.
+Settings are split into Display, Schedule, and Preferences pages. A fresh
+manual launch opens Settings; after 10 seconds without keyboard or pointer
+activity, the window hides while Moonglow keeps running in the background.
+Launching `moonglow --show-settings` (or simply `moonglow` again) opens the
+existing window. The configurable **Show settings** global shortcut does the
+same. Use **Quit Moonglow** in Preferences to stop the app. The autostart entry
+launches with `--hidden`, so Settings does not open at login.
 
 A second invocation forwards to the running instance:
 
@@ -163,10 +201,11 @@ The Shortcuts card uses the best mechanism the session offers:
    the compositor itself owns the key grab.
 3. **X11 key grabs** on plain X11 sessions that are not GNOME.
 
-Defaults are Ctrl+Alt+PageUp / Ctrl+Alt+PageDown for brightness and
-Ctrl+Alt+] / Ctrl+Alt+[ for temperature, chosen because GNOME already owns the
-Ctrl+Alt+arrow combinations for workspace switching. A shortcut needs at least one modifier, and
-assigning a combination to one action removes it from any other.
+Defaults are Ctrl+Alt+PageUp / Ctrl+Alt+PageDown for brightness,
+Ctrl+Alt+] / Ctrl+Alt+[ for temperature, and Ctrl+Alt+M to show Settings.
+These avoid GNOME's Ctrl+Alt+arrow workspace shortcuts. A shortcut needs at
+least one modifier, and assigning a combination to one action removes it from
+any other.
 
 Settings live at `~/.config/moonglow/settings.json` (same schema as macOS).
 Start-at-login is a `~/.config/autostart` entry managed from the settings

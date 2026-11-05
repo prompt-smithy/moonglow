@@ -591,6 +591,10 @@ fn forward_command(cli: &Cli) -> i32 {
             }
         };
     }
+    // A duplicate login-start request must not surface the preferences UI.
+    if cli.hidden {
+        return 0;
+    }
     let mut acted = false;
     if let Some(percent) = cli.set_brightness {
         acted = true;

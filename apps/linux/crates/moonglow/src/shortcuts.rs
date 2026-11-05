@@ -93,7 +93,7 @@ impl ShortcutHandle {
 /// Current bindings, in [`ShortcutAction::ALL`] order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Bindings {
-    shortcuts: [Option<Shortcut>; 4],
+    shortcuts: [Option<Shortcut>; 5],
 }
 
 impl Bindings {
@@ -104,6 +104,7 @@ impl Bindings {
                 settings.decrease_brightness_shortcut,
                 settings.increase_temperature_shortcut,
                 settings.decrease_temperature_shortcut,
+                settings.show_settings_shortcut,
             ],
         }
     }
@@ -113,7 +114,7 @@ impl Bindings {
             .lock()
             .map(|s| Self::from_settings(s.settings()))
             .unwrap_or(Bindings {
-                shortcuts: [None; 4],
+                shortcuts: [None; 5],
             })
     }
 
@@ -208,6 +209,7 @@ fn apply_action<S: SettingsPersistence>(state: &SharedState<S>, action: Shortcut
         ShortcutAction::DecreaseBrightness => state.decrease_brightness(),
         ShortcutAction::IncreaseTemperature => state.increase_color_temperature(),
         ShortcutAction::DecreaseTemperature => state.decrease_color_temperature(),
+        ShortcutAction::ShowSettings => state.show_settings(),
     }
 }
 
@@ -255,6 +257,7 @@ mod gnome {
             ShortcutAction::DecreaseBrightness => "--brightness-down",
             ShortcutAction::IncreaseTemperature => "--temperature-up",
             ShortcutAction::DecreaseTemperature => "--temperature-down",
+            ShortcutAction::ShowSettings => "--show-settings",
         }
     }
 

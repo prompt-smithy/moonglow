@@ -52,6 +52,8 @@ const RANGE_HANDLE_RADIUS: f32 = 10.0;
 const HANDLE_HALF_WIDTH: f32 = 8.0;
 const HANDLE_APEX_RISE: f32 = 10.5;
 const HANDLE_BASE_DROP: f32 = 4.5;
+/// Distance along each edge trimmed for a softly rounded triangle corner.
+const HANDLE_CORNER_INSET: f64 = 2.5;
 const TRACK_HEIGHT: f32 = 10.0;
 const RANGE_BAR_HEIGHT: i32 = 36;
 
@@ -181,12 +183,13 @@ pub const CLI_COMMANDS: &[CliCommand] = &[
     },
 ];
 
-fn shortcuts_of(settings: &AppSettings) -> [Option<Shortcut>; 4] {
+fn shortcuts_of(settings: &AppSettings) -> [Option<Shortcut>; 5] {
     [
         settings.increase_brightness_shortcut,
         settings.decrease_brightness_shortcut,
         settings.increase_temperature_shortcut,
         settings.decrease_temperature_shortcut,
+        settings.show_settings_shortcut,
     ]
 }
 
@@ -196,6 +199,7 @@ fn shortcut_hint(action: ShortcutAction) -> &'static str {
         ShortcutAction::DecreaseBrightness => "Brightness −5%",
         ShortcutAction::IncreaseTemperature => "+100 K, cooler",
         ShortcutAction::DecreaseTemperature => "−100 K, warmer",
+        ShortcutAction::ShowSettings => "Open the Moonglow settings window",
     }
 }
 
@@ -269,8 +273,8 @@ struct UiWidgets {
     auto_switch: gtk::Switch,
     range_area: gtk::DrawingArea,
     range_text: gtk::Label,
-    record_buttons: [gtk::Button; 4],
-    clear_buttons: [gtk::Button; 4],
+    record_buttons: [gtk::Button; 5],
+    clear_buttons: [gtk::Button; 5],
     shortcut_message: gtk::Label,
     backend_detail: gtk::Label,
     time_drops: [[gtk::DropDown; 3]; 4],
@@ -302,9 +306,10 @@ struct Model<S: SettingsPersistence> {
     launch_at_login: bool,
     times: [TwelveHourTime; 4],
     range: TemperatureRange,
-    shortcuts: [Option<Shortcut>; 4],
+    shortcuts: [Option<Shortcut>; 5],
     recording: Option<usize>,
     shortcut_message: Option<(String, Instant)>,
+    last_activity: Instant,
     cli_copied_at: Option<Instant>,
     cached_displays: Vec<moonglow_core::DisplayInfo>,
     drag_handle_night: Option<bool>,
@@ -469,7 +474,55 @@ fn caption(text: &str) -> gtk::Label {
         .build();
     label.add_css_class("caption");
     label.add_css_class("dim-label");
+    label.set_visible(!text.is_empty());
     label
+}
+
+fn set_caption(label: &gtk::Label, text: &str) {
+    label.set_label(text);
+    label.set_visible(!text.is_empty());
+}
+
+/// PreferencesWindow exposes search enablement, but no public search-toggle
+/// handle. Locate the standard toggle by its icon rather than a private child
+/// name; the native toggle still owns search, Escape, and result navigation.
+fn configure_search_navigation(widget: &impl IsA<gtk::Widget>) -> Option<gtk::ToggleButton> {
+    let widget = widget.as_ref();
+    if let Some(button) = widget.downcast_ref::<gtk::ToggleButton>() {
+        if button.icon_name().as_deref() == Some("edit-find-symbolic") {
+            button.set_tooltip_text(Some("Search settings"));
+            button.connect_toggled(|button| {
+                let (icon, label) = if button.is_active() {
+                    ("go-previous-symbolic", "Back to settings")
+                } else {
+                    ("edit-find-symbolic", "Search settings")
+                };
+                button.set_icon_name(icon);
+                button.set_tooltip_text(Some(label));
+            });
+            return Some(button.clone());
+        }
+    }
+    let mut child = widget.first_child();
+    while let Some(current) = child {
+        if let Some(button) = configure_search_navigation(&current) {
+            return Some(button);
+        }
+        child = current.next_sibling();
+    }
+    None
+}
+
+fn install_compact_style() {
+    if let Some(display) = gdk::Display::default() {
+        let provider = gtk::CssProvider::new();
+        provider.load_from_data(include_str!("settings.css"));
+        gtk::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
 }
 
 fn value_label(text: &str) -> gtk::Label {
@@ -549,17 +602,39 @@ fn paint_range(range: &TemperatureRange, cr: &cairo::Context, width: i32, height
         TRACK_HEIGHT as f64,
     );
     let _ = cr.fill();
-    // Triangle handles.
+    // Triangle handles with short, tangent curves around all three corners.
     for x in [night_x, day_x] {
-        cr.move_to(x, height / 2.0 - HANDLE_APEX_RISE as f64);
-        cr.line_to(
-            x + HANDLE_HALF_WIDTH as f64,
-            height / 2.0 + HANDLE_BASE_DROP as f64,
-        );
-        cr.line_to(
-            x - HANDLE_HALF_WIDTH as f64,
-            height / 2.0 + HANDLE_BASE_DROP as f64,
-        );
+        let top = height / 2.0 - HANDLE_APEX_RISE as f64;
+        let base = height / 2.0 + HANDLE_BASE_DROP as f64;
+        let vertices = [
+            (x, top),
+            (x + HANDLE_HALF_WIDTH as f64, base),
+            (x - HANDLE_HALF_WIDTH as f64, base),
+        ];
+        for (index, &(vx, vy)) in vertices.iter().enumerate() {
+            let edge_point = |neighbor: (f64, f64)| {
+                let dx = neighbor.0 - vx;
+                let dy = neighbor.1 - vy;
+                let fraction = HANDLE_CORNER_INSET / dx.hypot(dy);
+                (vx + dx * fraction, vy + dy * fraction)
+            };
+            let (in_x, in_y) = edge_point(vertices[(index + 2) % 3]);
+            let (out_x, out_y) = edge_point(vertices[(index + 1) % 3]);
+            if index == 0 {
+                cr.move_to(in_x, in_y);
+            } else {
+                cr.line_to(in_x, in_y);
+            }
+            // A quadratic corner through the vertex, expressed as a cubic.
+            cr.curve_to(
+                in_x + (vx - in_x) * 2.0 / 3.0,
+                in_y + (vy - in_y) * 2.0 / 3.0,
+                out_x + (vx - out_x) * 2.0 / 3.0,
+                out_y + (vy - out_y) * 2.0 / 3.0,
+                out_x,
+                out_y,
+            );
+        }
         cr.close_path();
         cr.set_source_rgb(1.0, 1.0, 1.0);
         let _ = cr.fill_preserve();
@@ -574,20 +649,39 @@ fn paint_range(range: &TemperatureRange, cr: &cairo::Context, width: i32, height
 /// Builds the window and every control, without connecting signals yet.
 /// Returns the widget handles plus the page the tail groups attach to.
 #[allow(clippy::too_many_lines)]
-fn build_widgets(settings: &AppSettings) -> (UiWidgets, adw::PreferencesPage) {
+fn build_widgets(
+    settings: &AppSettings,
+) -> (
+    UiWidgets,
+    adw::PreferencesPage,
+    adw::PreferencesPage,
+    adw::PreferencesPage,
+) {
     let window = adw::PreferencesWindow::builder()
         .title("Moonglow")
-        .default_width(470)
-        .default_height(680)
+        .default_width(440)
+        .default_height(640)
         .build();
-    let page = adw::PreferencesPage::new();
-    window.add(&page);
+    window.add_css_class("moonglow-settings");
+    configure_search_navigation(&window);
+    let display_page = adw::PreferencesPage::new();
+    display_page.set_title("Display");
+    display_page.set_icon_name(Some("video-display-symbolic"));
+    let schedule_page = adw::PreferencesPage::new();
+    schedule_page.set_title("Schedule");
+    schedule_page.set_icon_name(Some("preferences-system-time-symbolic"));
+    let preferences_page = adw::PreferencesPage::new();
+    preferences_page.set_title("Preferences");
+    preferences_page.set_icon_name(Some("preferences-other-symbolic"));
+    window.add(&display_page);
+    window.add(&schedule_page);
+    window.add(&preferences_page);
 
     // Status: the live "Automatic · 6500 K · Brightness 80%" line.
     let status_group = adw::PreferencesGroup::builder().title("Status").build();
     let status_row = adw::ActionRow::builder().title("Starting…").build();
     status_group.add(&status_row);
-    page.add(&status_group);
+    display_page.add(&status_group);
 
     // Brightness.
     let brightness_group = adw::PreferencesGroup::builder().title("Brightness").build();
@@ -595,14 +689,15 @@ fn build_widgets(settings: &AppSettings) -> (UiWidgets, adw::PreferencesPage) {
     let brightness_value = value_label(&format!("{}%", settings.manual_brightness));
     let brightness_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
-        .spacing(8)
+        .spacing(6)
+        .hexpand(true)
         .build();
     brightness_box.append(&brightness_scale);
     brightness_box.append(&brightness_value);
     let brightness_row = adw::ActionRow::builder().title("Level").build();
     brightness_row.add_suffix(&brightness_box);
     brightness_group.add(&brightness_row);
-    page.add(&brightness_group);
+    display_page.add(&brightness_group);
 
     // Colour temperature.
     let temp_group = adw::PreferencesGroup::builder()
@@ -626,7 +721,8 @@ fn build_widgets(settings: &AppSettings) -> (UiWidgets, adw::PreferencesPage) {
     let temp_value = value_label(&format!("{} K", settings.manual_color_temp_k));
     let temp_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
-        .spacing(8)
+        .spacing(6)
+        .hexpand(true)
         .build();
     temp_box.append(&temp_scale);
     temp_box.append(&temp_value);
@@ -635,7 +731,7 @@ fn build_widgets(settings: &AppSettings) -> (UiWidgets, adw::PreferencesPage) {
     temp_group.add(&temp_row);
     let temp_hint = caption("");
     temp_group.add(&temp_hint);
-    page.add(&temp_group);
+    display_page.add(&temp_group);
 
     // Day / night range.
     let range_group = adw::PreferencesGroup::builder()
@@ -659,7 +755,7 @@ fn build_widgets(settings: &AppSettings) -> (UiWidgets, adw::PreferencesPage) {
     range_group.add(&ends);
     let range_text = caption("");
     range_group.add(&range_text);
-    page.add(&range_group);
+    display_page.add(&range_group);
 
     let widgets = UiWidgets {
         window,
@@ -709,13 +805,17 @@ fn build_widgets(settings: &AppSettings) -> (UiWidgets, adw::PreferencesPage) {
             button
         },
     };
-    (widgets, page)
+    (widgets, display_page, schedule_page, preferences_page)
 }
 
 /// Appends the schedule, shortcuts, startup, displays, command-line, and
 /// footer groups. Pure widget building; signals connect later against the
 /// shared model.
-fn build_tail(page: &adw::PreferencesPage, w: &UiWidgets) {
+fn build_tail(
+    schedule_page: &adw::PreferencesPage,
+    preferences_page: &adw::PreferencesPage,
+    w: &UiWidgets,
+) {
     // Schedule.
     let schedule_group = adw::PreferencesGroup::builder()
         .title("Schedule")
@@ -736,7 +836,7 @@ fn build_tail(page: &adw::PreferencesPage, w: &UiWidgets) {
         row.add_suffix(&pickers);
         schedule_group.add(&row);
     }
-    page.add(&schedule_group);
+    schedule_page.add(&schedule_group);
 
     // Shortcuts, below Schedule and collapsed like the Windows window.
     let shortcuts_group = adw::PreferencesGroup::new();
@@ -745,8 +845,15 @@ fn build_tail(page: &adw::PreferencesPage, w: &UiWidgets) {
         .subtitle("Global keys that work from any application")
         .build();
     for (index, action) in ShortcutAction::ALL.into_iter().enumerate() {
+        let title = match action {
+            ShortcutAction::IncreaseBrightness => "Brightness up",
+            ShortcutAction::DecreaseBrightness => "Brightness down",
+            ShortcutAction::IncreaseTemperature => "Temperature up",
+            ShortcutAction::DecreaseTemperature => "Temperature down",
+            ShortcutAction::ShowSettings => "Show settings",
+        };
         let row = adw::ActionRow::builder()
-            .title(action.label())
+            .title(title)
             .subtitle(shortcut_hint(action))
             .build();
         let buttons = gtk::Box::builder()
@@ -768,7 +875,7 @@ fn build_tail(page: &adw::PreferencesPage, w: &UiWidgets) {
     shortcut_notes.append(&w.backend_detail);
     shortcuts.add_row(&shortcut_notes);
     shortcuts_group.add(&shortcuts);
-    page.add(&shortcuts_group);
+    preferences_page.add(&shortcuts_group);
 
     // Startup (collapsed until needed, like the old shell).
     let startup_group = adw::PreferencesGroup::new();
@@ -783,7 +890,7 @@ fn build_tail(page: &adw::PreferencesPage, w: &UiWidgets) {
     autostart_row.add_suffix(&w.open_button);
     startup.add_row(&autostart_row);
     startup_group.add(&startup);
-    page.add(&startup_group);
+    preferences_page.add(&startup_group);
 
     // Displays (collapsed until needed).
     let displays_group = adw::PreferencesGroup::new();
@@ -798,7 +905,7 @@ fn build_tail(page: &adw::PreferencesPage, w: &UiWidgets) {
     displays_inner.append(&w.refresh_button);
     displays.add_row(&displays_inner);
     displays_group.add(&displays);
-    page.add(&displays_group);
+    preferences_page.add(&displays_group);
 
     // Command line (collapsed until needed).
     let cli_group = adw::PreferencesGroup::new();
@@ -826,7 +933,7 @@ fn build_tail(page: &adw::PreferencesPage, w: &UiWidgets) {
     cli_inner.append(&w.cli_copied);
     cli.add_row(&cli_inner);
     cli_group.add(&cli);
-    page.add(&cli_group);
+    preferences_page.add(&cli_group);
 
     // Footer: background note, version, Hide, Quit.
     let footer = adw::PreferencesGroup::builder().title("Moonglow").build();
@@ -844,7 +951,7 @@ fn build_tail(page: &adw::PreferencesPage, w: &UiWidgets) {
     actions.append(&spacer);
     actions.append(&w.quit_button);
     footer.add(&actions);
-    page.add(&footer);
+    preferences_page.add(&footer);
 }
 
 // MARK: - Signals
@@ -853,6 +960,33 @@ fn build_tail(page: &adw::PreferencesPage, w: &UiWidgets) {
 /// briefly and returns early while `guard` is set (see [`suppressed`]).
 #[allow(clippy::too_many_lines)]
 fn connect_signals<S: SettingsPersistence + 'static>(model: &SharedModel<S>) {
+    // Count pointer and keyboard interaction on all nested controls.
+    {
+        let motion = gtk::EventControllerMotion::new();
+        motion.set_propagation_phase(gtk::PropagationPhase::Capture);
+        let activity_model = model.clone();
+        motion.connect_motion(move |_, _, _| {
+            activity_model.borrow_mut().last_activity = Instant::now();
+        });
+        model.borrow().w.window.add_controller(motion);
+
+        let click = gtk::GestureClick::new();
+        click.set_propagation_phase(gtk::PropagationPhase::Capture);
+        let activity_model = model.clone();
+        click.connect_pressed(move |_, _, _, _| {
+            activity_model.borrow_mut().last_activity = Instant::now();
+        });
+        model.borrow().w.window.add_controller(click);
+
+        let scroll = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
+        scroll.set_propagation_phase(gtk::PropagationPhase::Capture);
+        let activity_model = model.clone();
+        scroll.connect_scroll(move |_, _, _| {
+            activity_model.borrow_mut().last_activity = Instant::now();
+            glib::Propagation::Proceed
+        });
+        model.borrow().w.window.add_controller(scroll);
+    }
     // Brightness slider.
     {
         let scale = model.borrow().w.brightness_scale.clone();
@@ -1083,7 +1217,7 @@ fn connect_signals<S: SettingsPersistence + 'static>(model: &SharedModel<S>) {
             if let Some(display) = gdk::Display::default() {
                 display.clipboard().set_text(&sheet);
             }
-            model.w.cli_copied.set_label("Copied.");
+            set_caption(&model.w.cli_copied, "Copied.");
             model.cli_copied_at = Some(Instant::now());
         });
     }
@@ -1123,6 +1257,7 @@ fn connect_signals<S: SettingsPersistence + 'static>(model: &SharedModel<S>) {
         win.add_controller(keys.clone());
         keys.connect_key_pressed(move |_, keyval, _, modifiers| {
             let mut model = model.borrow_mut();
+            model.last_activity = Instant::now();
             let Some(index) = model.recording else {
                 return glib::Propagation::Proceed;
             };
@@ -1181,6 +1316,7 @@ impl<S: SettingsPersistence> Model<S> {
         while let Ok(cmd) = self.cmd_rx.try_recv() {
             match cmd {
                 AppCommand::ShowWindow => {
+                    self.last_activity = Instant::now();
                     let commands = self.vis.show();
                     apply_cmds(&self.w.window, commands);
                 }
@@ -1238,15 +1374,18 @@ impl<S: SettingsPersistence> Model<S> {
         self.w
             .temp_scale
             .set_sensitive(color_supported && !self.auto);
-        self.w.temp_hint.set_label(if !color_supported {
-            &color_status
-        } else if self.auto {
-            "The schedule is driving the temperature. Switch Automatic off to adjust it by hand."
-        } else {
-            &color_status
-        });
-        self.w.range_text.set_label(&self.range.display_text());
-        let record_labels: [String; 4] = std::array::from_fn(|index| {
+        set_caption(
+            &self.w.temp_hint,
+            if !color_supported {
+                &color_status
+            } else if self.auto {
+                "The schedule is driving the temperature. Switch Automatic off to adjust it by hand."
+            } else {
+                &color_status
+            },
+        );
+        set_caption(&self.w.range_text, &self.range.display_text());
+        let record_labels: [String; 5] = std::array::from_fn(|index| {
             if self.recording == Some(index) {
                 "Press keys…".to_string()
             } else {
@@ -1268,17 +1407,13 @@ impl<S: SettingsPersistence> Model<S> {
         let message = self.shortcut_message.as_ref().and_then(|(text, at)| {
             (at.elapsed() < Duration::from_secs(MESSAGE_SECONDS)).then_some(text.clone())
         });
-        self.w
-            .shortcut_message
-            .set_label(message.as_deref().unwrap_or(""));
+        set_caption(&self.w.shortcut_message, message.as_deref().unwrap_or(""));
         if let Ok(status) = self.shortcut_status.lock() {
-            self.w.backend_detail.set_label(&status.detail);
+            set_caption(&self.w.backend_detail, &status.detail);
         }
         let displays = match self.state.lock() {
             Ok(state) => {
-                self.w
-                    .login_status
-                    .set_label(&state.launch_at_login_status());
+                set_caption(&self.w.login_status, &state.launch_at_login_status());
                 state.displays().to_vec()
             }
             Err(_) => return,
@@ -1290,9 +1425,7 @@ impl<S: SettingsPersistence> Model<S> {
             .cli_copied_at
             .map(|at| at.elapsed() < Duration::from_secs(2))
             .unwrap_or(false);
-        self.w
-            .cli_copied
-            .set_label(if copied { "Copied." } else { "" });
+        set_caption(&self.w.cli_copied, if copied { "Copied." } else { "" });
     }
 
     /// One poll pass. Never holds a model borrow across a widget write:
@@ -1300,6 +1433,15 @@ impl<S: SettingsPersistence> Model<S> {
     /// re-entered signal handlers always find the cell free.
     fn tick(model: &SharedModel<S>) {
         model.borrow_mut().poll();
+        let idle = {
+            let model = model.borrow();
+            model.vis.visible() && model.last_activity.elapsed() >= Duration::from_secs(10)
+        };
+        if idle {
+            let mut model = model.borrow_mut();
+            let commands = model.vis.on_close_requested();
+            apply_cmds(&model.w.window, commands);
+        }
         if !model.borrow().vis.visible() {
             // Hidden: nothing to repaint. The next visible tick re-syncs, so
             // changes made while hidden are never lost.
@@ -1344,8 +1486,8 @@ fn assemble<S: SettingsPersistence + 'static>(
         .lock()
         .map(|state| state.settings().clone())
         .unwrap_or_default();
-    let (w, page) = build_widgets(&settings);
-    build_tail(&page, &w);
+    let (w, _display_page, schedule_page, preferences_page) = build_widgets(&settings);
+    build_tail(&schedule_page, &preferences_page, &w);
     let window = w.window.clone();
     let model: SharedModel<S> = Rc::new(RefCell::new(Model {
         state,
@@ -1369,6 +1511,7 @@ fn assemble<S: SettingsPersistence + 'static>(
         shortcuts: shortcuts_of(&settings),
         recording: None,
         shortcut_message: None,
+        last_activity: Instant::now(),
         cli_copied_at: None,
         cached_displays: Vec::new(),
         drag_handle_night: None,
@@ -1415,6 +1558,7 @@ pub fn run_settings_window<S: SettingsPersistence + 'static>(
         let Some(rx) = cmd_rx.borrow_mut().take() else {
             return;
         };
+        install_compact_style();
         let (model, window) = assemble(
             state.clone(),
             rx,
@@ -1444,6 +1588,42 @@ pub fn run_settings_window<S: SettingsPersistence + 'static>(
 #[cfg(test)]
 mod tests {
     use super::{shortcut_key_from_gdk, temperature_rgb};
+
+    // Exercises the native Adwaita template, since the search-toggle handle
+    // is not public API. Run explicitly in a graphical desktop session.
+    #[test]
+    #[ignore = "requires a graphical desktop session"]
+    fn native_search_back_navigation_and_compact_css() {
+        use adw::prelude::*;
+        use std::{cell::RefCell, rc::Rc};
+        adw::init().expect("GTK desktop display");
+        let errors = Rc::new(RefCell::new(Vec::new()));
+        let captured = errors.clone();
+        let provider = gtk::CssProvider::new();
+        provider.connect_parsing_error(move |_, _, error| {
+            captured.borrow_mut().push(error.to_string());
+        });
+        provider.load_from_data(include_str!("settings.css"));
+        assert!(
+            errors.borrow().is_empty(),
+            "CSS errors: {:?}",
+            errors.borrow()
+        );
+
+        let window = adw::PreferencesWindow::new();
+        window.add(&adw::PreferencesPage::new());
+        let button = super::configure_search_navigation(&window)
+            .expect("Adwaita search toggle must be discoverable");
+        button.emit_clicked();
+        assert!(button.is_active());
+        assert_eq!(button.icon_name().as_deref(), Some("go-previous-symbolic"));
+        assert_eq!(button.tooltip_text().as_deref(), Some("Back to settings"));
+        button.emit_clicked();
+        assert!(!button.is_active());
+        assert_eq!(button.icon_name().as_deref(), Some("edit-find-symbolic"));
+        assert_eq!(button.tooltip_text().as_deref(), Some("Search settings"));
+        window.destroy();
+    }
 
     #[test]
     fn recorder_maps_supported_keys() {
