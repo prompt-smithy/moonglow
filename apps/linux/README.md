@@ -1,9 +1,10 @@
 # Moonglow for Linux
 
 Desktop application for external-display brightness (DDC/CI), scheduled colour
-temperature, and global keyboard shortcuts. One static-ish binary, zero system
-GUI dependencies — it links only libc — so the same build runs on Ubuntu,
-Debian, and Arch.
+temperature, and global keyboard shortcuts. The settings window is a native
+Adwaita (GTK4 + libadwaita) preferences window, so the same build runs on
+Ubuntu, Debian, and Arch wherever those system libraries are installed (the
+packages declare them).
 
 ## Layout
 
@@ -38,6 +39,10 @@ Light settings, KWin preview stopped).
 
 - Ubuntu 24.04+ / Debian 12+ / Arch, x86_64 or aarch64.
 - Rust stable and a C toolchain (`build-essential` / `base-devel`) to compile.
+- GTK4 + libadwaita development files (`libgtk-4-dev libadwaita-1-dev` on
+  Debian/Ubuntu, `gtk4 libadwaita` on Arch, `gtk4-devel libadwaita-devel` on
+  Fedora/openSUSE). The UI only uses APIs available in GTK 4.8 / libadwaita
+  1.2, so Debian 12 stays supported.
 - For DDC/CI: the `i2c-dev` module, membership in the `i2c` group, and the
   shipped udev rule (installed by both packages).
 - No tray host or GNOME extension is needed.
@@ -169,8 +174,9 @@ window; a registration the desktop refuses is never recorded.
 
 ## Divergences from macOS
 
-- Settings window is egui, not GTK/Qt: a deliberate trade for a single binary
-  with no system GUI dependencies and identical rendering on every distro.
+- Settings window is a native Adwaita preferences window (GTK4 + libadwaita),
+  so it follows the desktop theme and runs as a real Wayland window. The API
+  is capped at GTK 4.8 / libadwaita 1.2 to keep Debian 12 supported.
 - Appearance always follows the desktop (no manual Light/Dark switch).
 - Night-light backends clamp to their own floors (1000 K); X11/wlroots cover
   the full 900–6600 K range.

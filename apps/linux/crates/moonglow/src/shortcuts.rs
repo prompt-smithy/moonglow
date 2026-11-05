@@ -59,6 +59,9 @@ impl ShortcutStatus {
         }
     }
 
+    // The native window surfaces `detail` instead of a separate availability
+    // pill; kept for backends and tests that read the flag directly.
+    #[allow(dead_code)]
     pub fn is_available(&self) -> bool {
         self.backend != ShortcutBackend::Unavailable
     }

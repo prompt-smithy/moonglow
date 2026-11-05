@@ -10,7 +10,7 @@
 //! This controller owns the reconciliation: commands go out only on change and
 //! any OS-side restore signal (focus, input) while hidden re-shows.
 
-/// Viewport effects, applied by the egui shell.
+/// Window effects, applied by the UI shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VisCommand {
     SetVisible(bool),
@@ -60,7 +60,10 @@ impl VisibilityController {
 
     /// The OS restored or focused the window while we believed it hidden
     /// (dock/taskbar restore, Alt-Tab to a hidden window): adopt the truth
-    /// and re-assert a visible, unminimized window with content.
+    /// and re-assert a visible, unminimized window with content. The native
+    /// backend hides and presents directly, so it never needs this path; it
+    /// stays for the tested state machine.
+    #[allow(dead_code)]
     pub fn on_os_restore_signal(&mut self) -> Vec<VisCommand> {
         if self.visible {
             return Vec::new();

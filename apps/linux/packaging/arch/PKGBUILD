@@ -8,7 +8,10 @@ pkgdesc="Desktop app for external-display DDC/CI brightness and scheduled colour
 arch=('x86_64' 'aarch64')
 url="https://github.com/prompt-smithy/moonglow"
 license=('MIT' 'Apache-2.0')
-depends=('gcc-libs')
+# libxkbcommon-x11: the old window backend dlopened it at startup; kept
+# while the binary still links it. gtk4 + libadwaita are the native
+# settings window (linked, so detected automatically too).
+depends=('gcc-libs' 'libxkbcommon-x11' 'gtk4' 'libadwaita')
 makedepends=('cargo')
 optdepends=('i2c-tools: DDC/CI brightness debugging (i2cdetect)')
 install=moonglow.install

@@ -4,7 +4,7 @@ Architecture: amd64
 Maintainer: Thomas Martin <tmmuttathara@gmail.com>
 Section: utils
 Priority: optional
-Depends: libc6, libgcc-s1
+Depends: libc6, libgcc-s1, libxkbcommon-x11-0, libgtk-4-1, libadwaita-1-0
 Recommends: i2c-tools
 Homepage: https://github.com/prompt-smithy/moonglow
 Description: Desktop app for external-display brightness and scheduled colour temperature

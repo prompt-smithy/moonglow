@@ -9,8 +9,17 @@ BuildRequires:  cargo
 BuildRequires:  rustc
 BuildRequires:  gcc
 BuildRequires:  systemd
+BuildRequires:  gtk4-devel
+BuildRequires:  libadwaita-devel
 # DDC/CI debugging needs i2c-tools; the %post creates the i2c group itself.
 Recommends:     i2c-tools
+# The settings window backend dlopens libxkbcommon-x11 at startup, so rpm
+# auto-deps never see it; without it the app panics on launch. Soname form
+# keeps this resolving on both Fedora (libxkbcommon-x11) and openSUSE
+# (libxkbcommon-x11-0).
+Requires:       libxkbcommon-x11.so.0()(64bit)
+Requires:       libgtk-4.so.1()(64bit)
+Requires:       libadwaita-1.so.0()(64bit)
 Requires(post): systemd-udev
 ExclusiveArch:  x86_64 aarch64
 
