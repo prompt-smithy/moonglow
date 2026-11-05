@@ -78,17 +78,19 @@ first; Linux backends implement its traits.</p>
   <tr><td>X11</td><td>RandR gamma ramps</td><td>DDC/CI</td></tr>
 </table>
 <p>One Unix-socket IPC server enforces single-instance and forwards CLI
-commands; the egui settings window is the primary surface. A shortcut worker
+commands; the Adwaita settings window is the primary surface. A shortcut worker
 re-registers the four global bindings whenever settings change.</p>
 
 <h2 id="decisions">3. Key decisions (with rationale)</h2>
 
 <details open>
-<summary>Stack: Rust + egui + raw zbus (not Tauri, not Python)</summary>
+<summary>Stack: Rust + GTK4/libadwaita + raw zbus (not Tauri, not Python)</summary>
 <p>Tauri would pull WebKitGTK (~100 MB, per-distro webview quirks) for a background
 daemon; Python would need a runtime + packaging story per distro. Rust gives one
-~17 MB binary with two shared-lib deps (<code>libc6, libgcc-s1</code> — GUI
-libs are dlopen'd at runtime) and fearless refactors under 144 tests.</p>
+~8 MB binary linking the desktop's GTK4/libadwaita (declared in every package)
+and fearless refactors under the workspace test suite. The UI stays on APIs
+available in GTK 4.8 / libadwaita 1.2 so Debian 12 is still supported, and
+being a native Wayland window it needs no XWayland fallback.</p>
 </details>
 
 <details open>
@@ -140,10 +142,10 @@ scripts and keyboard shortcuts.</p>
 
 <details>
 <summary>Quit on a dedicated thread, then exit(0)</summary>
-<p>eframe has no programmatic exit and minimized windows starve
-<code>update()</code>, so IPC/UI-button/Ctrl-C quit paths run cleanup (hardware
+<p>IPC/UI-button/Ctrl-C quit paths run cleanup (hardware
 restore, Night Light key restore) on their own thread instead of waiting on
-the event loop. ~10 s stop time is joins + restore, by design.</p>
+the main loop, so quitting works even with the window hidden and never waits
+on widget teardown. ~10 s stop time is joins + restore, by design.</p>
 </details>
 
 <details>
@@ -155,10 +157,9 @@ never touches the log.</p>
 </details>
 
 <details>
-<summary>Theme: always follow the OS (winit + gsettings fallback)</summary>
-<p>No manual Light/Dark switch. winit reports <code>None</code> on XWayland,
-so a polled gsettings fallback (<code>color-scheme</code>, 5 s cadence) covers
-that stack; first report is logged for audit.</p>
+<summary>Theme: always follow the OS (Adwaita style manager)</summary>
+<p>No manual Light/Dark switch. The Adwaita style manager tracks the desktop
+preference directly, so there is no theme polling and no fallback chain.</p>
 </details>
 
 <details>
@@ -201,8 +202,7 @@ name. Human display strings ("Moonglow") are unchanged.</p>
       surfaced in installer output, man page, and README.</li>
   <li><strong>No Flatpak / immutable-distro story</strong> (Silverblue); i2c access
       through a sandbox is uncharted. No official Fedora (Koji) build (needs vendoring).</li>
-  <li><strong>Theme flips apply within ~5 s</strong> on XWayland (poll cadence), instantly
-      where winit reports.</li>
+  <li><strong>Theme flips apply instantly</strong> through the Adwaita style manager.</li>
   <li><strong>Global shortcuts need a cooperating desktop</strong>: GNOME uses
       custom keybindings, KDE/wlroots use the portal, and plain X11 uses grabs.
       A session that offers none shows an explanation and the CLI commands.</li>
@@ -213,16 +213,23 @@ name. Human display strings ("Moonglow") are unchanged.</p>
 <h2 id="deps">5. Dependencies</h2>
 <h3>Runtime (shipped .deb)</h3>
 <ul>
-  <li><code>libc6, libgcc-s1</code> — the only linked libs (verified via <code>ldd</code>).</li>
-  <li>X11/Wayland/GL client libs — <strong>dlopen'd at runtime</strong>, present on any GUI system.</li>
+  <li><code>libc6, libgcc-s1</code> — the Rust runtime.</li>
+  <li><code>libgtk-4-1, libadwaita-1-0</code> — the native settings window
+      (linked; anything they pull in comes along via apt/dnf).</li>
+  <li><code>libxkbcommon-x11-0</code> — kept from the previous window backend;
+      harmless now that nothing dlopens it.</li>
   <li>Recommends: <code>i2c-tools</code> (DDC debugging).</li>
 </ul>
 <h3>Build</h3>
 <ul>
   <li><code>cargo</code>, <code>rustc</code>, a C linker (<code>gcc</code>, or
       <code>zig-cc</code> shim where no toolchain exists).</li>
-  <li>Key crates: <code>tokio, zbus, egui/eframe 0.33, clap 4, serde, dirs,
-      rustix, chrono</code>. <code>Cargo.lock</code> is committed for reproducible releases.</li>
+  <li>Key crates: <code>tokio, zbus, gtk4/adw 0.11/0.9 (API capped at GTK 4.8 /
+      libadwaita 1.2), clap 4, serde, dirs, rustix, chrono</code>.
+      <code>Cargo.lock</code> is committed for reproducible releases.</li>
+  <li>System: <code>libgtk-4-dev libadwaita-1-dev</code> (Debian/Ubuntu),
+      <code>gtk4 libadwaita</code> (Arch), <code>gtk4-devel
+      libadwaita-devel</code> (Fedora/openSUSE).</li>
 </ul>
 <h3>Packaging tools</h3>
 <ul>

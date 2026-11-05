@@ -812,9 +812,9 @@ type SharedShutdown = Arc<Mutex<Option<Shutdown>>>;
 
 /// Runs shutdown exactly once (first caller wins) and exits the process.
 ///
-/// eframe 0.33 offers no programmatic exit for the root viewport —
-/// `ViewportCommand::Close` is silently ignored there — so quit cannot go
-/// through the event loop and takes this explicit path instead.
+/// Quit takes an explicit path instead of the main loop: shutdown runs on a
+/// dedicated thread and exits the process, so quitting works even with the
+/// window hidden and never waits on widget teardown.
 /// Runs the shutdown bundle exactly once; later calls find it taken.
 fn run_shutdown_once(shutdown: &SharedShutdown) {
     let owned = shutdown.lock().ok().and_then(|mut guard| guard.take());
@@ -1048,15 +1048,9 @@ fn main() {
             }
         }
     } else {
-        // winit cannot hide windows on Wayland (`set_visible` is a documented
-        // no-op there), which breaks the hide/show lifecycle into stuck empty
-        // windows. Run the settings window through XWayland, where hide/unmap
-        // works; session and backends were already detected from the real
-        // environment above, so colour, shortcuts, and IPC select the native
-        // Wayland paths regardless.
-        if std::env::var_os("WAYLAND_DISPLAY").is_some() {
-            std::env::remove_var("WAYLAND_DISPLAY");
-        }
+        // The settings window is a native Wayland window (GTK4 + libadwaita),
+        // so no display-variable surgery is needed; session and backends were
+        // already detected from the real environment above.
         // The settings window owns the main thread (GUI toolkits require it)
         // and polls the same command channel every frame. A normal launch is
         // visible; `--hidden` starts in the background for autostart.

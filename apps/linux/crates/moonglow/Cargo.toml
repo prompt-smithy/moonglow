@@ -23,8 +23,16 @@ i2cdev = "0.6"
 tokio = { version = "1", features = ["full"] }
 zbus = { version = "4", default-features = false, features = ["tokio"] }
 wayland-client = "0.31"
-wayland-protocols-wlr = "0.3"
+# `client` was previously enabled transitively through eframe; without it
+# the generated `gamma_control::v1::client` module is empty.
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 rustix = { version = "1", features = ["fs", "shm", "process", "stdio"] }
-eframe = { version = "0.33", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
-egui = "0.33"
 futures-util = "0.3"
+# Native settings window (Adwaita). API capped at GTK 4.8 / libadwaita 1.2
+# (the `gnome_43` + `v1_2`/`gtk_v4_6` features) so the same build runs on
+# Debian 12 through current releases; newer systems run old-API apps fine.
+gtk = { package = "gtk4", version = "0.11", features = ["gnome_43"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_2", "gtk_v4_6"] }
+gdk = { package = "gdk4", version = "0.11" }
+glib = "0.22"
+cairo-rs = "0.22"

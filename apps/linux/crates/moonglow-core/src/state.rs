@@ -1100,6 +1100,61 @@ mod tests {
     }
 
     #[test]
+    fn brightness_needs_service_and_capable_display() {
+        // The reported setup: DDC blocked, no software dimming, and the only
+        // display is temperature-only. The slider stays insensitive here.
+        let night_light_only = vec![DisplayInfo::new(
+            "DP-1", "DP-1", "drm-DP-1", true, false, true,
+        )];
+        let blocked = make_harness(
+            AppSettings::default(),
+            false,
+            true,
+            Some(night_light_only),
+            true,
+            false,
+            false,
+        );
+        assert!(!blocked.state.has_brightness_support());
+        assert!(blocked.state.brightness_status().contains("unavailable"));
+        // A working service alone is not enough: an internal panel with no
+        // brightness channel still reports unsupported, so the UI never
+        // offers a dead slider.
+        let internal_only = vec![DisplayInfo::new(
+            "eDP-1",
+            "eDP-1",
+            "drm-eDP-1",
+            true,
+            false,
+            false,
+        )];
+        let internal = make_harness(
+            AppSettings::default(),
+            true,
+            true,
+            Some(internal_only),
+            true,
+            false,
+            false,
+        );
+        assert!(!internal.state.has_brightness_support());
+        // DDC answering on an external panel re-enables it.
+        let capable = vec![DisplayInfo::new(
+            "DP-1", "DP-1", "drm-DP-1", true, true, true,
+        )];
+        let working = make_harness(
+            AppSettings::default(),
+            true,
+            true,
+            Some(capable),
+            true,
+            false,
+            false,
+        );
+        assert!(working.state.has_brightness_support());
+    }
+
+    #[test]
     fn no_supported_displays_means_no_capability() {
         let inert = DisplayInfo::new("9", "Inert", "9", true, false, false);
         let h = make_harness(
