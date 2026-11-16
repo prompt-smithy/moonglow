@@ -388,6 +388,8 @@ impl<S: SettingsPersistence> Model<S> {
             brightness: i32,
             hardware_brightness: i32,
             software_brightness: i32,
+            brightness_minimum: i32,
+            software_minimum: i32,
             hardware_enabled: bool,
             software_enabled: bool,
             split: bool,
@@ -400,7 +402,6 @@ impl<S: SettingsPersistence> Model<S> {
             snap,
             bscale,
             bval,
-            master_row,
             hscale,
             hval,
             sscale,
@@ -416,11 +417,25 @@ impl<S: SettingsPersistence> Model<S> {
             area,
         ) = {
             let m = model.borrow();
+            let (brightness, software_brightness, brightness_minimum, software_minimum) = m
+                .state
+                .lock()
+                .map(|state| {
+                    (
+                        state.brightness(),
+                        state.software_brightness(),
+                        state.brightness_minimum(),
+                        state.software_brightness_minimum(),
+                    )
+                })
+                .unwrap_or((m.brightness, m.software_brightness, 1, 50));
             (
                 Snap {
-                    brightness: m.brightness,
+                    brightness,
                     hardware_brightness: m.hardware_brightness,
-                    software_brightness: m.software_brightness,
+                    software_brightness,
+                    brightness_minimum,
+                    software_minimum,
                     hardware_enabled: m.hardware_brightness_enabled,
                     software_enabled: m.software_brightness_enabled,
                     split: m.split_brightness_controls,
@@ -431,7 +446,6 @@ impl<S: SettingsPersistence> Model<S> {
                 },
                 m.w.brightness_scale.clone(),
                 m.w.brightness_value.clone(),
-                m.w.brightness_master_row.clone(),
                 m.w.hardware_brightness_scale.clone(),
                 m.w.hardware_brightness_value.clone(),
                 m.w.software_brightness_scale.clone(),
@@ -448,6 +462,8 @@ impl<S: SettingsPersistence> Model<S> {
             )
         };
         suppressed(model, move || {
+            bscale.set_range(snap.brightness_minimum as f64, 100.0);
+            sscale.set_range(snap.software_minimum as f64, 100.0);
             bscale.set_value(snap.brightness as f64);
             bval.set_label(&format!("{}%", snap.brightness));
             bscale.set_visible(!snap.split);
@@ -1286,27 +1302,26 @@ fn connect_signals<S: SettingsPersistence + 'static>(model: &SharedModel<S>) {
             let explanation = if !hardware_on && !software_on {
                 "Hardware and software brightness are both disabled in Preferences → Brightness engines. Enable at least one engine to use brightness control."
             } else if !software_on {
-                "Software Digital Shade is disabled in Preferences. Hardware backlight control works only when every active display supports DDC/CI."
+                "Software Digital Shade is disabled in Preferences. Hardware backlight control operates on displays that support DDC/CI."
             } else if !software_available {
-                "This display session does not provide software gamma brightness. Hardware control is available only when every active display supports DDC/CI."
+                "This display session does not provide software gamma brightness. Hardware control remains available on displays that support DDC/CI."
             } else if !ready {
-                "Set a global Restore brightness to 100% shortcut in Preferences → Shortcuts and confirm that the desktop registers it. Software Digital Shade changes the image rather than the physical backlight and remains disabled until this recovery shortcut is active."
+                "Software Digital Shade is available down to 50%. Register a Restore brightness to 100% shortcut in Preferences → Shortcuts to dim below 50%. On desktops without a shortcut backend, bind moonglow --restore-brightness in compositor settings and invoke it once to acknowledge the binding."
             } else if !hardware_on {
                 "Hardware Backlight is disabled in Preferences. Software Digital Shade changes the image rather than the physical backlight, and your registered Restore brightness shortcut returns the image to 100%."
             } else if all_hardware {
                 "All active displays support hardware backlight control. Software Digital Shade is available for extra dimming, and your registered Restore brightness shortcut returns it to 100%."
             } else {
-                "At least one active display lacks DDC/CI brightness. Moonglow uses software dimming across displays to keep them in sync; any supported hardware backlights are restored to 100%. Your registered Restore brightness shortcut returns the image to full brightness."
+                "At least one active display lacks DDC/CI brightness. Hardware brightness controls capable displays. Digital Shade in split controls dims all displays. Your registered Restore brightness shortcut returns the image to full brightness."
             };
-            let dialog = gtk::MessageDialog::builder()
+            let dialog = adw::MessageDialog::builder()
                 .transient_for(&window)
                 .modal(true)
-                .message_type(gtk::MessageType::Info)
-                .buttons(gtk::ButtonsType::Close)
-                .text("Brightness control")
-                .secondary_text(explanation)
+                .heading("Brightness control")
+                .body(explanation)
                 .build();
-            dialog.connect_response(|dialog, _| dialog.close());
+            dialog.add_response("close", "Close");
+            dialog.set_close_response("close");
             dialog.present();
         });
     }
@@ -1656,7 +1671,7 @@ impl<S: SettingsPersistence> Model<S> {
                     state.color_temperature(),
                     state.brightness(),
                     state.hardware_brightness(),
-                    state.settings().manual_software_brightness,
+                    state.software_brightness(),
                     state.settings().split_brightness_controls,
                 ),
                 Err(_) => (
@@ -1805,6 +1820,7 @@ impl<S: SettingsPersistence> Model<S> {
         if model.borrow().auto {
             Self::resync_displayed_temp(model);
         }
+        Self::push_to_widgets(model);
         model.borrow_mut().refresh_labels();
     }
 }
@@ -1971,6 +1987,33 @@ mod tests {
         assert!(!button.is_active());
         assert_eq!(button.icon_name().as_deref(), Some("edit-find-symbolic"));
         assert_eq!(button.tooltip_text().as_deref(), Some("Search settings"));
+        window.destroy();
+
+        // Exercise actual brightness signal handlers: an external mode change
+        // synchronizes the expander under suppression without borrowing twice.
+        let state = crate::ipc::tests::test_state();
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let status = std::sync::Arc::new(std::sync::Mutex::new(
+            crate::shortcuts::ShortcutStatus::default(),
+        ));
+        let shutdown = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let (model, window) = super::assemble(state.clone(), rx, status, true, shutdown);
+        state.lock().unwrap().set_split_brightness_controls(true);
+        super::Model::tick(&model);
+        assert!(model.borrow().w.brightness_split_expander.is_expanded());
+        assert_eq!(
+            model
+                .borrow()
+                .w
+                .software_brightness_scale
+                .adjustment()
+                .lower(),
+            50.0
+        );
+        model.borrow_mut().refresh_labels();
+        state.lock().unwrap().set_split_brightness_controls(false);
+        super::Model::tick(&model);
+        assert!(!model.borrow().w.brightness_split_expander.is_expanded());
         window.destroy();
     }
 

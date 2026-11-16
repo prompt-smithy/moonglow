@@ -15,7 +15,7 @@ import Foundation
 ///
 /// ## Private CoreDisplay (no headers — resolved at runtime)
 ///
-/// `IOAVServiceCreate`, `IOAVServiceReadI2C`, and `IOAVServiceWriteI2C` are the only way to drive
+/// `IOAVServiceCreateWithService`, `IOAVServiceCopyEDID`, `IOAVServiceReadI2C`, and `IOAVServiceWriteI2C` are the only way to drive
 /// DDC/CI on Apple Silicon. They are bound in ``CoreDisplayBridge`` with `dlopen`/`dlsym`, which is
 /// why Moonglow is distributed directly rather than through the Mac App Store.
 ///
@@ -23,10 +23,13 @@ import Foundation
 /// reference and released explicitly, or it leaks.
 
 #if !MOONGLOW_APP_SANDBOXED
+import IOKit
+
 /// Runtime binding for the private CoreDisplay DDC/CI entry points.
 private enum CoreDisplayBridge {
 
-    typealias CreateFunction = @convention(c) (CFAllocator?) -> UnsafeMutableRawPointer?
+    typealias CreateFunction = @convention(c) (CFAllocator?, io_service_t) -> UnsafeMutableRawPointer?
+    typealias CopyEDIDFunction = @convention(c) (UnsafeMutableRawPointer?, UnsafeMutablePointer<Unmanaged<CFData>?>) -> Int32
 
     typealias ReadI2CFunction = @convention(c) (
         UnsafeMutableRawPointer?,
@@ -49,19 +52,22 @@ private enum CoreDisplayBridge {
         RTLD_NOW
     )
 
-    static let create: CreateFunction? = resolve("IOAVServiceCreate")
+    static let create: CreateFunction? = resolve("IOAVServiceCreateWithService")
+    static let copyEDID: CopyEDIDFunction? = resolve("IOAVServiceCopyEDID")
     static let readI2C: ReadI2CFunction? = resolve("IOAVServiceReadI2C")
     static let writeI2C: WriteI2CFunction? = resolve("IOAVServiceWriteI2C")
 
     /// True only when every symbol the DDC backend needs is present.
-    static var isAvailable: Bool { create != nil && readI2C != nil && writeI2C != nil }
+    static var isAvailable: Bool { create != nil && copyEDID != nil && readI2C != nil && writeI2C != nil }
 
     private static func resolve<T>(_ name: String) -> T? {
-        guard let handle, let symbol = dlsym(handle, name) else { return nil }
+        let ioKit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW)
+        defer { if let ioKit { dlclose(ioKit) } }
+        guard let symbol = handle.flatMap({ dlsym($0, name) }) ?? ioKit.flatMap({ dlsym($0, name) }) else { return nil }
         return unsafeBitCast(symbol, to: T.self)
     }
 
-    /// Releases a service returned by `IOAVServiceCreate`, which hands back a +1 reference.
+    /// Releases a service returned by `IOAVServiceCreateWithService`, which hands back a +1 reference.
     static func release(_ service: UnsafeMutableRawPointer) {
         Unmanaged<AnyObject>.fromOpaque(service).release()
     }
@@ -341,10 +347,15 @@ public final class CoreGraphicsBrightnessService: BrightnessService {
 protocol DDCTransport: AnyObject {
     /// False when the backend itself is missing (symbols gone), as opposed to silent hardware.
     var isAvailable: Bool { get }
+    var displayID: CGDirectDisplayID { get }
     func createService() -> UnsafeMutableRawPointer?
     func releaseService(_ service: UnsafeMutableRawPointer)
     func write(_ bytes: [UInt8], to service: UnsafeMutableRawPointer) -> Bool
     func read(byteCount: Int, from service: UnsafeMutableRawPointer) -> [UInt8]?
+}
+
+extension DDCTransport {
+    var displayID: CGDirectDisplayID { CGMainDisplayID() }
 }
 
 /// Production ``DDCTransport`` over the private CoreDisplay `IOAVService*` API.
@@ -353,7 +364,45 @@ final class CoreDisplayDDCTransport: DDCTransport {
     var isAvailable: Bool { CoreDisplayBridge.isAvailable }
 
     func createService() -> UnsafeMutableRawPointer? {
-        CoreDisplayBridge.create?(nil)
+        let target = displayID
+        guard CGDisplayIsBuiltin(target) == 0, let create = CoreDisplayBridge.create, let copyEDID = CoreDisplayBridge.copyEDID else { return nil }
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(0, IOServiceMatching("DCPAVServiceProxy"), &iterator) == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(iterator) }
+        var matches: [UnsafeMutableRawPointer] = []
+        while true {
+            let entry = IOIteratorNext(iterator)
+            guard entry != 0 else { break }
+            defer { IOObjectRelease(entry) }
+            let location = IORegistryEntryCreateCFProperty(entry, "Location" as CFString, nil, 0)?.takeRetainedValue() as? String
+            let supported = IORegistryEntryCreateCFProperty(entry, "IOAVServiceUserInterfaceSupported" as CFString, nil, 0)?.takeRetainedValue() as? Bool
+            guard location == "External", supported != false, let service = create(nil, entry) else { continue }
+            var copied: Unmanaged<CFData>?
+            let result = copyEDID(service, &copied)
+            let edid = copied?.takeRetainedValue() as Data?
+            if result == 0, let edid,
+               Self.matches(edid: Array(edid), vendor: CGDisplayVendorNumber(target), model: CGDisplayModelNumber(target), serial: CGDisplaySerialNumber(target)) {
+                matches.append(service)
+            } else {
+                CoreDisplayBridge.release(service)
+            }
+        }
+        // Identical EDIDs without a usable serial are ambiguous. Never choose
+        // an arbitrary external display and dim the wrong monitor.
+        guard matches.count == 1 else {
+            matches.forEach { CoreDisplayBridge.release($0) }
+            return nil
+        }
+        return matches[0]
+    }
+
+    static func matches(edid: [UInt8], vendor: UInt32, model: UInt32, serial: UInt32) -> Bool {
+        guard edid.count >= 128, Array(edid.prefix(8)) == [0, 255, 255, 255, 255, 255, 255, 0],
+              edid.prefix(128).reduce(UInt8(0), { $0 &+ $1 }) == 0 else { return false }
+        let edidVendor = UInt32(edid[8]) << 8 | UInt32(edid[9])
+        let edidModel = UInt32(edid[10]) | UInt32(edid[11]) << 8
+        let edidSerial = UInt32(edid[12]) | UInt32(edid[13]) << 8 | UInt32(edid[14]) << 16 | UInt32(edid[15]) << 24
+        return edidVendor == vendor && edidModel == model && edidSerial == serial
     }
 
     func releaseService(_ service: UnsafeMutableRawPointer) {
@@ -408,6 +457,8 @@ public final class AppleSiliconBrightnessService: BrightnessService {
     private let transport: DDCTransport
 
     private var service: UnsafeMutableRawPointer?
+    private var serviceDisplayID: CGDirectDisplayID?
+    private var hardwareProbed = false
     private var pendingBrightness = AppSettings.defaultManualBrightness
     private var pendingWrite: DispatchWorkItem?
     private var isDisposed = false
@@ -427,12 +478,12 @@ public final class AppleSiliconBrightnessService: BrightnessService {
     public var isSupported: Bool {
         lock.lock()
         defer { lock.unlock() }
-        return service != nil
+        return service != nil && hardwareProbed && !isDisposed && serviceDisplayID == transport.displayID
     }
 
     /// Opens the CoreDisplay service and probes it, unless hardware is already up.
     public func refreshSupport() {
-        tryOpenAndProbe()
+        queue.sync { _ = tryOpenAndProbe() }
     }
 
     /// Probes on the serial queue so I2C traffic — probe and brightness writes alike —
@@ -447,7 +498,7 @@ public final class AppleSiliconBrightnessService: BrightnessService {
     public func setBrightness(percent: Int) {
         lock.lock()
 
-        guard service != nil, !isDisposed else {
+        guard service != nil, hardwareProbed, serviceDisplayID == transport.displayID, !isDisposed else {
             lock.unlock()
             return
         }
@@ -499,6 +550,11 @@ public final class AppleSiliconBrightnessService: BrightnessService {
     @discardableResult
     private func tryOpenAndProbe() -> Bool {
         #if arch(arm64)
+        let currentDisplayID = transport.displayID
+        lock.lock()
+        let changedDisplay = service != nil && serviceDisplayID != currentDisplayID
+        lock.unlock()
+        if changedDisplay { releaseService() }
         lock.lock()
         guard service == nil, !isDisposed else {
             lock.unlock()
@@ -522,6 +578,7 @@ public final class AppleSiliconBrightnessService: BrightnessService {
             return false
         }
         service = created
+        serviceDisplayID = currentDisplayID
         lock.unlock()
 
         // An open service is not proof that the panel speaks DDC/CI: the luminance probe decides,
@@ -540,7 +597,11 @@ public final class AppleSiliconBrightnessService: BrightnessService {
             }
             return false
         }
-        return true
+        lock.lock()
+        hardwareProbed = !isDisposed && service == created && serviceDisplayID == transport.displayID
+        let available = hardwareProbed
+        lock.unlock()
+        return available
         #else
         return false
         #endif
@@ -592,6 +653,7 @@ public final class AppleSiliconBrightnessService: BrightnessService {
         lock.unlock()
 
         guard let target, !isDisposed else { return }
+        guard serviceDisplayID == transport.displayID else { releaseService(); return }
 
         if writeWithRetries(DDCPacket.buildWritePacket(percent: percent), to: target) {
             return
@@ -642,6 +704,7 @@ public final class AppleSiliconBrightnessService: BrightnessService {
         lock.lock()
         let old = service
         service = nil
+        hardwareProbed = false
         lock.unlock()
         if let old {
             transport.releaseService(old)

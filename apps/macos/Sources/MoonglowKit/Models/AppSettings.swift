@@ -74,15 +74,7 @@ public struct AppSettings: Equatable, Sendable {
 
     public init() {}
 
-    public static let `default`: AppSettings = {
-        var settings = AppSettings()
-        #if MOONGLOW_APP_SANDBOXED
-        // Keep the prototype neutral on first launch; gamma changes are exercised explicitly.
-        settings.autoColorTemperature = false
-        settings.manualBrightness = 100
-        #endif
-        return settings
-    }()
+    public static let `default` = AppSettings()
 
     // MARK: - Clamping
 

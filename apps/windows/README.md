@@ -15,7 +15,7 @@ Moonglow keeps display controls close at hand without adding another window to y
 - Controls internal-panel brightness through WMI and supported external monitors through DDC/CI.
 - Provides one unified brightness slider by default, or separate **Backlight** and **Digital Shade** sliders in the tray popup.
 - Uses hardware brightness only when every active display can be controlled. If any display lacks hardware support, software dimming is applied across all displays.
-- Keeps software Digital Shade locked until Windows registers a user-chosen global **Restore brightness to 100%** shortcut; the tray info button explains the setup.
+- Provides software Digital Shade down to 50% without a shortcut. Registering a global **Restore brightness to 100%** shortcut unlocks lower levels.
 - Lets users disable either brightness engine in Settings.
 - Applies whole-desktop color temperatures from 1200 K to 6500 K.
 - Smoothly transitions between configurable day and night temperatures.
@@ -30,7 +30,7 @@ Moonglow keeps display controls close at hand without adding another window to y
 - The [.NET Framework 4.8 runtime](https://dotnet.microsoft.com/download/dotnet-framework/net48)
 - A DDC/CI-capable external monitor for external brightness control
 
-Software brightness changes image output rather than the display backlight. If hardware brightness is available, the unified slider remains usable without a recovery shortcut; Digital Shade becomes available after its recovery shortcut is registered.
+Software brightness changes image output rather than the display backlight. Its slider stops at 50% until a recovery shortcut is registered. Restore brightness is also available from the tray menu. Unmanaged backlights are left untouched; an owned hardware route is released once when disabled. On the legacy gamma backend, a refusing monitor disables uniform software dimming while capable monitors continue receiving colour temperature.
 
 Windows 10 1903 and later and Windows 11 already include .NET Framework 4.8, so most systems need nothing extra. On older systems the app still works, but dark title-bar tinting and the widest color-temperature range require Windows 10 or Windows 11.
 

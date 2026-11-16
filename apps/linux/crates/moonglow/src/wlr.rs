@@ -122,7 +122,6 @@ pub struct WlrGammaService {
     qh: QueueHandle<WlrState>,
     state: Mutex<WlrState>,
     shared: Mutex<Shared>,
-    all_outputs_controlled: bool,
 }
 
 struct Shared {
@@ -155,14 +154,13 @@ impl WlrGammaService {
             });
         }
         queue.roundtrip(&mut state)?;
-        let active_output_count = state.outputs.len();
-        state
+        if !state
             .controls
-            .retain(|c| !c.failed && c.size.unwrap_or(0) > 0);
-        if state.controls.is_empty() {
+            .iter()
+            .any(|c| !c.failed && c.size.unwrap_or(0) > 0)
+        {
             return Err("no output with a gamma table".into());
         }
-        let all_outputs_controlled = state.controls.len() == active_output_count;
         Ok(Self {
             _conn: conn,
             queue: Mutex::new(queue),
@@ -172,17 +170,20 @@ impl WlrGammaService {
                 kelvin: 6500,
                 software_brightness: 100,
             }),
-            all_outputs_controlled,
         })
     }
 
     pub fn supports_software_brightness(&self) -> bool {
-        self.all_outputs_controlled
-            && self
-                .state
-                .lock()
-                .map(|s| !s.controls.is_empty())
-                .unwrap_or(false)
+        self.state
+            .lock()
+            .map(|s| {
+                !s.outputs.is_empty()
+                    && s.controls.len() == s.outputs.len()
+                    && s.controls
+                        .iter()
+                        .all(|c| !c.failed && c.size.unwrap_or(0) > 0)
+            })
+            .unwrap_or(false)
     }
 
     pub fn set_software_brightness(&self, percent: i32) {
@@ -196,6 +197,11 @@ impl WlrGammaService {
         let (kelvin_value, brightness) = match self.shared.lock() {
             Ok(shared) => (shared.kelvin, shared.software_brightness),
             Err(_) => return false,
+        };
+        let brightness = if self.supports_software_brightness() {
+            brightness
+        } else {
+            100
         };
         self.apply_ramps(|capacity| {
             let scale = kelvin::rgb_scale(kelvin_value);
@@ -218,14 +224,16 @@ impl WlrGammaService {
             let _ = queue.flush();
         }
         let mut applied = false;
-        let mut state = match self.state.lock() {
+        let state = match self.state.lock() {
             Ok(s) => s,
             Err(_) => return false,
         };
-        state
+        // Keep indices stable: protocol callback data indexes this vector.
+        for output in state
             .controls
-            .retain(|c| !c.failed && c.size.unwrap_or(0) > 0);
-        for output in &state.controls {
+            .iter()
+            .filter(|c| !c.failed && c.size.unwrap_or(0) > 0)
+        {
             let size = output.size.unwrap_or(0) as usize;
             if size == 0 {
                 continue;
@@ -278,7 +286,14 @@ impl ColorTemperatureService for WlrGammaService {
     }
 
     fn is_supported(&self) -> bool {
-        self.supports_software_brightness()
+        self.state
+            .lock()
+            .map(|s| {
+                s.controls
+                    .iter()
+                    .any(|c| !c.failed && c.size.unwrap_or(0) > 0)
+            })
+            .unwrap_or(false)
     }
 
     fn apply(&self, kelvin: i32) -> bool {

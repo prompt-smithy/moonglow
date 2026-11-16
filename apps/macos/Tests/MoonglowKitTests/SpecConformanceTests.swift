@@ -28,20 +28,23 @@ struct SpecConformanceTests {
     func settingsNormalizationVectorsMatch() throws {
         let document: SettingsDocument = try Self.load("settings.json")
         for row in document.cases {
-            let actual = row.input.normalized()
-            #expect(actual.manualBrightness == row.expected.manualBrightness, "\(row.name)")
-            #expect(actual.hardwareBrightnessEnabled == row.expected.hardwareBrightnessEnabled, "\(row.name)")
-            #expect(actual.softwareBrightnessEnabled == row.expected.softwareBrightnessEnabled, "\(row.name)")
-            #expect(actual.splitBrightnessControls == row.expected.splitBrightnessControls, "\(row.name)")
-            #expect(actual.manualHardwareBrightness == row.expected.manualHardwareBrightness, "\(row.name)")
-            #expect(actual.manualSoftwareBrightness == row.expected.manualSoftwareBrightness, "\(row.name)")
-            #expect(actual.manualColorTempK == row.expected.manualColorTempK, "\(row.name)")
-            #expect(actual.dayColorTempK == row.expected.dayColorTempK, "\(row.name)")
-            #expect(actual.nightColorTempK == row.expected.nightColorTempK, "\(row.name)")
-            #expect(actual.morningStart == row.expected.morningStart, "\(row.name)")
-            #expect(actual.morningEnd == row.expected.morningEnd, "\(row.name)")
-            #expect(actual.eveningStart == row.expected.eveningStart, "\(row.name)")
-            #expect(actual.eveningEnd == row.expected.eveningEnd, "\(row.name)")
+            let actual = (row.macosInput ?? row.input).normalized()
+            let expected = row.macosExpected ?? row.expected
+            #expect(actual.restoreBrightnessShortcut == expected.restoreBrightnessShortcut, "\(row.name)")
+            #expect(actual.increaseBrightnessShortcut == expected.increaseBrightnessShortcut, "\(row.name)")
+            #expect(actual.manualBrightness == expected.manualBrightness, "\(row.name)")
+            #expect(actual.hardwareBrightnessEnabled == expected.hardwareBrightnessEnabled, "\(row.name)")
+            #expect(actual.softwareBrightnessEnabled == expected.softwareBrightnessEnabled, "\(row.name)")
+            #expect(actual.splitBrightnessControls == expected.splitBrightnessControls, "\(row.name)")
+            #expect(actual.manualHardwareBrightness == expected.manualHardwareBrightness, "\(row.name)")
+            #expect(actual.manualSoftwareBrightness == expected.manualSoftwareBrightness, "\(row.name)")
+            #expect(actual.manualColorTempK == expected.manualColorTempK, "\(row.name)")
+            #expect(actual.dayColorTempK == expected.dayColorTempK, "\(row.name)")
+            #expect(actual.nightColorTempK == expected.nightColorTempK, "\(row.name)")
+            #expect(actual.morningStart == expected.morningStart, "\(row.name)")
+            #expect(actual.morningEnd == expected.morningEnd, "\(row.name)")
+            #expect(actual.eveningStart == expected.eveningStart, "\(row.name)")
+            #expect(actual.eveningEnd == expected.eveningEnd, "\(row.name)")
         }
     }
 
@@ -127,7 +130,9 @@ struct SpecConformanceTests {
 
         for row in document.transitions {
             if let expectedMaster = row.expectedMaster {
-                let master = BrightnessPlan.splitToUnified(
+                let master = row.preserveOutput == true
+                    ? BrightnessPlan.masterPreservingOutput(.init(hardware: row.hardware, software: row.software ?? 100), hardwareAvailable: row.hardwareAvailable, softwareAvailable: row.softwareAvailable, recoveryRegistered: row.recoveryRegistered)
+                    : BrightnessPlan.splitToUnified(
                     hardware: row.hardware ?? 80,
                     software: row.software ?? 100,
                     hardwareAvailable: row.hardwareAvailable,
@@ -230,6 +235,8 @@ private struct SettingsDocument: Decodable {
         let name: String
         let input: AppSettings
         let expected: AppSettings
+        let macosInput: AppSettings?
+        let macosExpected: AppSettings?
     }
     let cases: [Row]
 }
@@ -258,6 +265,7 @@ private struct BrightnessRoutingDocument: Decodable {
         let expectedHardware: Int?
         let expectedSoftware: Int?
         let expectedMaster: Int?
+        let preserveOutput: Bool?
     }
     let softwareBrightnessFloor: Int
     let vectors: [VectorRow]

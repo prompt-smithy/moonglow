@@ -49,3 +49,10 @@ jobs:
 
       - name: Test
         run: swift test
+
+      - name: Build and test sandbox prototype
+        env:
+          MOONGLOW_APP_SANDBOXED: '1'
+        run: |
+          swift build --scratch-path .build-sandbox
+          swift test --scratch-path .build-sandbox

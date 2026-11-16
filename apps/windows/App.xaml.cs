@@ -290,6 +290,10 @@ public partial class App : Application
     {
         var menu = new ContextMenu();
 
+        var restoreItem = new MenuItem { Header = "Restore brightness to 100%" };
+        restoreItem.Click += (_, _) => _viewModel.RestoreBrightnessToFull();
+        menu.Items.Add(restoreItem);
+
         var settingsItem = new MenuItem { Header = "Settings\u2026" };
         settingsItem.Click += (_, _) => OpenSettings();
 

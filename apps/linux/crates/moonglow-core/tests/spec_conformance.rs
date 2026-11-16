@@ -297,9 +297,21 @@ fn brightness_routing_vectors_match() {
         let rec_reg = row["recoveryRegistered"].as_bool().unwrap();
 
         if let Some(expected_master) = row.get("expectedMaster").and_then(|v| v.as_i64()) {
-            let hw = row["hardware"].as_i64().unwrap() as i32;
+            let hw = row["hardware"].as_i64().map(|v| v as i32);
             let sw = row["software"].as_i64().unwrap() as i32;
-            let master = brightness_plan::split_to_unified(hw, sw, hw_avail, sw_avail, rec_reg);
+            let master = if row["preserveOutput"].as_bool() == Some(true) {
+                brightness_plan::master_preserving_output(
+                    brightness_plan::RoutingOutput {
+                        hardware: hw,
+                        software: sw,
+                    },
+                    hw_avail,
+                    sw_avail,
+                    rec_reg,
+                )
+            } else {
+                brightness_plan::split_to_unified(hw.unwrap(), sw, hw_avail, sw_avail, rec_reg)
+            };
             assert_eq!(master, expected_master as i32, "{name} master");
         } else {
             let master = row["master"].as_i64().unwrap() as i32;

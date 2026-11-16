@@ -115,7 +115,12 @@
     "restoreBrightnessShortcut": {
       "$ref": "#/$defs/hotKey",
       "default": null,
-      "description": "Global recovery shortcut that immediately restores brightness to 100%. Required before software gamma brightness is enabled when hardware brightness is unavailable."
+      "description": "Optional global recovery shortcut that restores brightness to 100% and unlocks software dimming below the default 50% floor."
+    },
+    "restoreBrightnessBoundExternally": {
+      "type": "boolean",
+      "default": false,
+      "description": "Linux only: an external IPC recovery command acknowledged a compositor key binding. Used only when no application shortcut backend exists."
     }
   },
   "$defs": {

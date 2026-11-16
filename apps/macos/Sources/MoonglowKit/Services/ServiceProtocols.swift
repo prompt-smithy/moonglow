@@ -16,7 +16,6 @@ public protocol BrightnessService: AnyObject {
     var isHardwareSupported: Bool { get }
     var isSoftwareSupported: Bool { get }
     func setBrightness(percent: Int)
-    func setBrightness(percent: Int, allowSoftwareFallback: Bool)
     func setHardwareBrightness(percent: Int)
     func setSoftwareBrightness(percent: Int)
     func dispose()
@@ -42,13 +41,6 @@ public protocol BrightnessService: AnyObject {
 public extension BrightnessService {
     var isHardwareSupported: Bool { isSupported }
     var isSoftwareSupported: Bool { false }
-    func setBrightness(percent: Int, allowSoftwareFallback: Bool) {
-        if allowSoftwareFallback && isSoftwareSupported {
-            setSoftwareBrightness(percent: percent)
-        } else if isHardwareSupported {
-            setHardwareBrightness(percent: percent)
-        }
-    }
     func setHardwareBrightness(percent: Int) { setBrightness(percent: percent) }
     func setSoftwareBrightness(percent: Int) { setBrightness(percent: percent) }
     func dispose() {}
@@ -79,10 +71,8 @@ public final class BrightnessFallbackService: BrightnessService {
     public var isSoftwareSupported: Bool { software.isSoftwareSupported }
 
     public func setBrightness(percent: Int) {
-        setBrightness(percent: percent, allowSoftwareFallback: true)
-    }
+        // Compatibility convenience; the state layer uses the pure router.
 
-    public func setBrightness(percent: Int, allowSoftwareFallback: Bool) {
         if hardware.isHardwareSupported {
             // Exactly one mechanism owns brightness: a fallback episode may have left
             // the gamma dimmed, so reset it before the hardware write or the two would
@@ -90,7 +80,7 @@ public final class BrightnessFallbackService: BrightnessService {
             // rewrite when already at 100%.
             software.setSoftwareBrightness(percent: 100)
             setHardwareBrightness(percent: percent)
-        } else if allowSoftwareFallback && software.isSoftwareSupported {
+        } else if software.isSoftwareSupported {
             setSoftwareBrightness(percent: percent)
         } else {
             AppLog.shared.log(.brightness, "brightness \(percent)% → unsupported, dropped")

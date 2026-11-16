@@ -77,7 +77,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             CGDisplayRestoreColorSyncSettings()
         }
 
+        #if MOONGLOW_APP_SANDBOXED
+        var prototypeDefaults = AppSettings.default
+        prototypeDefaults.autoColorTemperature = false
+        prototypeDefaults.manualBrightness = 100
+        let store = SettingsStore(defaultSettings: prototypeDefaults)
+        #else
         let store = SettingsStore()
+        #endif
         let installationStore = InstallationStore()
         let installIdentifier = Bundle.main.object(forInfoDictionaryKey: "MoonglowInstallationID") as? String
             ?? "legacy-or-unpackaged"
@@ -99,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         #if arch(arm64)
         hardwareBrightnessService = AppleSiliconBrightnessService()
         #else
-        hardwareBrightnessService = IntelDDCBrightnessService(displayID: CGMainDisplayID())
+        hardwareBrightnessService = IntelDDCBrightnessService()
         #endif
         displayService = CoreGraphicsDisplayService(
             ddcBrightnessSupported: { hardwareBrightnessService.isSupported }
@@ -167,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         viewModel.applyInitialState()
         viewModel.applyLoginItemState(isFirstLaunchAfterInstall: isFirstLaunchAfterInstall)
 #if MOONGLOW_APP_SANDBOXED
-        runSandboxGammaProbeIfRequested(store: store)
+        runSandboxGammaProbeIfRequested()
 #endif
         if isFirstLaunchAfterInstall {
             installationStore.markSeen(identifier: installIdentifier)
@@ -190,20 +197,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else if viewModel.allDisplaysSupportHardwareBrightness {
             hardwareContext = "Hardware backlight control is available on every active display."
         } else {
-            hardwareContext = "At least one active display lacks hardware brightness, so Moonglow uses software dimming across displays."
+            hardwareContext = "Hardware brightness controls the primary external display when available. Digital Shade in split controls dims all displays."
         }
         let alert = NSAlert()
         alert.messageText = softwarePathAvailable
-            ? (recoveryShortcutReady ? "Software brightness is ready" : "Set a brightness recovery shortcut")
+            ? (recoveryShortcutReady ? "Software brightness is ready" : "Dim below 50% with a recovery shortcut")
             : softwareBrightnessAvailable
                 ? "Enable Software Digital Shade"
             : "Brightness control is unavailable"
         if softwarePathAvailable {
             alert.informativeText = recoveryShortcutReady
                 ? "\(hardwareContext) Digital Shade changes the image rather than the physical backlight. Your global recovery shortcut restores the image to 100% immediately."
-                : "\(hardwareContext) Digital Shade changes the image rather than the physical backlight. Set a global shortcut that immediately restores brightness to 100%; the software control stays disabled until macOS registers it."
+                : "\(hardwareContext) Digital Shade changes the image rather than the physical backlight. Software dimming is available down to 50%. Register a global shortcut that restores brightness to 100% to unlock lower values."
         } else if softwareBrightnessAvailable {
-            alert.informativeText = "\(hardwareContext) Software Digital Shade is turned off in Settings. Enable it to use gamma dimming, then set a global Restore brightness to 100% shortcut before using the software control."
+            alert.informativeText = "\(hardwareContext) Software Digital Shade is turned off in Settings. Enable it to dim down to 50%. A global Restore brightness to 100% shortcut unlocks lower levels."
         } else {
             alert.informativeText = "\(hardwareContext) macOS does not provide a usable software gamma ramp for this display session. Use the display's physical controls or connect a compatible external display."
         }
@@ -239,11 +246,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
 #if MOONGLOW_APP_SANDBOXED
-    private func runSandboxGammaProbeIfRequested(store: SettingsStore) {
+    private func runSandboxGammaProbeIfRequested() {
         guard ProcessInfo.processInfo.arguments.contains("--sandbox-gamma-probe") else { return }
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("moonglow-sandbox-probe-\(UUID().uuidString).json")
         let tempStore = SettingsStore(fileURL: tempURL)
         tempStore.save(AppSettings.default)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
         AppLog.shared.log(.settings, "sandbox settings file: \(tempStore.fileURL.path)")
         AppLog.shared.log(.display, "sandbox gamma probe started")
 
@@ -442,8 +450,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 item.keyEquivalent = keyEquivalent
                 item.keyEquivalentModifierMask = menuModifierFlags(for: shortcut)
             } else {
-                item.isHidden = true
+                item.isHidden = !viewModel.isSoftwareDimmed
                 item.keyEquivalent = ""
+                item.keyEquivalentModifierMask = []
             }
         }
     }

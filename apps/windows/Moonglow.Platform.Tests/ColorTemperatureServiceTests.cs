@@ -183,4 +183,60 @@ public sealed class ColorTemperatureServiceTests
         Assert.True(SpinWait.SpinUntil(() => NativeMethods.Writes.Count >= 2, 3000));
         Assert.True(attempts >= 3);
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RefusingLegacyMonitorKeepsTemperatureOnOtherDisplaysAndGoesIdle(bool dim)
+    {
+        NativeMethods.Reset();
+        NativeMethods.OnWrite = device => device != new IntPtr(2);
+        using var service = new ColorTemperatureService(new MonitorService(), useMagnification: false);
+        if (dim) service.SetSoftwareBrightness(60);
+        service.Apply(6400);
+        ushort targetBlue = (ushort)(65535 * KelvinConversion.RgbScale(6400).B);
+        Assert.True(SpinWait.SpinUntil(() => NativeMethods.Writes.Any(w => w.Device == new IntPtr(1) && w.Blue == targetBlue), 3000));
+        Assert.False(service.SupportsSoftwareBrightness);
+        Thread.Sleep(100);
+        int count = NativeMethods.Writes.Count;
+        Thread.Sleep(300);
+        Assert.Equal(count, NativeMethods.Writes.Count);
+        Assert.Equal(targetBlue, NativeMethods.Writes.Last(w => w.Device == new IntPtr(1)).Blue);
+        Assert.Equal(2, NativeMethods.GammaReads);
+    }
+
+    [Fact]
+    public async Task SoftwareCapabilityReadsDoNotWaitForAStalledDriver()
+    {
+        NativeMethods.Reset();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        NativeMethods.OnWrite = _ => { entered.Set(); release.Wait(); return true; };
+        using var service = new ColorTemperatureService(new MonitorService(), useMagnification: false);
+        service.Apply(6400);
+        try
+        {
+            Assert.True(entered.Wait(3000));
+            var read = Task.Run(() => service.SupportsSoftwareBrightness);
+            Assert.Same(read, await Task.WhenAny(read, Task.Delay(1000)));
+        }
+        finally { release.Set(); }
+    }
+
+    [Fact]
+    public void AcceptingTemperatureDoesNotReenableARefusedDimmingRamp()
+    {
+        NativeMethods.Reset();
+        NativeMethods.OnRampWrite = (device, ramp) => device != new IntPtr(2) || ramp.Red[255] > 60000;
+        using var service = new ColorTemperatureService(new MonitorService(), useMagnification: false);
+        service.SetSoftwareBrightness(60);
+        service.Apply(6400);
+        ushort targetBlue = (ushort)(65535 * KelvinConversion.RgbScale(6400).B);
+        Assert.True(SpinWait.SpinUntil(() => NativeMethods.Writes.Any(w => w.Device == new IntPtr(1) && w.Blue == targetBlue), 3000));
+        Thread.Sleep(100);
+        Assert.False(service.SupportsSoftwareBrightness);
+        int count = NativeMethods.Writes.Count;
+        Thread.Sleep(300);
+        Assert.Equal(count, NativeMethods.Writes.Count);
+    }
 }

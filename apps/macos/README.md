@@ -79,13 +79,13 @@ automatically. Set `MOONGLOW_SIGNING_IDENTITY` to choose a specific identity. Se
 
 - `bash Packaging/build-app.sh` builds the full version for direct download and the Homebrew tap.
   It uses one unified brightness slider by default, with optional split Backlight and Digital Shade
-  sliders. Hardware brightness is used only when every active display supports it; otherwise
-  software gamma is applied across displays. Digital Shade stays locked until macOS registers a
-  user-chosen recovery shortcut.
+  sliders. Hardware brightness remains available on the primary external display in mixed
+  setups. Digital Shade can dim all gamma-capable displays down to 50%; a registered recovery
+  shortcut unlocks lower levels.
 - `bash Packaging/build-sandbox-prototype.sh` builds an isolated, software-only App Sandbox
-  prototype at `artifacts/sandbox-prototype/Moonglow.app`. Its software brightness slider stays
-  locked until the user records a global shortcut that restores brightness to 100% and macOS
-  confirms that shortcut is registered. This prototype is for App Store feasibility work; it is not yet
+  prototype at `artifacts/sandbox-prototype/Moonglow.app`. Software brightness is available down
+  to 50%, and registering a restore-to-100% shortcut unlocks lower levels. Its initial settings
+  are neutral (100% brightness and manual temperature); saved settings are retained. This prototype is for App Store feasibility work; it is not yet
   signed or provisioned as a Mac App Store submission.
 
 For a local ad-hoc build, explicitly clear the identity:
@@ -95,11 +95,12 @@ MOONGLOW_SIGNING_IDENTITY='' bash Packaging/build-app.sh
 ```
 
 The app targets macOS 12 or later. Hardware DDC/CI brightness targets the main display only when
-it is an external panel. If any active display cannot be controlled by that hardware path, Moonglow
-uses software gamma across displays when CoreGraphics supports it and returns supported hardware
-backlights to 100%. Software dimming changes the image rather than the physical backlight and
-requires a registered shortcut that restores brightness to 100%. The hardware and software engines
-can be switched independently in Settings. Login-item management requires macOS 13 or
+it is an external panel. A mixed setup keeps that hardware control; Digital Shade in split controls
+dims all gamma-capable displays. The unified 50% hardware/software handoff is used when every
+active display supports hardware brightness. Backlights that Moonglow has never managed are left
+untouched. Disabling an owned hardware route releases it once to 100%. Software dimming changes
+the image rather than the physical backlight and has a 50% floor until a recovery shortcut is
+registered. Both engines can be switched independently in Settings. Login-item management requires macOS 13 or
 later. Without a Developer ID identity, the build script uses an ad-hoc signature and does not
 notarize the app. For public releases, use a Developer ID identity and enable notarization as
 described above.

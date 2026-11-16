@@ -79,6 +79,15 @@ public static class BrightnessPlan
         return new SplitOutput(hw, sw);
     }
 
+    public static int MasterPreservingOutput(RoutingOutput output, bool hardwareAvailable, bool softwareAvailable, bool recoveryRegistered)
+    {
+        int hardware = output.Hardware ?? 100;
+        if (hardwareAvailable && softwareAvailable)
+            return SplitToUnified(hardware, output.Software, true, true, recoveryRegistered);
+        int effective = (int)Math.Round(hardware * output.Software / 100.0, MidpointRounding.AwayFromZero);
+        return Math.Max(AppSettings.ClampBrightness(effective), softwareAvailable && !recoveryRegistered ? AppSettings.SoftwareBrightnessFloor : 1);
+    }
+
     public static int SplitToUnified(
         int hardware,
         int software,
@@ -88,19 +97,16 @@ public static class BrightnessPlan
     {
         if (hardwareAvailable && softwareAvailable)
         {
-            if (hardware > 1)
-            {
-                return 50 + (int)Math.Round((hardware - 1) * 50.0 / 99.0, MidpointRounding.AwayFromZero);
-            }
+            int hw = AppSettings.ClampBrightness(hardware);
+            int sw = Math.Max(AppSettings.ClampBrightness(software), recoveryRegistered ? 1 : AppSettings.SoftwareBrightnessFloor);
+            double effective = hw * sw / 100.0;
+            if (effective > 1)
+                return 50 + (int)Math.Round((effective - 1) * 50.0 / 99.0, MidpointRounding.AwayFromZero);
+            int shade = Math.Max((int)Math.Round(effective * 100, MidpointRounding.AwayFromZero), recoveryRegistered ? 1 : AppSettings.SoftwareBrightnessFloor);
+            if (shade >= 100) return 50;
             if (recoveryRegistered)
-            {
-                return 1 + (int)Math.Round((software - 1) * 49.0 / 99.0, MidpointRounding.AwayFromZero);
-            }
-            else
-            {
-                int clampedSw = Math.Max(software, AppSettings.SoftwareBrightnessFloor);
-                return 1 + (int)Math.Round((clampedSw - 50) * 48.0 / 49.0, MidpointRounding.AwayFromZero);
-            }
+                return 1 + (int)Math.Round((shade - 1) * 49.0 / 99.0, MidpointRounding.AwayFromZero);
+            return 1 + (int)Math.Round((shade - 50) * 48.0 / 49.0, MidpointRounding.AwayFromZero);
         }
         else if (hardwareAvailable)
         {

@@ -79,7 +79,7 @@ struct SettingsView: View {
                     Divider()
                     caption(viewModel.hasBrightnessRecoveryShortcut
                         ? "Software dimming is available. This global shortcut immediately restores brightness to 100%."
-                        : "Software dimming changes the image rather than the display backlight. Set a global shortcut to restore brightness to 100%; the software control stays locked until macOS registers it.")
+                        : "Software dimming changes the image rather than the display backlight. It is available down to 50%; registering a shortcut to restore brightness to 100% unlocks lower levels.")
                     shortcutRow(label: "Restore brightness to 100%", shortcut: $viewModel.restoreBrightnessShortcut)
                     if viewModel.restoreBrightnessShortcut != nil && !viewModel.hasBrightnessRecoveryShortcut {
                         caption("macOS could not register that shortcut. Choose another combination, since another app may already be using it.")

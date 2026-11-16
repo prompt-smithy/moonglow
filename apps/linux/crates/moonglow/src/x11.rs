@@ -13,6 +13,7 @@ use std::collections::HashSet;
 use std::sync::Mutex;
 use x11rb::connection::Connection;
 use x11rb::protocol::randr::{self, ConnectionExt as _, Crtc};
+use x11rb::protocol::xproto::ConnectionExt as _;
 use x11rb::rust_connection::RustConnection;
 
 type X11Result<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -239,7 +240,7 @@ fn enumerate(ddc_connectors: &HashSet<String>) -> X11Result<Vec<DisplayInfo>> {
     for output in &resources.outputs {
         let info = conn.randr_get_output_info(*output, resources.config_timestamp)?;
         let Ok(info) = info.reply() else { continue };
-        if info.connection != randr::Connection::CONNECTED {
+        if info.connection != randr::Connection::CONNECTED || info.crtc == 0 {
             continue;
         }
         let name = String::from_utf8_lossy(&info.name).into_owned();
@@ -253,15 +254,19 @@ fn enumerate(ddc_connectors: &HashSet<String>) -> X11Result<Vec<DisplayInfo>> {
                 Err(_) => false,
             }
         };
-        let supports_hardware = ddc_connectors.contains(&name)
-            || ddc_connectors.iter().any(|c| {
-                let norm = |s: &str| {
-                    s.replace("-A-", "-")
-                        .replace("DisplayPort-", "DP-")
-                        .replace('-', "")
-                };
-                norm(c) == norm(&name)
-            });
+        let identity = conn
+            .intern_atom(true, b"EDID")
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .filter(|atom| atom.atom != 0)
+            .and_then(|atom| {
+                conn.randr_get_output_property(*output, atom.atom, 0u32, 0, 32, false, false)
+                    .ok()
+            })
+            .and_then(|cookie| cookie.reply().ok())
+            .and_then(|property| crate::ddc::edid_identity(&property.data));
+        let supports_hardware =
+            output_supports_hardware(&name, identity.as_deref(), ddc_connectors);
         displays.push(
             DisplayInfo::new(
                 output.to_string(),
@@ -274,6 +279,22 @@ fn enumerate(ddc_connectors: &HashSet<String>) -> X11Result<Vec<DisplayInfo>> {
             .with_brightness_modes(supports_hardware, supports_gamma),
         );
     }
+    // A count-based fallback is safe only when RandR agrees with DRM about
+    // the complete external output set (including active virtual outputs).
+    let is_external = |display: &DisplayInfo| {
+        !["eDP", "LVDS", "DSI"]
+            .iter()
+            .any(|prefix| display.name.starts_with(prefix))
+    };
+    let external_count = displays.iter().filter(|d| is_external(d)).count();
+    if external_count > 0
+        && ddc_connectors.contains(&format!("all-external-outputs:{external_count}"))
+    {
+        for display in displays.iter_mut().filter(|d| is_external(d)) {
+            display.supports_hardware_brightness = true;
+            display.supports_brightness = true;
+        }
+    }
     // No primary reported: treat the first output as primary.
     if !primary_valid(&displays) && !displays.is_empty() {
         displays[0].is_primary = true;
@@ -283,4 +304,52 @@ fn enumerate(ddc_connectors: &HashSet<String>) -> X11Result<Vec<DisplayInfo>> {
 
 fn primary_valid(displays: &[DisplayInfo]) -> bool {
     displays.iter().any(|d| d.is_primary)
+}
+
+/// EDID is authoritative when present; aliases are a fallback for older drivers.
+fn output_supports_hardware(
+    name: &str,
+    identity: Option<&str>,
+    capabilities: &HashSet<String>,
+) -> bool {
+    if let Some(identity) = identity {
+        if capabilities.iter().any(|key| key.starts_with("edid-")) {
+            return capabilities.contains(identity);
+        }
+    }
+    let normalize = |s: &str| {
+        s.replace("-A-", "-")
+            .replace("DisplayPort-", "DP-")
+            .replace('-', "")
+    };
+    capabilities.contains(name)
+        || capabilities
+            .iter()
+            .filter(|key| {
+                !key.starts_with("card")
+                    && !key.starts_with("edid-")
+                    && !key.starts_with("all-external-outputs:")
+            })
+            .any(|key| normalize(key) == normalize(name))
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+    #[test]
+    fn edid_identity_crosses_driver_names_and_overrules_misleading_aliases() {
+        let capabilities = HashSet::from(["edid-supported".to_owned(), "HDMI-A-1".to_owned()]);
+        assert!(output_supports_hardware(
+            "DP-0",
+            Some("edid-supported"),
+            &capabilities
+        ));
+        assert!(!output_supports_hardware(
+            "HDMI-A-1",
+            Some("edid-unsupported"),
+            &capabilities
+        ));
+        assert!(output_supports_hardware("HDMI-1", None, &capabilities));
+        assert!(output_supports_hardware("HDMI1", None, &capabilities));
+    }
 }

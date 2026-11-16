@@ -218,25 +218,95 @@ def check_settings() -> None:
 
 
 def check_brightness_routing() -> None:
-    path = VECTORS / "brightness-routing.json"
-    data = load(path)
+    data = load(VECTORS / "brightness-routing.json")
     if data is None:
         return
-    if "softwareBrightnessFloor" not in data or data["softwareBrightnessFloor"] != 50:
+    if data.get("softwareBrightnessFloor") != 50:
         fail("brightness-routing.json: softwareBrightnessFloor must be 50")
-    if "vectors" not in data or not data["vectors"]:
-        fail("brightness-routing.json: missing vectors")
+    if not data.get("vectors") or not data.get("transitions"):
+        fail("brightness-routing.json: routing and transition vectors are required")
+
+    def clamp(value):
+        return min(100, max(1, value))
+
+    def rounded(numerator, denominator):
+        return (2 * numerator + denominator) // (2 * denominator)
+
+    def route(master, split, hw, sw, ha, sa, recovery):
+        floor = 1 if recovery else 50
+        if split:
+            return (clamp(hw) if ha else None, max(clamp(sw), floor) if sa else 100)
+        master = clamp(master)
+        if ha and sa:
+            if master >= 50:
+                return (1 + rounded((master - 50) * 99, 50), 100)
+            return (1, floor + rounded((master - 1) * (99 if recovery else 49), 49 if recovery else 48))
+        return (master if ha else None, max(master, floor) if sa and not ha else 100)
+
+    def inverse(hw, sw, ha, sa, recovery):
+        if ha and sa:
+            hw, sw = clamp(hw), max(clamp(sw), 1 if recovery else 50)
+            product = hw * sw
+            if product > 100:
+                return 50 + rounded((product - 100) * 50, 9900)
+            shade = max(product, 1 if recovery else 50)
+            if shade >= 100:
+                return 50
+            return 1 + rounded((shade - (1 if recovery else 50)) * (49 if recovery else 48), 99 if recovery else 49)
+        return clamp(hw) if ha else clamp(sw) if sa else 80
+
+    names = set()
     for row in data.get("vectors", []):
-        for key in ("name", "master", "split", "hardwareAvailable", "softwareAvailable",
-                    "recoveryRegistered", "expectedSoftware"):
-            if key not in row:
-                fail(f"brightness-routing.json: row missing {key!r}: {row}")
-        hw = row.get("expectedHardware")
-        if hw is not None and (isinstance(hw, bool) or not isinstance(hw, int) or not 1 <= hw <= 100):
-            fail(f"brightness-routing.json: {row.get('name')} invalid expectedHardware")
-        sw = row.get("expectedSoftware")
-        if isinstance(sw, bool) or not isinstance(sw, int) or not 1 <= sw <= 100:
-            fail(f"brightness-routing.json: {row.get('name')} invalid expectedSoftware")
+        name = row.get("name")
+        required = ("master", "hardwareInput", "softwareInput", "split", "hardwareAvailable", "softwareAvailable", "recoveryRegistered", "expectedHardware", "expectedSoftware")
+        if not name or name in names or any(key not in row for key in required):
+            fail(f"brightness-routing.json: duplicate name or missing routing field: {name}")
+            continue
+        names.add(name)
+        integers = ("master", "hardwareInput", "softwareInput", "expectedSoftware")
+        booleans = ("split", "hardwareAvailable", "softwareAvailable", "recoveryRegistered")
+        if any(type(row[k]) is not int for k in integers) or any(type(row[k]) is not bool for k in booleans):
+            fail(f"brightness-routing.json: {name} invalid input type")
+            continue
+        if row["expectedHardware"] is not None and type(row["expectedHardware"]) is not int:
+            fail(f"brightness-routing.json: {name} invalid hardware output type")
+            continue
+        expected = route(row["master"], row["split"], row["hardwareInput"], row["softwareInput"], row["hardwareAvailable"], row["softwareAvailable"], row["recoveryRegistered"])
+        if (row["expectedHardware"], row["expectedSoftware"]) != expected:
+            fail(f"brightness-routing.json: {name} inconsistent routing output, expected {expected}")
+
+    for row in data.get("transitions", []):
+        name = row.get("name")
+        flags = ("hardwareAvailable", "softwareAvailable", "recoveryRegistered")
+        if not name or name in names or any(type(row.get(k)) is not bool for k in flags):
+            fail(f"brightness-routing.json: invalid transition: {name}")
+            continue
+        names.add(name)
+        ha, sa, recovery = (row[k] for k in flags)
+        if "expectedMaster" in row:
+            if type(row["expectedMaster"]) is not int:
+                fail(f"brightness-routing.json: {name} invalid master output type")
+                continue
+            if type(row.get("software")) is not int or (row.get("hardware") is not None and type(row["hardware"]) is not int):
+                fail(f"brightness-routing.json: {name} invalid output inputs")
+                continue
+            hw, sw = row.get("hardware"), row["software"]
+            if row.get("preserveOutput"):
+                hw = 100 if hw is None else hw
+                result = inverse(hw, sw, ha, sa, recovery) if ha and sa else max(clamp(rounded(hw * sw, 100)), 50 if sa and not recovery else 1)
+            elif hw is not None:
+                result = inverse(hw, sw, ha, sa, recovery)
+            else:
+                fail(f"brightness-routing.json: {name} missing hardware")
+                continue
+            if row["expectedMaster"] != result:
+                fail(f"brightness-routing.json: {name} inconsistent transition, expected {result}")
+        elif type(row.get("master")) is int:
+            hw, sw = route(row["master"], False, 80, 100, ha, sa, recovery)
+            if (row.get("expectedHardware"), row.get("expectedSoftware")) != (80 if hw is None else hw, sw):
+                fail(f"brightness-routing.json: {name} inconsistent split conversion")
+        else:
+            fail(f"brightness-routing.json: {name} missing transition input")
 
 
 def main() -> int:

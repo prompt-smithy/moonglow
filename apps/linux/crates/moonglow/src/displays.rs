@@ -124,7 +124,10 @@ fn connected_connectors(drm_dir: &PathBuf) -> Vec<(String, String)> {
         }
         let status = entry.path().join("status");
         if let Ok(text) = std::fs::read_to_string(&status) {
-            if text.trim() == "connected" {
+            if text.trim() == "connected"
+                && !std::fs::read_to_string(entry.path().join("enabled"))
+                    .is_ok_and(|v| v.trim() == "disabled")
+            {
                 if let Some((_, connector)) = name.split_once('-') {
                     let display_name = connector.to_string();
                     out.push((name, display_name));
@@ -213,11 +216,33 @@ mod tests {
         let live = supported.clone();
         let mut service = SysfsDisplayService::with_drm_dir(dir.clone(), false, false, true);
         service.live_capabilities = Some(Box::new(move || {
-            (live.load(Ordering::Relaxed), false, true)
+            (
+                if live.load(Ordering::Relaxed) {
+                    HashSet::from(["card1-DP-1".to_owned()])
+                } else {
+                    HashSet::new()
+                },
+                false,
+                true,
+            )
         }));
         assert!(!service.refresh()[0].supports_brightness);
         supported.store(true, Ordering::Relaxed);
         assert!(service.refresh()[0].supports_brightness);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn lid_closed_panel_is_not_an_active_display() {
+        let dir = fake_drm(
+            "lid-closed",
+            &[("eDP-1", "connected"), ("DP-1", "connected")],
+        );
+        std::fs::write(dir.join("card1-eDP-1/enabled"), "disabled").unwrap();
+        let mut service = SysfsDisplayService::with_drm_dir(dir.clone(), true, true, true);
+        let displays = service.refresh();
+        assert_eq!(displays.len(), 1);
+        assert_eq!(displays[0].name, "DP-1");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

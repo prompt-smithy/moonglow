@@ -1,5 +1,11 @@
 # Dual Hardware & Software Brightness Control Architecture Plan
 
+**Historical proposal:** The implemented contract is in [`system.md`](../../system.md) and
+[`spec/README.md`](../../spec/README.md). The review superseded the mandatory shortcut gate,
+unconditional hardware resets and mixed-display all-or-nothing rule below: software has a
+50% default floor, owned hardware is released once, and macOS/Linux retain hardware control
+on capable displays. See [`fable-review-verification.md`](../fable-review-verification.md).
+
 This document specifies the technical design, cross-platform behavioral contract, and step-by-step implementation plan for adding dual hardware/software brightness controls to Moonglow across macOS, Windows, and Linux.
 
 ---

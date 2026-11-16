@@ -71,9 +71,12 @@ pub struct AppSettings {
     pub decrease_temperature_shortcut: Option<Shortcut>,
     #[serde(default = "default_show_settings_shortcut")]
     pub show_settings_shortcut: Option<Shortcut>,
-    /// Required recovery shortcut for software gamma brightness; never assigned by default.
+    /// Optional recovery shortcut unlocking software dimming below 50%.
     #[serde(default)]
     pub restore_brightness_shortcut: Option<Shortcut>,
+    /// A successful external IPC recovery command acknowledged a compositor binding.
+    #[serde(default)]
+    pub restore_brightness_bound_externally: bool,
 }
 
 fn default_day() -> i32 {
@@ -177,6 +180,7 @@ impl Default for AppSettings {
             decrease_temperature_shortcut: default_decrease_temperature_shortcut(),
             show_settings_shortcut: default_show_settings_shortcut(),
             restore_brightness_shortcut: None,
+            restore_brightness_bound_externally: false,
         }
     }
 }
@@ -353,6 +357,10 @@ impl<'de> Deserialize<'de> for AppSettings {
             show_settings_shortcut: shortcut(
                 get("showSettingsShortcut"),
                 defaults.show_settings_shortcut,
+            ),
+            restore_brightness_bound_externally: convert(
+                get("restoreBrightnessBoundExternally"),
+                false,
             ),
             restore_brightness_shortcut: shortcut(
                 get("restoreBrightnessShortcut"),

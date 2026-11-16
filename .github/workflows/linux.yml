@@ -49,19 +49,23 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('apps/linux/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      # The GUI crate links only libc, but eframe/winit still need a C toolchain
-      # and the usual X11/Wayland headers at build time.
+      # Build the native GTK4/libadwaita app as well as the portable core.
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential pkg-config \
+            build-essential pkg-config libgtk-4-dev libadwaita-1-dev xvfb dbus-x11 \
             libxkbcommon-dev libwayland-dev \
             libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev \
             libgl1-mesa-dev
 
       - name: Test
         run: cargo test --workspace
+
+      - name: Test native GTK controls
+        env:
+          GTK_A11Y: none
+        run: xvfb-run -a dbus-run-session cargo test -p moonglow native_search_back_navigation_and_compact_css -- --ignored
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings

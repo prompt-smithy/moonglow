@@ -1,7 +1,9 @@
 # Moonglow
 
 Moonglow shifts your screen colour temperature toward amber in the evening and back to
-neutral in the morning, on Windows, Linux, and macOS.
+neutral in the morning, on Windows, Linux, and macOS. Control hardware backlights and
+software Digital Shade with one brightness slider or separate controls. Software dimming
+works down to 50%; an optional restore shortcut unlocks lower levels.
 
 This repository is a **monorepo of three independent native apps**, not a shared codebase.
 Each platform is written in the language that fits it — C#/WPF, Rust, and Swift — so the
@@ -42,6 +44,7 @@ spec/vectors/kelvin.json
 spec/vectors/schedule.json
 spec/vectors/temperature-range.json
 spec/vectors/settings.json
+spec/vectors/brightness-routing.json
 ```
 
 All three implementations load these vectors in their test suites, so a change to the

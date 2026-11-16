@@ -57,7 +57,25 @@ Brightness control supports dual engines: hardware (DDC/CI or internal panel) an
 software (GPU gamma ramp or digital shade). Under unified mode, the 1–100% slider maps
 50–100% to hardware (with software at 100%), and 1–49% to software (with hardware at 1%).
 Without a registered recovery shortcut, software dimming is floored at 50% (`softwareBrightnessFloor`).
-`vectors/brightness-routing.json` pins the routing and mode transition calculations.
+`vectors/brightness-routing.json` pins forward mapping, split conversions and preservation
+of applied output when the usable engines or recovery floor change. Independent split
+levels are combined as hardware × software / 100 when returning to one slider; integer
+rounding can change that effective level by about one percentage point. Saved deep levels
+are retained while a configured shortcut is first registering or temporarily unavailable.
+
+Windows uses the unified dual mapping only with complete hardware coverage. macOS and
+Linux retain hardware control on capable displays in mixed setups; their unified slider
+then drives those backlights directly, and split Digital Shade dims all gamma-capable
+displays. This preserves the existing hardware path without claiming per-display gamma
+routing. On macOS the hardware target is the primary external display.
+
+Linux also stores `restoreBrightnessBoundExternally` (default false). A successful IPC
+restore command acknowledges an external compositor key binding only when the desktop
+has no shortcut backend. That acknowledgement unlocks deep dimming only in such sessions.
+
+Settings vectors can include `macosInput` / `macosExpected` for Carbon shortcut objects;
+Windows and Linux use the string form in `input` / `expected`. Recovery duplicate priority,
+invalid values and explicit clearing are checked on all three platforms.
 
 Persisted settings are normalized before use: temperatures snap to 100 K, targets are
 ordered, and an inverted or overlapping schedule falls back to the four default times.

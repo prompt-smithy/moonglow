@@ -35,7 +35,7 @@ public sealed class SpecConformanceTests
             var settings = JsonSerializer.Deserialize<AppSettings>(row.GetProperty("input").GetRawText(), options)!.Normalized();
             using var actual = JsonDocument.Parse(JsonSerializer.Serialize(settings, options));
             foreach (var expected in row.GetProperty("expected").EnumerateObject())
-                Assert.Equal(expected.Value.GetRawText(), actual.RootElement.GetProperty(expected.Name).GetRawText());
+                Assert.True(JsonElement.DeepEquals(expected.Value, actual.RootElement.GetProperty(expected.Name)), $"{row.GetProperty("name")}: {expected.Name}");
         }
     }
 
@@ -176,9 +176,11 @@ public sealed class SpecConformanceTests
 
             if (row.TryGetProperty("expectedMaster", out var expMasterProp))
             {
-                int hw = row.GetProperty("hardware").GetInt32();
+                int? hw = row.GetProperty("hardware").ValueKind == JsonValueKind.Null ? null : row.GetProperty("hardware").GetInt32();
                 int sw = row.GetProperty("software").GetInt32();
-                int master = BrightnessPlan.SplitToUnified(hw, sw, hwAvail, swAvail, recReg);
+                int master = row.TryGetProperty("preserveOutput", out var preserve) && preserve.GetBoolean()
+                    ? BrightnessPlan.MasterPreservingOutput(new BrightnessPlan.RoutingOutput(hw, sw), hwAvail, swAvail, recReg)
+                    : BrightnessPlan.SplitToUnified(hw!.Value, sw, hwAvail, swAvail, recReg);
                 Assert.Equal(expMasterProp.GetInt32(), master);
             }
             else

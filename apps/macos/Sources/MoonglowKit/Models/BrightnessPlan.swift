@@ -82,6 +82,17 @@ public struct BrightnessPlan: Sendable {
         return SplitOutput(hardware: hw, software: sw)
     }
 
+    /// Re-expresses an applied output after the usable engines or floor change.
+    /// The new safety floor still takes precedence over continuity.
+    public static func masterPreservingOutput(_ output: RoutingOutput, hardwareAvailable: Bool, softwareAvailable: Bool, recoveryRegistered: Bool) -> Int {
+        let hardware = output.hardware ?? 100
+        if hardwareAvailable && softwareAvailable {
+            return splitToUnified(hardware: hardware, software: output.software, hardwareAvailable: true, softwareAvailable: true, recoveryRegistered: recoveryRegistered)
+        }
+        let effective = Int((Double(hardware * output.software) / 100.0).rounded())
+        return max(AppSettings.clampBrightness(effective), softwareAvailable && !recoveryRegistered ? AppSettings.softwareBrightnessFloor : 1)
+    }
+
     public static func splitToUnified(
         hardware: Int,
         software: Int,
@@ -90,15 +101,18 @@ public struct BrightnessPlan: Sendable {
         recoveryRegistered: Bool
     ) -> Int {
         if hardwareAvailable && softwareAvailable {
-            if hardware > 1 {
-                return 50 + Int((Double(hardware - 1) * 50.0 / 99.0).rounded())
+            let hw = AppSettings.clampBrightness(hardware)
+            let sw = max(AppSettings.clampBrightness(software), recoveryRegistered ? 1 : AppSettings.softwareBrightnessFloor)
+            let effective = Double(hw * sw) / 100.0
+            if effective > 1 {
+                return 50 + Int(((effective - 1) * 50.0 / 99.0).rounded())
             }
+            let shade = max(Int((effective * 100).rounded()), recoveryRegistered ? 1 : AppSettings.softwareBrightnessFloor)
+            if shade >= 100 { return 50 }
             if recoveryRegistered {
-                return 1 + Int((Double(software - 1) * 49.0 / 99.0).rounded())
-            } else {
-                let clampedSw = max(software, AppSettings.softwareBrightnessFloor)
-                return 1 + Int((Double(clampedSw - 50) * 48.0 / 49.0).rounded())
+                return 1 + Int((Double(shade - 1) * 49.0 / 99.0).rounded())
             }
+            return 1 + Int((Double(shade - 50) * 48.0 / 49.0).rounded())
         } else if hardwareAvailable {
             return AppSettings.clampBrightness(hardware)
         } else if softwareAvailable {

@@ -60,9 +60,18 @@ public sealed class ColorTemperatureService : IDisposable
     }
 
     private volatile bool _supportsSoftwareBrightness = true;
+    private bool _gammaDimmingRefused;
 
     /// <summary>Whether the current Windows display backend can apply software dimming.</summary>
     public bool SupportsSoftwareBrightness => _supportsSoftwareBrightness;
+    public event EventHandler? SoftwareBrightnessSupportChanged;
+
+    private void PublishSoftwareBrightnessSupport(bool supported)
+    {
+        if (_supportsSoftwareBrightness == supported) return;
+        _supportsSoftwareBrightness = supported;
+        SoftwareBrightnessSupportChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>Queues a software brightness value while preserving the active temperature.</summary>
     public void SetSoftwareBrightness(int percent)
@@ -172,7 +181,9 @@ public sealed class ColorTemperatureService : IDisposable
                 DeleteDC(hdc);
             _deviceContexts.Clear();
 
-            _supportsSoftwareBrightness = _useMagnification || CanApplyGammaToAllMonitors();
+            // The next apply discovers capability on the worker using actual writes.
+            _gammaDimmingRefused = false;
+            PublishSoftwareBrightnessSupport(true);
         }
     }
 
@@ -389,7 +400,7 @@ public sealed class ColorTemperatureService : IDisposable
                     if (!ApplyMagnification(mRed, mGreen, mBlue))
                         return ApplyResult.RetryLater;
                     LogColorApply($"apply {kelvin}K rgb=({mRed:F3},{mGreen:F3},{mBlue:F3}) via=magnification");
-                    _supportsSoftwareBrightness = true;
+                    PublishSoftwareBrightnessSupport(true);
                     return ApplyResult.Applied;
                 }
                 catch (EntryPointNotFoundException) { _useMagnification = false; }
@@ -401,13 +412,10 @@ public sealed class ColorTemperatureService : IDisposable
             RAMP colorOnlyRamp = BuildRamp(redScale, greenScale, blueScale);
 
             bool gammaApplied = ApplyToMonitors(fullRamp, colorOnlyRamp, hasDimming, out bool mayFallbackToDesktop);
-            // ApplyToMonitors rolls back partial writes. Use the desktop path only
-            // when no per-monitor write was attempted, so it cannot stack with a
-            // monitor ramp that may have survived a failed rollback.
+            // Use the desktop path only before a per-monitor ramp has been
+            // captured/applied, so it cannot stack with a partial monitor state.
             if (!gammaApplied && mayFallbackToDesktop)
                 gammaApplied = ApplyToDesktop(fullRamp);
-
-            _supportsSoftwareBrightness = _useMagnification || CanApplyGammaToAllMonitors();
 
             if (gammaApplied)
             {
@@ -434,7 +442,11 @@ public sealed class ColorTemperatureService : IDisposable
             return false;
 
         bool allSupportFull = true;
-        var attempted = new List<string>();
+        var applied = new List<string>();
+        // Once a monitor refuses gamma, later fade frames carry temperature only.
+        // Retest dimming after display invalidation, not on every frame.
+        bool tryDimming = hasDimming && _supportsSoftwareBrightness;
+        RAMP targetRamp = tryDimming ? ramp : colorOnlyRamp;
 
         foreach (var monitor in monitors)
         {
@@ -448,13 +460,18 @@ public sealed class ColorTemperatureService : IDisposable
             if (!_savedGammaRamps.ContainsKey(monitor.DeviceName))
             {
                 RAMP previousRamp = CreateEmptyRamp();
-                if (GetDeviceGammaRamp(hdc, ref previousRamp))
-                    _savedGammaRamps[monitor.DeviceName] = previousRamp;
+                if (!GetDeviceGammaRamp(hdc, ref previousRamp))
+                {
+                    allSupportFull = false;
+                    continue;
+                }
+                _savedGammaRamps[monitor.DeviceName] = previousRamp;
             }
-
-            attempted.Add(monitor.DeviceName);
-
-            if (!SetDeviceGammaRamp(hdc, ref ramp))
+            if (SetDeviceGammaRamp(hdc, ref targetRamp))
+            {
+                applied.Add(monitor.DeviceName);
+            }
+            else
             {
                 allSupportFull = false;
                 // A DC can go stale after a driver reset; recreate it on the next write.
@@ -462,18 +479,15 @@ public sealed class ColorTemperatureService : IDisposable
             }
         }
 
-        if (allSupportFull)
+        // A temperature-only success does not prove that a previously refused
+        // dimming ramp will work. Keep that capability down until invalidation.
+        _gammaDimmingRefused |= !allSupportFull;
+        PublishSoftwareBrightnessSupport(!_gammaDimmingRefused);
+        // Undo only the dimming component of a partial write. Temperature remains
+        // best effort, including when there was no dimming in the requested ramp.
+        if (!allSupportFull && tryDimming)
         {
-            mayFallbackToDesktop = false;
-            return true;
-        }
-
-        // If brightness dimming was included and not all monitors supported it,
-        // fall back to applying colorOnlyRamp to the capable monitors so colour temperature
-        // is best-effort and does not flicker or stall.
-        if (hasDimming)
-        {
-            foreach (string deviceName in attempted)
+            foreach (string deviceName in applied)
             {
                 IntPtr hdc = GetDeviceContext(deviceName);
                 if (hdc != IntPtr.Zero)
@@ -481,56 +495,9 @@ public sealed class ColorTemperatureService : IDisposable
                     SetDeviceGammaRamp(hdc, ref colorOnlyRamp);
                 }
             }
-            mayFallbackToDesktop = false;
-            return true;
         }
-
-        // Gamma is per monitor on this legacy path. Undo every write from this
-        // attempt if any display rejected it, so a failed software fallback does
-        // not leave only part of the desktop dimmed.
-        bool rollbackSucceeded = true;
-        foreach (string deviceName in attempted)
-        {
-            if (_savedGammaRamps.TryGetValue(deviceName, out RAMP previousRamp))
-            {
-                IntPtr hdc = GetDeviceContext(deviceName);
-                if (hdc == IntPtr.Zero || !SetDeviceGammaRamp(hdc, ref previousRamp))
-                {
-                    rollbackSucceeded = false;
-                    ReleaseDeviceContext(deviceName);
-                }
-            }
-        }
-
-        // A failure before any panel write can still use the whole-desktop path.
-        // Once a panel was touched, keep retrying the all-panel operation instead
-        // of layering a desktop ramp over a mixed monitor state.
-        mayFallbackToDesktop = attempted.Count == 0
-            && rollbackSucceeded
-            && _savedGammaRamps.Count == 0;
-        return false;
-    }
-
-    private bool CanApplyGammaToAllMonitors()
-    {
-        var monitors = _monitors.Snapshot();
-        if (monitors.Count == 0)
-            return false;
-
-        foreach (var monitor in monitors)
-        {
-            IntPtr hdc = GetDeviceContext(monitor.DeviceName);
-            if (hdc == IntPtr.Zero)
-                return false;
-
-            RAMP ramp = CreateEmptyRamp();
-            if (!GetDeviceGammaRamp(hdc, ref ramp))
-            {
-                ReleaseDeviceContext(monitor.DeviceName);
-                return false;
-            }
-        }
-        return true;
+        mayFallbackToDesktop = applied.Count == 0 && _savedGammaRamps.Count == 0;
+        return applied.Count > 0;
     }
 
     private bool ApplyToDesktop(RAMP ramp)

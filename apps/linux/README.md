@@ -32,15 +32,24 @@ claims support:
 - Brightness everywhere — DDC/CI over `/dev/i2c-*` on every panel that answers
   the luminance probe; software gamma dimming where the session backend allows.
 
-Brightness has one unified slider by default and an advanced expander for
-separate **Backlight** and **Digital Shade** sliders. Hardware control is used
-only when every active display has a mapped, responding DDC/CI bus; otherwise
-supported displays use software gamma together and available DDC backlights are
-returned to 100%. The hardware and software engines can each be disabled in
-Preferences. Software gamma dims the image rather than the panel backlight and
-stays locked until the desktop registers a user-chosen **Restore brightness to
-100%** shortcut. Use the info button beside the slider for current capabilities
-and setup steps.
+Brightness has one unified slider by default and an advanced expander for separate
+**Backlight** and **Digital Shade** sliders. DDC/CI remains available on capable displays in
+mixed setups. The unified slider controls their backlights; Digital Shade in split controls
+dims all displays when the gamma backend supports them. With complete hardware coverage,
+the unified slider hands off from hardware to software at 50%. Unmanaged backlights are left
+untouched; a hardware route Moonglow owned is released once when disabled.
+
+Software gamma dims the image rather than the panel backlight and works down to 50% without
+any shortcut. A registered **Restore brightness to 100%** shortcut unlocks lower levels. On
+desktops without an application shortcut backend, bind `moonglow --restore-brightness` in your
+compositor and invoke that command once while Moonglow is running to acknowledge the binding.
+The Linux-only `restoreBrightnessBoundExternally` setting records that acknowledgement; it is
+used only while the shortcut backend is unavailable. Use the info button beside the slider
+for current capabilities and setup steps.
+
+DDC display matching uses EDID identity across I²C, DRM and RandR; a complete bus/connector
+count match is a fallback for drivers without DDC links or EDID. Disabled DRM connectors
+(including closed-lid panels) do not count as active displays.
 
 The app restores the pre-launch state on quit (original gamma ramps, Night
 Light settings, KWin preview stopped).
@@ -148,8 +157,8 @@ DDC/CI is enabled in the monitor's on-screen menu.
 Launch `moonglow` (or the app launcher entry). The settings window opens with:
 
 - **Brightness** — a unified slider by default, with optional split Backlight
-  and Digital Shade sliders. Hardware brightness requires DDC/CI on every
-  active display; software gamma requires a registered restore-to-100% shortcut.
+  and Digital Shade sliders. Hardware brightness works on DDC/CI-capable displays;
+  software gamma has a 50% floor until a recovery binding is available.
 - **Colour temperature** — a warm-to-cool slider, the automatic schedule
   switch, and the day/night range as one two-handle bar. The slider is
   disabled while Automatic is on; the schedule is driving the display.
@@ -257,4 +266,8 @@ Needs hardware and real sessions; not automatable.
   re-registration after editing a shortcut; clearing one.
 - All five schedule states, including both transitions.
 - Settings round trip through `~/.config/moonglow/settings.json`.
-- Second invocation forwards; `--quit` stops the daemon; socket removed.
+- Second invocation forwards; `--quit` stops the daemon; a stale socket can be reclaimed.
+
+IPC uses `$XDG_RUNTIME_DIR/moonglow.sock` or a socket inside a private 0700
+`$TMPDIR/moonglow-<uid>/` directory. The directory must belong to the current user;
+symlinks and directories accessible to other users are rejected.

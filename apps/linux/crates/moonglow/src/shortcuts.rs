@@ -211,6 +211,9 @@ fn run<S: SettingsPersistence>(
     );
     let bindings = Bindings::from_state(&state);
     set_brightness_recovery_registration(&state, &bindings, false);
+    if let Ok(mut state) = state.lock() {
+        state.set_shortcut_backend_unavailable(true);
+    }
 }
 
 /// Applies one shortcut action to the shared state.

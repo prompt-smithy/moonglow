@@ -89,7 +89,7 @@
                       IsChecked="{Binding SoftwareBrightnessEnabled, Mode=TwoWay}" />
             <CheckBox Content="Show split sliders in the tray by default"
                       IsChecked="{Binding SplitBrightnessControls, Mode=TwoWay}" />
-            <TextBlock Text="When any active display lacks hardware brightness, software dimming is used across all displays. Software dimming requires a registered Restore brightness to 100% shortcut."
+            <TextBlock Text="When any active display lacks hardware brightness, software dimming is used across all displays. Software dimming is limited to 50% until a Restore brightness to 100% shortcut is registered."
                        Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,6,0,0" TextWrapping="Wrap" />
 
             <TextBlock Text="Morning transition (warm → cool)" Style="{StaticResource SectionHeader}" />

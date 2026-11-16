@@ -119,7 +119,8 @@ private struct MenuBrightnessSliderContent: View {
                 brightnessSliderRow(
                     title: "Digital shade",
                     value: $viewModel.softwareBrightness,
-                    enabled: viewModel.softwareBrightnessControlEnabled
+                    enabled: viewModel.softwareBrightnessControlEnabled,
+                    minimum: viewModel.softwareBrightnessMinimum
                 )
             } else {
                 brightnessSlider
@@ -134,6 +135,7 @@ private struct MenuBrightnessSliderContent: View {
             HStack(spacing: 6) {
                 TriangleSlider(
                     value: $viewModel.brightness,
+                    range: viewModel.brightnessMinimum...100,
                     isEnabled: viewModel.brightnessControlEnabled,
                     midpoint: viewModel.showsDualBrightnessMidpoint ? 50 : nil,
                     label: "Brightness",
@@ -149,7 +151,7 @@ private struct MenuBrightnessSliderContent: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help("Why is brightness disabled?")
+                    .help("Brightness limits and recovery shortcut")
                     .accessibilityLabel("Learn about software brightness and set a recovery shortcut")
                 }
             }
@@ -176,7 +178,8 @@ private struct MenuBrightnessSliderContent: View {
     private func brightnessSliderRow(
         title: String,
         value: Binding<Int>,
-        enabled: Bool
+        enabled: Bool,
+        minimum: Int = 1
     ) -> some View {
         HStack(spacing: 6) {
             Text(title)
@@ -184,6 +187,7 @@ private struct MenuBrightnessSliderContent: View {
                 .frame(width: 74, alignment: .leading)
             TriangleSlider(
                 value: value,
+                range: minimum...100,
                 isEnabled: enabled,
                 label: title,
                 valueDescription: { "\($0) percent" }

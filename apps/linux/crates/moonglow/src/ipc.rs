@@ -10,23 +10,42 @@ use moonglow_core::state::{ScheduleTime, ScheduleWindow};
 use moonglow_core::time_of_day::TimeOfDay;
 use moonglow_core::traits::SettingsPersistence;
 use std::io::{BufRead, Write};
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
-/// `$XDG_RUNTIME_DIR/moonglow.sock`, falling back to a
-/// per-user temp path.
-pub fn socket_path() -> PathBuf {
+/// Resolves a socket inside an owned, private directory. Never trust a
+/// pre-created temporary path (or an XDG directory belonging to another user).
+pub fn socket_path() -> std::io::Result<PathBuf> {
     if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") {
         if !dir.is_empty() {
-            return PathBuf::from(dir).join("moonglow.sock");
+            return private_socket_path(std::path::Path::new(&dir));
         }
     }
     let uid = rustix_user();
-    std::env::temp_dir().join(format!("moonglow-{uid}.sock"))
+    private_socket_path(&std::env::temp_dir().join(format!("moonglow-{uid}")))
+}
+
+fn private_socket_path(dir: &std::path::Path) -> std::io::Result<PathBuf> {
+    match std::fs::DirBuilder::new().mode(0o700).create(dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(e),
+    }
+    let metadata = std::fs::symlink_metadata(dir)?;
+    if !metadata.is_dir() || metadata.uid() != rustix_user() || metadata.mode() & 0o077 != 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "{} must be a private directory owned by the current user",
+                dir.display()
+            ),
+        ));
+    }
+    Ok(dir.join("moonglow.sock"))
 }
 
 fn rustix_user() -> u32 {
@@ -41,7 +60,7 @@ pub struct InstanceLock {
 
 impl InstanceLock {
     pub fn try_acquire() -> std::io::Result<Option<Self>> {
-        Self::at_path(&socket_path().with_extension("lock"))
+        Self::at_path(&socket_path()?.with_extension("lock"))
     }
 
     fn at_path(path: &std::path::Path) -> std::io::Result<Option<Self>> {
@@ -54,7 +73,15 @@ impl InstanceLock {
             .create(true)
             .truncate(false)
             .mode(0o600)
+            .custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32)
             .open(path)?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() || metadata.uid() != rustix_user() || metadata.mode() & 0o077 != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "unsafe instance lock",
+            ));
+        }
         match rustix::fs::flock(&file, rustix::fs::FlockOperation::NonBlockingLockExclusive) {
             Ok(()) => Ok(Some(Self { _file: file })),
             Err(rustix::io::Errno::WOULDBLOCK) => Ok(None),
@@ -73,8 +100,8 @@ pub fn ping() -> bool {
 
 /// Sends one command to the running instance.
 pub fn send(cmd: &serde_json::Value) -> Result<serde_json::Value, String> {
-    let mut stream =
-        UnixStream::connect(socket_path()).map_err(|e| format!("no running instance ({e})"))?;
+    let mut stream = UnixStream::connect(socket_path().map_err(|e| e.to_string())?)
+        .map_err(|e| format!("no running instance ({e})"))?;
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .map_err(|e| e.to_string())?;
@@ -142,10 +169,7 @@ pub fn spawn_ipc<S: SettingsPersistence + 'static>(
     state: SharedState<S>,
     cmd_tx: mpsc::Sender<AppCommand>,
 ) -> Result<IpcHandle, String> {
-    let path = socket_path();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
+    let path = socket_path().map_err(|e| e.to_string())?;
     let listener =
         bind_socket(&path).map_err(|e| format!("cannot bind {}: {e}", path.display()))?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
@@ -235,7 +259,10 @@ fn dispatch<S: SettingsPersistence>(
             Some(action) => match state.lock() {
                 Ok(mut s) => {
                     match action {
-                        "restore-brightness" => s.restore_brightness_to_full(),
+                        "restore-brightness" => {
+                            s.acknowledge_external_brightness_recovery();
+                            s.restore_brightness_to_full();
+                        }
                         "increase-brightness" => s.increase_brightness(),
                         "decrease-brightness" => s.decrease_brightness(),
                         "increase-temperature" => s.increase_color_temperature(),
@@ -413,7 +440,7 @@ fn dispatch<S: SettingsPersistence>(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use moonglow_core::settings::AppSettings;
     use moonglow_core::state::StateManager;
@@ -425,7 +452,7 @@ mod tests {
     use std::sync::Mutex;
 
     #[derive(Default)]
-    struct MemStore(Mutex<AppSettings>);
+    pub(crate) struct MemStore(Mutex<AppSettings>);
 
     impl SettingsPersistence for MemStore {
         fn load(&self) -> AppSettings {
@@ -478,7 +505,7 @@ mod tests {
         }
     }
 
-    fn test_state() -> SharedState<MemStore> {
+    pub(crate) fn test_state() -> SharedState<MemStore> {
         Arc::new(Mutex::new(StateManager::new(
             MemStore::default(),
             Box::new(StubDisplay),
@@ -608,7 +635,7 @@ mod tests {
 
     #[test]
     fn socket_path_is_per_user() {
-        let path = socket_path();
+        let path = socket_path().unwrap();
         assert!(path.to_string_lossy().contains("moonglow"));
     }
 
@@ -646,5 +673,39 @@ mod tests {
                 .schedule_time(ScheduleTime::MorningStart),
             TimeOfDay::new(8, 0)
         );
+    }
+
+    #[test]
+    fn fallback_socket_directory_is_private_and_symlinks_are_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir =
+            std::env::temp_dir().join(format!("moonglow-private-test-{}", std::process::id()));
+        let link = dir.with_extension("symlink");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_file(&link);
+        let socket = private_socket_path(&dir).unwrap();
+        assert_eq!(socket.parent(), Some(dir.as_path()));
+        assert_eq!(std::fs::metadata(&dir).unwrap().mode() & 0o777, 0o700);
+        std::os::unix::fs::symlink(&dir, &link).unwrap();
+        assert!(private_socket_path(&link).is_err());
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(private_socket_path(&dir).is_err());
+        std::fs::remove_file(link).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn instance_lock_refuses_symlinks() {
+        let dir = std::env::temp_dir().join(format!("moonglow-lock-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::write(dir.join("target"), "unchanged").unwrap();
+        std::os::unix::fs::symlink(dir.join("target"), dir.join("lock")).unwrap();
+        assert!(InstanceLock::at_path(&dir.join("lock")).is_err());
+        assert_eq!(
+            std::fs::read_to_string(dir.join("target")).unwrap(),
+            "unchanged"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

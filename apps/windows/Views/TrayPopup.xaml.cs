@@ -51,7 +51,7 @@ public partial class TrayPopup : UserControl
         if (!vm.SoftwareBrightnessEnabled)
         {
             MessageBoxResult disabledResult = MessageBox.Show(
-                "Software brightness is turned off in Settings. Enable Digital Shade to dim the image in software. A global Restore brightness to 100% shortcut is required before that control can be used.",
+                "Software brightness is turned off in Settings. Enable Digital Shade to dim the image in software. Software dimming is available down to 50%; a global Restore brightness to 100% shortcut unlocks lower values.",
                 "Software brightness is disabled",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Information);
@@ -78,7 +78,7 @@ public partial class TrayPopup : UserControl
                 : "At least one active display lacks hardware brightness, so Moonglow uses software dimming across all displays.";
         string message = recoveryShortcutReady
             ? $"{hardwareContext} Software dimming changes the image rather than the display backlight. Your global Restore brightness to 100% shortcut is registered and immediately brings the image back to full brightness.\n\nOpen keyboard shortcut settings?"
-            : $"{hardwareContext} Software dimming can make the screen hard to read at low values. Set a global Restore brightness to 100% shortcut before using software dimming; that control stays disabled until Windows registers it.\n\nOpen keyboard shortcut settings now?";
+            : $"{hardwareContext} Software dimming can make the screen hard to read at low values. Software dimming is available down to 50%. Register a global Restore brightness to 100% shortcut to unlock lower values.\n\nOpen keyboard shortcut settings now?";
         MessageBoxResult result = MessageBox.Show(
             message,
             recoveryShortcutReady ? "Software brightness is ready" : "Set a brightness recovery shortcut",

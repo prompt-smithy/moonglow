@@ -112,13 +112,28 @@ pub fn split_to_unified(
     recovery_registered: bool,
 ) -> i32 {
     if hardware_available && software_available {
-        if hardware > 1 {
-            50 + ((hardware - 1) as f64 * 50.0 / 99.0).round() as i32
-        } else if recovery_registered {
-            1 + ((software - 1) as f64 * 49.0 / 99.0).round() as i32
+        let hw = AppSettings::clamp_brightness(hardware);
+        let sw = AppSettings::clamp_brightness(software).max(if recovery_registered {
+            1
         } else {
-            let clamped_sw = software.max(SOFTWARE_BRIGHTNESS_FLOOR);
-            1 + ((clamped_sw - 50) as f64 * 48.0 / 49.0).round() as i32
+            SOFTWARE_BRIGHTNESS_FLOOR
+        });
+        let effective = (hw * sw) as f64 / 100.0;
+        if effective > 1.0 {
+            50 + ((effective - 1.0) * 50.0 / 99.0).round() as i32
+        } else {
+            let shade = ((effective * 100.0).round() as i32).max(if recovery_registered {
+                1
+            } else {
+                SOFTWARE_BRIGHTNESS_FLOOR
+            });
+            if shade >= 100 {
+                50
+            } else if recovery_registered {
+                1 + ((shade - 1) as f64 * 49.0 / 99.0).round() as i32
+            } else {
+                1 + ((shade - 50) as f64 * 48.0 / 49.0).round() as i32
+            }
         }
     } else if hardware_available {
         AppSettings::clamp_brightness(hardware)
@@ -127,4 +142,23 @@ pub fn split_to_unified(
     } else {
         80
     }
+}
+
+/// Re-expresses the applied light level under a new engine set or software floor.
+pub fn master_preserving_output(
+    output: RoutingOutput,
+    hardware_available: bool,
+    software_available: bool,
+    recovery_registered: bool,
+) -> i32 {
+    let hardware = output.hardware.unwrap_or(100);
+    if hardware_available && software_available {
+        return split_to_unified(hardware, output.software, true, true, recovery_registered);
+    }
+    let effective = ((hardware * output.software) as f64 / 100.0).round() as i32;
+    AppSettings::clamp_brightness(effective).max(if software_available && !recovery_registered {
+        SOFTWARE_BRIGHTNESS_FLOOR
+    } else {
+        1
+    })
 }

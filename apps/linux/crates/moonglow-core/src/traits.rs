@@ -42,10 +42,6 @@ pub trait BrightnessService: Send {
     fn set_software_brightness(&self, percent: i32) {
         self.set_brightness(percent);
     }
-    /// Routes a brightness request while allowing callers to gate the software path.
-    fn set_brightness_with_software_fallback(&self, percent: i32, _allow_software: bool) {
-        self.set_brightness(percent);
-    }
     /// Releases hardware handles. Called on the way out.
     fn dispose(&mut self) {}
     /// Human-readable reason support is missing, shown when a capability is
@@ -84,10 +80,6 @@ impl BrightnessService for BrightnessFallbackService {
         self.is_hardware_supported() || self.is_software_supported()
     }
 
-    fn set_brightness(&self, percent: i32) {
-        self.set_brightness_with_software_fallback(percent, true);
-    }
-
     fn is_hardware_supported(&self) -> bool {
         self.hardware
             .lock()
@@ -102,7 +94,7 @@ impl BrightnessService for BrightnessFallbackService {
             .unwrap_or(false)
     }
 
-    fn set_brightness_with_software_fallback(&self, percent: i32, allow_software: bool) {
+    fn set_brightness(&self, percent: i32) {
         if self.is_hardware_supported() {
             // Exactly one mechanism owns brightness: a fallback episode may have
             // left the gamma ramps dimmed, so reset them before the hardware
@@ -114,7 +106,7 @@ impl BrightnessService for BrightnessFallbackService {
             if let Ok(h) = self.hardware.lock() {
                 h.set_brightness(percent);
             }
-        } else if allow_software && self.is_software_supported() {
+        } else if self.is_software_supported() {
             if let Ok(s) = self.software.lock() {
                 s.set_brightness(percent);
             }

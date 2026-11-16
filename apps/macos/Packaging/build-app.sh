@@ -157,7 +157,6 @@ iconutil -c icns "$iconset_dir" -o "$app_dir/Contents/Resources/Moonglow.icns"
 
 # Sign the executable first, then the containing bundle. --deep is intentionally avoided for
 # signing because it can hide incorrectly signed nested code.
-sign_app "$app_dir/Contents/MacOS/Moonglow"
 sign_app "$app_dir"
 codesign --verify --strict --verbose=2 "$app_dir"
 

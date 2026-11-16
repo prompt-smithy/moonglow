@@ -21,11 +21,13 @@ public final class SettingsStore {
     public let fileURL: URL
 
     private let fileManager: FileManager
+    private let defaultSettings: AppSettings
     private let writeQueue = DispatchQueue(label: "com.prompt-smithy.Moonglow.settings")
     private var pendingSettings: AppSettings?
     private var pendingWrite: DispatchWorkItem?
 
-    public init(fileURL: URL = SettingsStore.defaultFileURL(), fileManager: FileManager = .default) {
+    public init(fileURL: URL = SettingsStore.defaultFileURL(), fileManager: FileManager = .default, defaultSettings: AppSettings = .default) {
+        self.defaultSettings = defaultSettings.normalized()
         self.fileURL = fileURL
         self.fileManager = fileManager
     }
@@ -35,7 +37,7 @@ public final class SettingsStore {
     /// `settings.json.corrupt` so the next save does not silently destroy it.
     public func load() -> AppSettings {
         flush()
-        guard fileManager.fileExists(atPath: fileURL.path) else { return .default }
+        guard fileManager.fileExists(atPath: fileURL.path) else { return defaultSettings }
         guard let data = try? Data(contentsOf: fileURL),
               let decoded = try? JSONDecoder().decode(AppSettings.self, from: data)
         else {
@@ -44,7 +46,7 @@ public final class SettingsStore {
                 "settings file unreadable, falling back to defaults; keeping the original as \(corruptFileURL.lastPathComponent)"
             )
             preserveCorruptFile()
-            return .default
+            return defaultSettings
         }
 
         return decoded.normalized()

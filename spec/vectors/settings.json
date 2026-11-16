@@ -101,7 +101,8 @@
         "softwareBrightnessEnabled": true,
         "splitBrightnessControls": false,
         "manualHardwareBrightness": 80,
-        "manualSoftwareBrightness": 100
+        "manualSoftwareBrightness": 100,
+        "restoreBrightnessShortcut": null
       }
     },
     {
@@ -149,6 +150,76 @@
         "splitBrightnessControls": false,
         "manualHardwareBrightness": 80,
         "manualSoftwareBrightness": 37
+      }
+    },
+    {
+      "name": "recovery-shortcut-takes-priority",
+      "input": {
+        "restoreBrightnessShortcut": "Ctrl+Alt+Home",
+        "increaseBrightnessShortcut": "Ctrl+Alt+Home"
+      },
+      "macosInput": {
+        "restoreBrightnessShortcut": {
+          "keyCode": 115,
+          "modifiers": 6144
+        },
+        "increaseBrightnessShortcut": {
+          "keyCode": 115,
+          "modifiers": 6144
+        }
+      },
+      "expected": {
+        "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
+        "restoreBrightnessShortcut": "Ctrl+Alt+Home",
+        "increaseBrightnessShortcut": null
+      },
+      "macosExpected": {
+        "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
+        "restoreBrightnessShortcut": {
+          "keyCode": 115,
+          "modifiers": 6144
+        },
+        "increaseBrightnessShortcut": null
+      }
+    },
+    {
+      "name": "invalid-recovery-shortcut-becomes-null",
+      "input": {
+        "restoreBrightnessShortcut": "not-a-shortcut"
+      },
+      "expected": {
+        "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
+        "restoreBrightnessShortcut": null
+      }
+    },
+    {
+      "name": "recovery-shortcut-explicitly-cleared",
+      "input": {
+        "restoreBrightnessShortcut": null
+      },
+      "expected": {
+        "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
+        "restoreBrightnessShortcut": null
       }
     }
   ]

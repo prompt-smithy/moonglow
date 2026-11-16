@@ -8,6 +8,106 @@ import Testing
 @MainActor
 struct MainViewModelTests {
 
+    @Test("Explicit restore wins over a concurrent hardware capability change")
+    func restoreWinsOverCapabilityChange() {
+        var settings = AppSettings.default
+        settings.manualBrightness = 25
+        let h = makeHarness(settings: settings)
+        h.viewModel.applyInitialState()
+        h.brightness.isHardware = false
+        h.viewModel.restoreBrightnessToFull()
+        #expect(h.viewModel.settings.manualBrightness == 100)
+        #expect(h.brightness.appliedSoftware.last == 100)
+    }
+
+    @Test("Temporary recovery loss retains the saved deep unified level")
+    func deepBrightnessSurvivesRecoveryLoss() {
+        var settings = AppSettings.default
+        settings.manualBrightness = 20
+        settings.restoreBrightnessShortcut = HotKeyShortcut(keyCode: 115, modifiers: 6144)
+        let h = makeHarness(settings: settings)
+        h.viewModel.applyInitialState()
+        let deepShade = h.brightness.appliedSoftware.last
+        h.hotKeys.acceptsRecovery = false
+        h.viewModel.updateHotKeys()
+        #expect(h.store.load().manualBrightness == 20)
+        #expect(h.brightness.appliedSoftware.last! >= 50)
+        h.hotKeys.acceptsRecovery = true
+        h.viewModel.updateHotKeys()
+        #expect(h.store.load().manualBrightness == 20)
+        #expect(h.brightness.appliedSoftware.last == deepShade)
+    }
+
+    @Test("Mixed displays retain hardware control without forcing backlights on other displays")
+    func mixedDisplaysRetainHardware() {
+        let displays = [
+            DisplayInfo(nativeId: 1, name: "DDC", isPrimary: true, supportsBrightness: true, supportsColorTemperature: true, supportsHardwareBrightness: true),
+            DisplayInfo(nativeId: 2, name: "Built-in", isPrimary: false, supportsBrightness: true, supportsColorTemperature: true, supportsHardwareBrightness: false),
+        ]
+        var settings = AppSettings.default
+        settings.manualBrightness = 55
+        let h = makeHarness(settings: settings, displays: displays)
+        h.viewModel.applyInitialState()
+        #expect(h.viewModel.hardwareBrightnessControlEnabled)
+        #expect(!h.viewModel.showsDualBrightnessMidpoint)
+        #expect(h.brightness.appliedHardware == [55])
+        #expect(h.brightness.appliedSoftware == [100])
+        h.viewModel.splitBrightnessControls = true
+        #expect(h.viewModel.hardwareBrightness == 55)
+        #expect(h.viewModel.softwareBrightness == 100)
+    }
+
+    @Test("Software floor preserves preferences through recovery re-registration")
+    func softwareFloorPreservesSettings() {
+        let displays = [DisplayInfo(nativeId: 1, name: "Gamma", isPrimary: true, supportsBrightness: true, supportsColorTemperature: true, supportsHardwareBrightness: false)]
+        var settings = AppSettings.default
+        settings.manualBrightness = 40
+        let h = makeHarness(settings: settings, displays: displays)
+        h.viewModel.applyInitialState()
+        #expect(h.brightness.appliedHardware.isEmpty)
+        #expect(h.brightness.appliedSoftware.last == 50)
+        #expect(h.viewModel.brightness == 50)
+        #expect(h.viewModel.brightnessMinimum == 50)
+        #expect(h.viewModel.isSoftwareDimmed)
+        #expect(h.store.load().manualBrightness == 40)
+        h.viewModel.restoreBrightnessShortcut = HotKeyShortcut(keyCode: 115, modifiers: 6144)
+        #expect(h.brightness.appliedSoftware.last == 40)
+        h.viewModel.restoreBrightnessShortcut = HotKeyShortcut(keyCode: 119, modifiers: 6144)
+        #expect(h.store.load().manualBrightness == 40)
+        #expect(h.brightness.appliedSoftware.last == 40)
+    }
+
+    @Test("Recovery registration preserves the unified shade above the safety floor")
+    func registeringRecoveryKeepsUnifiedOutput() {
+        var settings = AppSettings.default
+        settings.manualBrightness = 25
+        let h = makeHarness(settings: settings)
+        h.viewModel.applyInitialState()
+        let shade = h.brightness.appliedSoftware.last!
+        h.viewModel.restoreBrightnessShortcut = HotKeyShortcut(keyCode: 115, modifiers: 6144)
+        #expect(h.brightness.appliedHardware.last == 1)
+        #expect(abs(h.brightness.appliedSoftware.last! - shade) <= 1)
+    }
+
+    @Test("Disclosure preserves light output and releases hardware only once")
+    func disclosureAndOwnership() {
+        var settings = AppSettings.default
+        settings.manualBrightness = 25
+        let h = makeHarness(settings: settings)
+        h.viewModel.applyInitialState()
+        h.viewModel.splitBrightnessControls = true
+        #expect(h.brightness.appliedHardware.last == 1)
+        #expect(h.brightness.appliedSoftware.last == 75)
+        h.viewModel.splitBrightnessControls = false
+        #expect(h.viewModel.brightness == 25)
+        h.viewModel.hardwareBrightnessEnabled = false
+        let writes = h.brightness.appliedHardware
+        #expect(writes.last == 100)
+        h.viewModel.applyInitialState()
+        h.viewModel.applyInitialState()
+        #expect(h.brightness.appliedHardware == writes)
+    }
+
     @Test("Hardware brightness takes priority over software dimming")
     func hardwareBrightnessTakesPriority() {
         let hardware = FakeBrightnessService(isSupported: true, isHardware: true, isSoftware: false)
@@ -775,7 +875,7 @@ private final class FakeDisplayService: DisplayService {
 
 private final class FakeBrightnessService: BrightnessService {
     let isSupported: Bool
-    let isHardware: Bool
+    var isHardware: Bool
     let isSoftware: Bool
     private(set) var applied: [Int] = []
     private(set) var appliedHardware: [Int] = []
@@ -854,11 +954,12 @@ private final class FlagBox: @unchecked Sendable {
 private final class FakeHotKeyService: HotKeyService {
     private(set) var assignments: [(action: HotKeyAction, shortcut: HotKeyShortcut?)] = []
     private(set) var updateCount = 0
+    var acceptsRecovery = true
 
     func updateHotKeys(_ assignments: [(action: HotKeyAction, shortcut: HotKeyShortcut?)]) -> Set<HotKeyAction> {
         self.assignments = assignments
         updateCount += 1
-        return Set(assignments.compactMap { $0.shortcut == nil ? nil : $0.action })
+        return Set(assignments.compactMap { $0.shortcut == nil || ($0.action == .restoreBrightness && !acceptsRecovery) ? nil : $0.action })
     }
 
     func shortcut(for action: HotKeyAction) -> HotKeyShortcut? {

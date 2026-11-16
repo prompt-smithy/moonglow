@@ -13,6 +13,7 @@
     <PackageReference Include="System.Text.Json" Version="9.0.0" />
     <ProjectReference Include="../Moonglow.Core/Moonglow.Core.csproj" />
     <!-- Run the production worker with fake native calls, without changing a real display. -->
+    <Compile Include="../Services/BrightnessService.cs" Link="BrightnessService.cs" />
     <Compile Include="../Services/ColorTemperatureService.cs" Link="ColorTemperatureService.cs" />
     <Compile Include="../Services/DiagnosticLog.cs" Link="DiagnosticLog.cs" />
     <Compile Include="../Services/SettingsService.cs" Link="SettingsService.cs" />

@@ -22,7 +22,7 @@
                             ToolTip="{Binding BrightnessStatus}" Click="BrightnessInfo_Click" />
                 </StackPanel>
             </DockPanel>
-            <Slider x:Name="BrightnessSlider" Margin="0,4,0,0" Minimum="1" Maximum="100"
+            <Slider x:Name="BrightnessSlider" Margin="0,4,0,0" Minimum="{Binding BrightnessMinimum}" Maximum="100"
                     TickPlacement="BottomRight" Ticks="50" IsSnapToTickEnabled="False"
                     IsEnabled="{Binding BrightnessControlEnabled}"
                     ToolTip="{Binding BrightnessStatus}"
@@ -54,7 +54,7 @@
                             IsMoveToPointEnabled="True"
                             ValueChanged="HardwareBrightnessSlider_ValueChanged" />
                     <TextBlock Text="Digital shade" FontSize="10" Foreground="{DynamicResource ThemeSecondaryText}" />
-                    <Slider x:Name="SoftwareBrightnessSlider" Minimum="1" Maximum="100" Margin="0,1,0,0"
+                    <Slider x:Name="SoftwareBrightnessSlider" Minimum="{Binding SoftwareBrightnessMinimum}" Maximum="100" Margin="0,1,0,0"
                             IsEnabled="{Binding SoftwareBrightnessControlEnabled}"
                             ToolTip="{Binding BrightnessStatus}"
                             Value="{Binding SoftwareBrightness, Mode=OneWay}"
