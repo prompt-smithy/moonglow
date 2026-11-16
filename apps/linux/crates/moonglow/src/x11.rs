@@ -9,6 +9,7 @@ use moonglow_core::kelvin;
 use moonglow_core::settings::AppSettings;
 use moonglow_core::traits::{ColorTemperatureService, DisplayService};
 use moonglow_core::DisplayInfo;
+use std::collections::HashSet;
 use std::sync::Mutex;
 use x11rb::connection::Connection;
 use x11rb::protocol::randr::{self, ConnectionExt as _, Crtc};
@@ -183,6 +184,14 @@ impl moonglow_core::traits::BrightnessService for X11SoftwareBrightnessService {
             .unwrap_or(false)
     }
 
+    fn is_hardware_supported(&self) -> bool {
+        false
+    }
+
+    fn is_software_supported(&self) -> bool {
+        self.is_supported()
+    }
+
     fn set_brightness(&self, percent: i32) {
         if let Ok(gamma) = self.gamma.lock() {
             gamma.set_software_brightness(percent);
@@ -192,14 +201,14 @@ impl moonglow_core::traits::BrightnessService for X11SoftwareBrightnessService {
 
 /// Enumerates displays through RandR outputs.
 pub struct X11DisplayService {
-    ddc_brightness_supported: Box<dyn Fn() -> bool + Send>,
+    ddc_connectors: Box<dyn Fn() -> HashSet<String> + Send>,
     displays: Vec<DisplayInfo>,
 }
 
 impl X11DisplayService {
-    pub fn new(ddc_brightness_supported: impl Fn() -> bool + Send + 'static) -> Self {
+    pub fn new(ddc_connectors: impl Fn() -> HashSet<String> + Send + 'static) -> Self {
         Self {
-            ddc_brightness_supported: Box::new(ddc_brightness_supported),
+            ddc_connectors: Box::new(ddc_connectors),
             displays: Vec::new(),
         }
     }
@@ -211,12 +220,12 @@ impl DisplayService for X11DisplayService {
     }
 
     fn refresh(&mut self) -> Vec<DisplayInfo> {
-        self.displays = enumerate(&(self.ddc_brightness_supported)()).unwrap_or_default();
+        self.displays = enumerate(&(self.ddc_connectors)()).unwrap_or_default();
         self.displays.clone()
     }
 }
 
-fn enumerate(ddc: &bool) -> X11Result<Vec<DisplayInfo>> {
+fn enumerate(ddc_connectors: &HashSet<String>) -> X11Result<Vec<DisplayInfo>> {
     let (conn, screen) = connect()?;
     let root = conn.setup().roots[screen].root;
     let resources = conn.randr_get_screen_resources_current(root)?.reply()?;
@@ -244,14 +253,26 @@ fn enumerate(ddc: &bool) -> X11Result<Vec<DisplayInfo>> {
                 Err(_) => false,
             }
         };
-        displays.push(DisplayInfo::new(
-            output.to_string(),
-            name.clone(),
-            format!("x11-{output}"),
-            *output == primary,
-            *ddc || supports_gamma,
-            supports_gamma,
-        ));
+        let supports_hardware = ddc_connectors.contains(&name)
+            || ddc_connectors.iter().any(|c| {
+                let norm = |s: &str| {
+                    s.replace("-A-", "-")
+                        .replace("DisplayPort-", "DP-")
+                        .replace('-', "")
+                };
+                norm(c) == norm(&name)
+            });
+        displays.push(
+            DisplayInfo::new(
+                output.to_string(),
+                name.clone(),
+                format!("x11-{output}"),
+                *output == primary,
+                supports_hardware || supports_gamma,
+                supports_gamma,
+            )
+            .with_brightness_modes(supports_hardware, supports_gamma),
+        );
     }
     // No primary reported: treat the first output as primary.
     if !primary_valid(&displays) && !displays.is_empty() {

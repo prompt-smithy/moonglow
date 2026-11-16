@@ -1,20 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
-    <mask id="crescent">
-      <circle cx="512.000" cy="512.000" r="245.760" fill="#ffffff"/>
-      <circle cx="611.054" cy="412.946" r="258.048" fill="#000000"/>
-    </mask>
+    <clipPath id="moon-disc">
+      <circle cx="512" cy="512" r="215"/>
+    </clipPath>
+    <radialGradient id="lunar-depth" cx="42%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#2a2a34"/>
+      <stop offset="60%" stop-color="#18181c"/>
+      <stop offset="100%" stop-color="#0f0f13"/>
+    </radialGradient>
   </defs>
   <rect width="1024" height="1024" rx="245.760" fill="#ffb300"/>
-  <g mask="url(#crescent)">
-    <circle cx="512.000" cy="512.000" r="245.760" fill="#18181c"/>
+  <!-- Full Moon Disc with Subtle Shading -->
+  <g clip-path="url(#moon-disc)">
+    <circle cx="512" cy="512" r="215" fill="url(#lunar-depth)"/>
+    <!-- Lunar Maria (Seas) - Organic soft charcoal patches -->
+    <!-- Mare Imbrium / Serenitatis -->
+    <path d="M 430 370 Q 480 330 540 360 Q 570 410 520 440 Q 460 450 420 410 Z" fill="#24242d" opacity="0.85"/>
+    <!-- Mare Tranquillitatis -->
+    <path d="M 540 420 Q 600 400 635 435 Q 645 480 595 505 Q 555 490 540 440 Z" fill="#212128" opacity="0.8"/>
+    <!-- Oceanus Procellarum -->
+    <path d="M 405 470 Q 455 460 475 510 Q 465 560 425 570 Q 380 540 400 490 Z" fill="#202027" opacity="0.8"/>
+    <!-- Mare Nubium -->
+    <path d="M 495 530 Q 555 520 575 570 Q 545 620 485 600 Q 465 560 495 530 Z" fill="#22222a" opacity="0.8"/>
+    <!-- Distinct Crater Formations -->
+    <!-- Copernicus -->
+    <circle cx="455" cy="475" r="14" fill="#0d0d11" opacity="0.75"/>
+    <circle cx="454" cy="474" r="10" fill="#2b2b36" opacity="0.6"/>
+    <!-- Tycho -->
+    <circle cx="510" cy="625" r="16" fill="#0d0d11" opacity="0.75"/>
+    <circle cx="509" cy="624" r="12" fill="#2c2c38" opacity="0.6"/>
+    <!-- Kepler -->
+    <circle cx="395" cy="465" r="10" fill="#0d0d11" opacity="0.7"/>
+    <circle cx="394" cy="464" r="7" fill="#2b2b36" opacity="0.5"/>
   </g>
-    <line x1="512.000" y1="189.440" x2="512.000" y2="92.160" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
-  <line x1="740.084" y1="283.916" x2="808.872" y2="215.128" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
-  <line x1="834.560" y1="512.000" x2="931.840" y2="512.000" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
-  <line x1="740.084" y1="740.084" x2="808.872" y2="808.872" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
-  <line x1="512.000" y1="834.560" x2="512.000" y2="931.840" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
-  <line x1="283.916" y1="740.084" x2="215.128" y2="808.872" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
-  <line x1="189.440" y1="512.000" x2="92.160" y2="512.000" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
-  <line x1="283.916" y1="283.916" x2="215.128" y2="215.128" stroke="#18181c" stroke-width="81.920" stroke-linecap="round"/>
+  <line x1="857.000" y1="512.000" x2="947.000" y2="512.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="755.952" y1="755.952" x2="819.591" y2="819.591" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="512.000" y1="857.000" x2="512.000" y2="947.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="268.048" y1="755.952" x2="204.409" y2="819.591" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="167.000" y1="512.000" x2="77.000" y2="512.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="268.048" y1="268.048" x2="204.409" y2="204.409" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="512.000" y1="167.000" x2="512.000" y2="77.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="755.952" y1="268.048" x2="819.591" y2="204.409" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
 </svg>

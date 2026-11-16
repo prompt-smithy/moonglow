@@ -36,6 +36,7 @@ struct SettingsView: View {
                 caption("Set the automatic color temperature range and daily transition times. Use the tray slider for manual adjustments.")
 
                 VStack(alignment: .leading, spacing: 12) {
+                    brightnessControlsSection
                     scheduleSection
                     startupSection
                     shortcutsSection
@@ -65,6 +66,28 @@ struct SettingsView: View {
     }
 
     // MARK: - Displays
+
+    private var brightnessControlsSection: some View {
+        card {
+            VStack(alignment: .leading, spacing: 8) {
+                sectionTitle("Brightness controls")
+                Toggle("Enable Hardware Backlight Control (DDC/CI)", isOn: $viewModel.hardwareBrightnessEnabled)
+                Toggle("Enable Digital Shade (Software Dimming)", isOn: $viewModel.softwareBrightnessEnabled)
+                Toggle("Show split sliders in the menu by default", isOn: $viewModel.splitBrightnessControls)
+                caption("When multiple displays are connected, hardware control is used only if every active display supports it. Otherwise Moonglow uses software dimming across all displays.")
+                if viewModel.hasSoftwareBrightnessSupport {
+                    Divider()
+                    caption(viewModel.hasBrightnessRecoveryShortcut
+                        ? "Software dimming is available. This global shortcut immediately restores brightness to 100%."
+                        : "Software dimming changes the image rather than the display backlight. Set a global shortcut to restore brightness to 100%; the software control stays locked until macOS registers it.")
+                    shortcutRow(label: "Restore brightness to 100%", shortcut: $viewModel.restoreBrightnessShortcut)
+                    if viewModel.restoreBrightnessShortcut != nil && !viewModel.hasBrightnessRecoveryShortcut {
+                        caption("macOS could not register that shortcut. Choose another combination, since another app may already be using it.")
+                    }
+                }
+            }
+        }
+    }
 
     private var displaysSection: some View {
         collapsibleCard(title: "Displays", isExpanded: $displaysExpanded) {

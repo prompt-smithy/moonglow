@@ -104,6 +104,9 @@ struct Cli {
     /// Global-shortcut action: lower brightness by 5%.
     #[arg(long)]
     brightness_down: bool,
+    /// Global-shortcut action: restore brightness to 100%.
+    #[arg(long)]
+    restore_brightness: bool,
     /// Global-shortcut action: raise colour temperature by 100 K.
     #[arg(long)]
     temperature_up: bool,
@@ -248,8 +251,8 @@ fn compose_backends() -> Composed {
             Box::new(x11::X11DisplayService::new(move || {
                 display_hardware
                     .lock()
-                    .map(|h| h.is_supported())
-                    .unwrap_or(false)
+                    .map(|h| h.supported_connectors())
+                    .unwrap_or_default()
             }))
         }
         _ => Box::new(displays::SysfsDisplayService::with_live_capabilities(
@@ -257,8 +260,8 @@ fn compose_backends() -> Composed {
                 (
                     display_hardware
                         .lock()
-                        .map(|h| h.is_supported())
-                        .unwrap_or(false),
+                        .map(|h| h.supported_connectors())
+                        .unwrap_or_default(),
                     display_software
                         .lock()
                         .map(|s| s.is_supported())
@@ -425,6 +428,10 @@ fn direct_command(cli: &Cli) -> i32 {
         state.decrease_brightness();
         println!("brightness: {}%", state.brightness());
     }
+    if cli.restore_brightness {
+        state.restore_brightness_to_full();
+        println!("brightness: {}%", state.brightness());
+    }
     if cli.temperature_up {
         state.increase_color_temperature();
         println!("temperature: {} K", state.color_temperature());
@@ -537,6 +544,7 @@ fn direct_command(cli: &Cli) -> i32 {
             && !cli.cooler
             && !cli.brightness_up
             && !cli.brightness_down
+            && !cli.restore_brightness
             && !cli.temperature_up
             && !cli.temperature_down)
     {
@@ -554,6 +562,7 @@ fn direct_command(cli: &Cli) -> i32 {
             },
             "login": state.launch_at_login(),
             "brightnessStatus": state.brightness_status(),
+            "brightnessEnabled": state.brightness_control_enabled(),
             "colorStatus": state.color_status(),
             "displays": state.displays().iter().map(|d| serde_json::json!({
                 "name": d.name,
@@ -621,6 +630,8 @@ fn forward_command(cli: &Cli) -> i32 {
         Some("increase-brightness")
     } else if cli.brightness_down {
         Some("decrease-brightness")
+    } else if cli.restore_brightness {
+        Some("restore-brightness")
     } else if cli.temperature_up {
         Some("increase-temperature")
     } else if cli.temperature_down {
@@ -908,6 +919,7 @@ fn main() {
         || cli.cooler
         || cli.brightness_up
         || cli.brightness_down
+        || cli.restore_brightness
         || cli.temperature_up
         || cli.temperature_down;
     if one_shot && !cli.show_settings {

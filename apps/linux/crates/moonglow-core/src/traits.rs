@@ -28,6 +28,24 @@ pub trait DisplayService: Send {
 pub trait BrightnessService: Send {
     fn is_supported(&self) -> bool;
     fn set_brightness(&self, percent: i32);
+    /// Hardware-backed brightness. Existing hardware services inherit this default.
+    fn is_hardware_supported(&self) -> bool {
+        self.is_supported()
+    }
+    /// Software gamma brightness. Most hardware services do not expose this.
+    fn is_software_supported(&self) -> bool {
+        false
+    }
+    fn set_hardware_brightness(&self, percent: i32) {
+        self.set_brightness(percent);
+    }
+    fn set_software_brightness(&self, percent: i32) {
+        self.set_brightness(percent);
+    }
+    /// Routes a brightness request while allowing callers to gate the software path.
+    fn set_brightness_with_software_fallback(&self, percent: i32, _allow_software: bool) {
+        self.set_brightness(percent);
+    }
     /// Releases hardware handles. Called on the way out.
     fn dispose(&mut self) {}
     /// Human-readable reason support is missing, shown when a capability is
@@ -63,24 +81,29 @@ impl BrightnessFallbackService {
 
 impl BrightnessService for BrightnessFallbackService {
     fn is_supported(&self) -> bool {
-        self.hardware
-            .lock()
-            .map(|h| h.is_supported())
-            .unwrap_or(false)
-            || self
-                .software
-                .lock()
-                .map(|s| s.is_supported())
-                .unwrap_or(false)
+        self.is_hardware_supported() || self.is_software_supported()
     }
 
     fn set_brightness(&self, percent: i32) {
-        let hardware_supported = self
-            .hardware
+        self.set_brightness_with_software_fallback(percent, true);
+    }
+
+    fn is_hardware_supported(&self) -> bool {
+        self.hardware
             .lock()
-            .map(|h| h.is_supported())
-            .unwrap_or(false);
-        if hardware_supported {
+            .map(|h| h.is_hardware_supported())
+            .unwrap_or(false)
+    }
+
+    fn is_software_supported(&self) -> bool {
+        self.software
+            .lock()
+            .map(|s| s.is_software_supported())
+            .unwrap_or(false)
+    }
+
+    fn set_brightness_with_software_fallback(&self, percent: i32, allow_software: bool) {
+        if self.is_hardware_supported() {
             // Exactly one mechanism owns brightness: a fallback episode may have
             // left the gamma ramps dimmed, so reset them before the hardware
             // write or the two would compound. Nearly free on the steady path —
@@ -91,15 +114,22 @@ impl BrightnessService for BrightnessFallbackService {
             if let Ok(h) = self.hardware.lock() {
                 h.set_brightness(percent);
             }
-        } else if self
-            .software
-            .lock()
-            .map(|s| s.is_supported())
-            .unwrap_or(false)
-        {
+        } else if allow_software && self.is_software_supported() {
             if let Ok(s) = self.software.lock() {
                 s.set_brightness(percent);
             }
+        }
+    }
+
+    fn set_hardware_brightness(&self, percent: i32) {
+        if let Ok(hardware) = self.hardware.lock() {
+            hardware.set_hardware_brightness(percent);
+        }
+    }
+
+    fn set_software_brightness(&self, percent: i32) {
+        if let Ok(software) = self.software.lock() {
+            software.set_software_brightness(percent);
         }
     }
 

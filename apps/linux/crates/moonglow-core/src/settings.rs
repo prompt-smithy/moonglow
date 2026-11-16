@@ -13,6 +13,8 @@ use std::collections::HashMap;
 /// Brightness range, in percent.
 pub const BRIGHTNESS_MIN: i32 = 1;
 pub const BRIGHTNESS_MAX: i32 = 100;
+/// Minimum percent for software dimming when no recovery shortcut is registered.
+pub const SOFTWARE_BRIGHTNESS_FLOOR: i32 = 50;
 /// Colour temperature range in kelvin. Lower is warmer.
 pub const KELVIN_MIN: i32 = 900;
 pub const KELVIN_MAX: i32 = 6600;
@@ -39,6 +41,16 @@ pub struct AppSettings {
     pub auto_color_temperature: bool,
     #[serde(default = "default_brightness")]
     pub manual_brightness: i32,
+    #[serde(default = "default_hardware_brightness_enabled")]
+    pub hardware_brightness_enabled: bool,
+    #[serde(default = "default_software_brightness_enabled")]
+    pub software_brightness_enabled: bool,
+    #[serde(default)]
+    pub split_brightness_controls: bool,
+    #[serde(default = "default_manual_hardware_brightness")]
+    pub manual_hardware_brightness: i32,
+    #[serde(default = "default_manual_software_brightness")]
+    pub manual_software_brightness: i32,
     #[serde(default = "default_manual_temp")]
     pub manual_color_temp_k: i32,
     /// Whether the user wants the app to start at login.
@@ -59,6 +71,9 @@ pub struct AppSettings {
     pub decrease_temperature_shortcut: Option<Shortcut>,
     #[serde(default = "default_show_settings_shortcut")]
     pub show_settings_shortcut: Option<Shortcut>,
+    /// Required recovery shortcut for software gamma brightness; never assigned by default.
+    #[serde(default)]
+    pub restore_brightness_shortcut: Option<Shortcut>,
 }
 
 fn default_day() -> i32 {
@@ -85,6 +100,18 @@ fn default_auto() -> bool {
 fn default_brightness() -> i32 {
     80
 }
+fn default_hardware_brightness_enabled() -> bool {
+    true
+}
+fn default_software_brightness_enabled() -> bool {
+    true
+}
+fn default_manual_hardware_brightness() -> i32 {
+    80
+}
+fn default_manual_software_brightness() -> i32 {
+    100
+}
 fn default_manual_temp() -> i32 {
     6500
 }
@@ -95,6 +122,7 @@ fn shortcut_of(settings: &AppSettings, action: ShortcutAction) -> Option<Shortcu
         ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut,
         ShortcutAction::DecreaseTemperature => settings.decrease_temperature_shortcut,
         ShortcutAction::ShowSettings => settings.show_settings_shortcut,
+        ShortcutAction::RestoreBrightness => settings.restore_brightness_shortcut,
     }
 }
 
@@ -105,23 +133,24 @@ fn set_shortcut(settings: &mut AppSettings, action: ShortcutAction, value: Optio
         ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut = value,
         ShortcutAction::DecreaseTemperature => settings.decrease_temperature_shortcut = value,
         ShortcutAction::ShowSettings => settings.show_settings_shortcut = value,
+        ShortcutAction::RestoreBrightness => settings.restore_brightness_shortcut = value,
     }
 }
 
 fn default_increase_brightness_shortcut() -> Option<Shortcut> {
-    Some(ShortcutAction::IncreaseBrightness.default_shortcut())
+    ShortcutAction::IncreaseBrightness.default_shortcut()
 }
 fn default_decrease_brightness_shortcut() -> Option<Shortcut> {
-    Some(ShortcutAction::DecreaseBrightness.default_shortcut())
+    ShortcutAction::DecreaseBrightness.default_shortcut()
 }
 fn default_increase_temperature_shortcut() -> Option<Shortcut> {
-    Some(ShortcutAction::IncreaseTemperature.default_shortcut())
+    ShortcutAction::IncreaseTemperature.default_shortcut()
 }
 fn default_decrease_temperature_shortcut() -> Option<Shortcut> {
-    Some(ShortcutAction::DecreaseTemperature.default_shortcut())
+    ShortcutAction::DecreaseTemperature.default_shortcut()
 }
 fn default_show_settings_shortcut() -> Option<Shortcut> {
-    Some(ShortcutAction::ShowSettings.default_shortcut())
+    ShortcutAction::ShowSettings.default_shortcut()
 }
 
 impl Default for AppSettings {
@@ -135,6 +164,11 @@ impl Default for AppSettings {
             evening_end: default_evening_end(),
             auto_color_temperature: default_auto(),
             manual_brightness: default_brightness(),
+            hardware_brightness_enabled: default_hardware_brightness_enabled(),
+            software_brightness_enabled: default_software_brightness_enabled(),
+            split_brightness_controls: false,
+            manual_hardware_brightness: default_manual_hardware_brightness(),
+            manual_software_brightness: default_manual_software_brightness(),
             manual_color_temp_k: default_manual_temp(),
             launch_at_login: false,
             increase_brightness_shortcut: default_increase_brightness_shortcut(),
@@ -142,6 +176,7 @@ impl Default for AppSettings {
             increase_temperature_shortcut: default_increase_temperature_shortcut(),
             decrease_temperature_shortcut: default_decrease_temperature_shortcut(),
             show_settings_shortcut: default_show_settings_shortcut(),
+            restore_brightness_shortcut: None,
         }
     }
 }
@@ -185,6 +220,8 @@ impl AppSettings {
     pub fn normalized(&self) -> Self {
         let mut copy = self.clone();
         copy.manual_brightness = Self::clamp_brightness(copy.manual_brightness);
+        copy.manual_hardware_brightness = Self::clamp_brightness(copy.manual_hardware_brightness);
+        copy.manual_software_brightness = Self::clamp_brightness(copy.manual_software_brightness);
         copy.manual_color_temp_k =
             crate::temperature_range::TemperatureRange::snap(copy.manual_color_temp_k);
         let targets = crate::temperature_range::TemperatureRange::from_settings(&copy);
@@ -275,6 +312,26 @@ impl<'de> Deserialize<'de> for AppSettings {
                 defaults.auto_color_temperature,
             ),
             manual_brightness: convert(get("manualBrightness"), defaults.manual_brightness),
+            hardware_brightness_enabled: convert(
+                get("hardwareBrightnessEnabled"),
+                defaults.hardware_brightness_enabled,
+            ),
+            software_brightness_enabled: convert(
+                get("softwareBrightnessEnabled"),
+                defaults.software_brightness_enabled,
+            ),
+            split_brightness_controls: convert(
+                get("splitBrightnessControls"),
+                defaults.split_brightness_controls,
+            ),
+            manual_hardware_brightness: convert(
+                get("manualHardwareBrightness"),
+                defaults.manual_hardware_brightness,
+            ),
+            manual_software_brightness: convert(
+                get("manualSoftwareBrightness"),
+                defaults.manual_software_brightness,
+            ),
             manual_color_temp_k: convert(get("manualColorTempK"), defaults.manual_color_temp_k),
             launch_at_login: convert(get("launchAtLogin"), defaults.launch_at_login),
             increase_brightness_shortcut: shortcut(
@@ -296,6 +353,10 @@ impl<'de> Deserialize<'de> for AppSettings {
             show_settings_shortcut: shortcut(
                 get("showSettingsShortcut"),
                 defaults.show_settings_shortcut,
+            ),
+            restore_brightness_shortcut: shortcut(
+                get("restoreBrightnessShortcut"),
+                defaults.restore_brightness_shortcut,
             ),
         })
     }
@@ -370,17 +431,17 @@ mod tests {
         // Malformed values fall back to the default instead of failing the load.
         assert_eq!(
             decoded.increase_temperature_shortcut,
-            Some(ShortcutAction::IncreaseTemperature.default_shortcut())
+            ShortcutAction::IncreaseTemperature.default_shortcut()
         );
         assert_eq!(
             decoded.decrease_temperature_shortcut,
-            Some(ShortcutAction::DecreaseTemperature.default_shortcut())
+            ShortcutAction::DecreaseTemperature.default_shortcut()
         );
         // A missing key falls back to the default too.
         let missing: AppSettings = serde_json::from_str("{}").unwrap();
         assert_eq!(
             missing.increase_brightness_shortcut,
-            Some(ShortcutAction::IncreaseBrightness.default_shortcut())
+            ShortcutAction::IncreaseBrightness.default_shortcut()
         );
     }
 

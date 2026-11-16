@@ -1,6 +1,9 @@
 <UserControl x:Class="Moonglow.Views.TrayPopup"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    </UserControl.Resources>
     <Border Width="300" CornerRadius="10" Background="{DynamicResource ThemeCardBackground}"
             BorderBrush="{DynamicResource ThemeBorder}" BorderThickness="1" Padding="16">
         <Border.Effect>
@@ -11,14 +14,54 @@
 
             <DockPanel Margin="0,16,0,0">
                 <TextBlock Text="Brightness" Foreground="{DynamicResource ThemeSecondaryText}" DockPanel.Dock="Left" />
-                <TextBlock Text="{Binding Brightness, StringFormat={}{0}%}" Foreground="{DynamicResource ThemeSecondaryText}"
-                           DockPanel.Dock="Right" HorizontalAlignment="Right" />
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                    <TextBlock Text="{Binding BrightnessDisplayText}" Foreground="{DynamicResource ThemeSecondaryText}"
+                               HorizontalAlignment="Right" />
+                    <Button Content="ⓘ" Width="24" Height="22" Margin="6,-4,0,0" Padding="0"
+                            Visibility="{Binding ShowBrightnessInfoButton, Converter={StaticResource BoolToVisibilityConverter}}"
+                            ToolTip="{Binding BrightnessStatus}" Click="BrightnessInfo_Click" />
+                </StackPanel>
             </DockPanel>
-            <Slider x:Name="BrightnessSlider" Minimum="1" Maximum="100" Margin="0,4,0,0"
-                    IsEnabled="{Binding HasBrightnessSupport}"
+            <Slider x:Name="BrightnessSlider" Margin="0,4,0,0" Minimum="1" Maximum="100"
+                    TickPlacement="BottomRight" Ticks="50" IsSnapToTickEnabled="False"
+                    IsEnabled="{Binding BrightnessControlEnabled}"
+                    ToolTip="{Binding BrightnessStatus}"
                     Value="{Binding Brightness, Mode=OneWay}"
                     IsMoveToPointEnabled="True"
-                    ValueChanged="BrightnessSlider_ValueChanged" />
+                    ValueChanged="BrightnessSlider_ValueChanged">
+                <Slider.Style>
+                    <Style TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding SplitBrightnessControls}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Slider.Style>
+            </Slider>
+            <Expander Margin="0,4,0,0" IsExpanded="{Binding SplitBrightnessControls, Mode=TwoWay}">
+                <Expander.Header>
+                    <TextBlock Text="Split hardware and software controls" FontSize="11"
+                               Foreground="{DynamicResource ThemeSecondaryText}" />
+                </Expander.Header>
+                <StackPanel Margin="0,2,0,0">
+                    <TextBlock Text="Hardware backlight" FontSize="10" Foreground="{DynamicResource ThemeSecondaryText}" />
+                    <Slider x:Name="HardwareBrightnessSlider" Minimum="1" Maximum="100" Margin="0,1,0,4"
+                            IsEnabled="{Binding HardwareBrightnessControlEnabled}"
+                            ToolTip="{Binding BrightnessStatus}"
+                            Value="{Binding HardwareBrightness, Mode=OneWay}"
+                            IsMoveToPointEnabled="True"
+                            ValueChanged="HardwareBrightnessSlider_ValueChanged" />
+                    <TextBlock Text="Digital shade" FontSize="10" Foreground="{DynamicResource ThemeSecondaryText}" />
+                    <Slider x:Name="SoftwareBrightnessSlider" Minimum="1" Maximum="100" Margin="0,1,0,0"
+                            IsEnabled="{Binding SoftwareBrightnessControlEnabled}"
+                            ToolTip="{Binding BrightnessStatus}"
+                            Value="{Binding SoftwareBrightness, Mode=OneWay}"
+                            IsMoveToPointEnabled="True"
+                            ValueChanged="SoftwareBrightnessSlider_ValueChanged" />
+                </StackPanel>
+            </Expander>
 
             <DockPanel Margin="0,16,0,0">
                 <TextBlock Text="Color temperature" Foreground="{DynamicResource ThemeSecondaryText}" DockPanel.Dock="Left" />

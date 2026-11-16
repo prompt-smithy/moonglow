@@ -122,6 +122,7 @@ pub struct WlrGammaService {
     qh: QueueHandle<WlrState>,
     state: Mutex<WlrState>,
     shared: Mutex<Shared>,
+    all_outputs_controlled: bool,
 }
 
 struct Shared {
@@ -154,12 +155,14 @@ impl WlrGammaService {
             });
         }
         queue.roundtrip(&mut state)?;
+        let active_output_count = state.outputs.len();
         state
             .controls
             .retain(|c| !c.failed && c.size.unwrap_or(0) > 0);
         if state.controls.is_empty() {
             return Err("no output with a gamma table".into());
         }
+        let all_outputs_controlled = state.controls.len() == active_output_count;
         Ok(Self {
             _conn: conn,
             queue: Mutex::new(queue),
@@ -169,14 +172,17 @@ impl WlrGammaService {
                 kelvin: 6500,
                 software_brightness: 100,
             }),
+            all_outputs_controlled,
         })
     }
 
     pub fn supports_software_brightness(&self) -> bool {
-        self.state
-            .lock()
-            .map(|s| !s.controls.is_empty())
-            .unwrap_or(false)
+        self.all_outputs_controlled
+            && self
+                .state
+                .lock()
+                .map(|s| !s.controls.is_empty())
+                .unwrap_or(false)
     }
 
     pub fn set_software_brightness(&self, percent: i32) {
@@ -340,6 +346,14 @@ impl moonglow_core::traits::BrightnessService for WlrSoftwareBrightnessService {
             .lock()
             .map(|g| g.supports_software_brightness())
             .unwrap_or(false)
+    }
+
+    fn is_hardware_supported(&self) -> bool {
+        false
+    }
+
+    fn is_software_supported(&self) -> bool {
+        self.is_supported()
     }
 
     fn set_brightness(&self, percent: i32) {

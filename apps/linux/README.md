@@ -32,6 +32,16 @@ claims support:
 - Brightness everywhere — DDC/CI over `/dev/i2c-*` on every panel that answers
   the luminance probe; software gamma dimming where the session backend allows.
 
+Brightness has one unified slider by default and an advanced expander for
+separate **Backlight** and **Digital Shade** sliders. Hardware control is used
+only when every active display has a mapped, responding DDC/CI bus; otherwise
+supported displays use software gamma together and available DDC backlights are
+returned to 100%. The hardware and software engines can each be disabled in
+Preferences. Software gamma dims the image rather than the panel backlight and
+stays locked until the desktop registers a user-chosen **Restore brightness to
+100%** shortcut. Use the info button beside the slider for current capabilities
+and setup steps.
+
 The app restores the pre-launch state on quit (original gamma ramps, Night
 Light settings, KWin preview stopped).
 
@@ -137,14 +147,15 @@ DDC/CI is enabled in the monitor's on-screen menu.
 
 Launch `moonglow` (or the app launcher entry). The settings window opens with:
 
-- **Brightness** — a slider for the hardware brightness of every answering
-  DDC/CI panel.
+- **Brightness** — a unified slider by default, with optional split Backlight
+  and Digital Shade sliders. Hardware brightness requires DDC/CI on every
+  active display; software gamma requires a registered restore-to-100% shortcut.
 - **Colour temperature** — a warm-to-cool slider, the automatic schedule
   switch, and the day/night range as one two-handle bar. The slider is
   disabled while Automatic is on; the schedule is driving the display.
-- **Shortcuts** — global shortcuts for brightness, temperature, and showing
-  Settings. Click a shortcut, press the new combination, and it is registered
-  immediately. `Clear` removes one.
+- **Shortcuts** — global shortcuts for brightness, temperature, restoring
+  brightness to 100%, and showing Settings. Click a shortcut, press the new
+  combination, and it is registered immediately. `Clear` removes one.
 - **Schedule** — morning and evening transition windows.
 - **Startup**, **Displays**, and **Command line** — secondary sections,
   collapsed until needed.

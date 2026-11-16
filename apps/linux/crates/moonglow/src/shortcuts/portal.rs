@@ -5,7 +5,10 @@
 //! recent wlroots portals implement it; GNOME is handled by its custom
 //! keybindings instead because older releases do not expose this interface.
 
-use super::{apply_action, set_status, Bindings, SharedShortcutStatus, ShortcutBackend};
+use super::{
+    apply_action, set_brightness_recovery_registration, set_status, Bindings, SharedShortcutStatus,
+    ShortcutBackend,
+};
 use crate::commands::SharedState;
 use futures_util::StreamExt;
 use moonglow_core::shortcut::ShortcutAction;
@@ -65,17 +68,30 @@ async fn run_async<S: SettingsPersistence>(
     while !stop.load(Ordering::Relaxed) {
         let bindings = Bindings::from_state(state);
         if last != Some(bindings) {
+            // Closing a portal session drops every binding in it. Revoke the
+            // recovery gate before that happens so software dimming is restored
+            // while the replacement request is waiting on the desktop.
+            set_brightness_recovery_registration(state, &bindings, false);
             if let Some(old) = session.take() {
                 close_session(&connection, &old).await;
             }
             match create_session(&connection, &proxy, &bindings).await {
-                Ok(path) => {
+                Ok((path, recovery_shortcut_bound)) => {
+                    set_brightness_recovery_registration(state, &bindings, recovery_shortcut_bound);
                     session = Some(path);
                     if bindings.is_empty() {
                         set_status(
                             status,
                             ShortcutBackend::Portal,
                             "Portal session active. No shortcuts are assigned.",
+                        );
+                    } else if bindings.get(ShortcutAction::RestoreBrightness).is_some()
+                        && !recovery_shortcut_bound
+                    {
+                        set_status(
+                            status,
+                            ShortcutBackend::Portal,
+                            "The desktop did not bind the Restore brightness shortcut. Software dimming remains locked.",
                         );
                     } else {
                         set_status(
@@ -85,7 +101,10 @@ async fn run_async<S: SettingsPersistence>(
                         );
                     }
                 }
-                Err(error) => set_status(status, ShortcutBackend::Unavailable, error),
+                Err(error) => {
+                    set_brightness_recovery_registration(state, &bindings, false);
+                    set_status(status, ShortcutBackend::Unavailable, error)
+                }
             }
             last = Some(bindings);
         }
@@ -102,6 +121,8 @@ async fn run_async<S: SettingsPersistence>(
         }
     }
     if let Some(session) = session {
+        let bindings = Bindings::from_state(state);
+        set_brightness_recovery_registration(state, &bindings, false);
         close_session(&connection, &session).await;
     }
     true
@@ -181,7 +202,7 @@ async fn create_session(
     connection: &zbus::Connection,
     proxy: &zbus::Proxy<'_>,
     bindings: &Bindings,
-) -> Result<OwnedObjectPath, String> {
+) -> Result<(OwnedObjectPath, bool), String> {
     let token = format!(
         "moonglow{}",
         std::time::SystemTime::now()
@@ -219,12 +240,12 @@ async fn create_session(
         shortcuts.push((action.id().to_string(), options));
     }
     if shortcuts.is_empty() {
-        return Ok(session_handle);
+        return Ok((session_handle, false));
     }
 
     let bind_token = format!("{token}bind");
     let bind_options = options(&bind_token);
-    call_and_wait(
+    let bind_results = match call_and_wait(
         connection,
         proxy,
         "BindShortcuts",
@@ -236,8 +257,37 @@ async fn create_session(
             bind_options,
         ),
     )
-    .await?;
-    Ok(session_handle)
+    .await
+    {
+        Ok(results) => results,
+        Err(error) => {
+            close_session(connection, &session_handle).await;
+            return Err(error);
+        }
+    };
+
+    let bound_shortcuts = match bound_shortcut_ids(bind_results) {
+        Ok(ids) => ids,
+        Err(error) => {
+            close_session(connection, &session_handle).await;
+            return Err(error);
+        }
+    };
+    let recovery_shortcut_bound = bound_shortcuts
+        .iter()
+        .any(|id| id == ShortcutAction::RestoreBrightness.id());
+    Ok((session_handle, recovery_shortcut_bound))
+}
+
+fn bound_shortcut_ids(mut results: HashMap<String, OwnedValue>) -> Result<Vec<String>, String> {
+    let value = results
+        .remove("shortcuts")
+        .ok_or_else(|| "the portal returned no bound shortcut list".to_string())?;
+    let shortcuts: Vec<(String, HashMap<String, OwnedValue>)> =
+        value.try_into().map_err(|error: zbus::zvariant::Error| {
+            format!("the portal returned an invalid bound shortcut list: {error}")
+        })?;
+    Ok(shortcuts.into_iter().map(|(id, _)| id).collect())
 }
 
 async fn close_session(connection: &zbus::Connection, session: &OwnedObjectPath) {

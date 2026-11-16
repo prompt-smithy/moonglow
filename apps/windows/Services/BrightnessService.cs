@@ -23,11 +23,43 @@ public sealed class BrightnessService
     private DateTime _applyStartedUtc;
     private int _generation;
 
-    public bool InternalPanelAvailable { get; private set; }
+    private readonly object _stateGate = new();
+    private bool _internalPanelAvailable;
+    private int _activeWmiBrightnessDisplayCount;
+
+    public bool InternalPanelAvailable
+    {
+        get { lock (_stateGate) return _internalPanelAvailable; }
+        private set { lock (_stateGate) _internalPanelAvailable = value; }
+    }
+
+    private int ActiveWmiBrightnessDisplayCount
+    {
+        get { lock (_stateGate) return _activeWmiBrightnessDisplayCount; }
+        set { lock (_stateGate) _activeWmiBrightnessDisplayCount = value; }
+    }
 
     /// <summary>Whether any attached display can take a hardware brightness write.</summary>
     public bool IsSupported
         => InternalPanelAvailable || _monitors.Snapshot().Any(m => m.SupportsDdcBrightness);
+
+    /// <summary>Whether every active display is covered by WMI or DDC/CI.</summary>
+    public bool AllActiveDisplaysSupportHardware
+    {
+        get
+        {
+            var monitors = _monitors.Snapshot();
+            if (monitors.Count == 0)
+                return InternalPanelAvailable;
+
+            int ddcDisplays = monitors.Count(m => m.SupportsDdcBrightness);
+            int displaysWithoutDdc = monitors.Count - ddcDisplays;
+            // WMI can cover only brightness-capable displays that WMI reports as
+            // active. A stale/inactive panel must not count for an unrelated
+            // active monitor that has no DDC/CI support.
+            return ActiveWmiBrightnessDisplayCount >= displaysWithoutDdc;
+        }
+    }
 
     public BrightnessService(MonitorService monitors)
     {
@@ -41,33 +73,55 @@ public sealed class BrightnessService
 
     private void DetectInternalPanel()
     {
+        int count = 0;
         try
         {
-            using var searcher = new ManagementObjectSearcher("root\\WMI", "SELECT * FROM WmiMonitorBrightness");
+            using var searcher = new ManagementObjectSearcher(
+                "root\\WMI",
+                "SELECT * FROM WmiMonitorBrightness WHERE Active = TRUE");
             using var results = searcher.Get();
-            foreach (var _ in results)
+            foreach (ManagementObject monitor in results)
             {
-                InternalPanelAvailable = true;
-                break;
+                using (monitor)
+                {
+                    if (Convert.ToBoolean(monitor["Active"]))
+                        count++;
+                }
             }
         }
         catch
         {
-            InternalPanelAvailable = false;
+            count = 0;
+        }
+
+        lock (_stateGate)
+        {
+            _activeWmiBrightnessDisplayCount = count;
+            _internalPanelAvailable = count > 0;
         }
     }
 
     public int? GetInternalBrightness()
     {
-        if (!InternalPanelAvailable)
-            return null;
+        lock (_stateGate)
+        {
+            if (!_internalPanelAvailable)
+                return null;
+        }
 
         try
         {
-            using var searcher = new ManagementObjectSearcher("root\\WMI", "SELECT * FROM WmiMonitorBrightness");
+            using var searcher = new ManagementObjectSearcher(
+                "root\\WMI",
+                "SELECT * FROM WmiMonitorBrightness WHERE Active = TRUE");
             using var results = searcher.Get();
             foreach (ManagementObject obj in results)
-                return Convert.ToInt32(obj["CurrentBrightness"]);
+            {
+                using (obj)
+                {
+                    return Convert.ToInt32(obj["CurrentBrightness"]);
+                }
+            }
         }
         catch
         {
@@ -142,15 +196,25 @@ public sealed class BrightnessService
 
     private void SetInternalBrightness(int percent)
     {
-        if (!InternalPanelAvailable)
-            return;
+        lock (_stateGate)
+        {
+            if (!_internalPanelAvailable)
+                return;
+        }
 
         try
         {
-            using var searcher = new ManagementObjectSearcher("root\\WMI", "SELECT * FROM WmiMonitorBrightnessMethods");
+            using var searcher = new ManagementObjectSearcher(
+                "root\\WMI",
+                "SELECT * FROM WmiMonitorBrightnessMethods WHERE Active = TRUE");
             using var results = searcher.Get();
             foreach (ManagementObject method in results)
-                method.InvokeMethod("WmiSetBrightness", new object[] { (uint)1, (byte)percent });
+            {
+                using (method)
+                {
+                    method.InvokeMethod("WmiSetBrightness", new object[] { (uint)1, (byte)percent });
+                }
+            }
         }
         catch
         {

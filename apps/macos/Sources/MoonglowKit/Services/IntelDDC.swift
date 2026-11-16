@@ -1,4 +1,4 @@
-#if arch(x86_64)
+#if !MOONGLOW_APP_SANDBOXED && arch(x86_64)
 import CoreGraphics
 import Foundation
 import IOKit

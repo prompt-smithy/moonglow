@@ -10,8 +10,8 @@ struct MainViewModelTests {
 
     @Test("Hardware brightness takes priority over software dimming")
     func hardwareBrightnessTakesPriority() {
-        let hardware = FakeBrightnessService(isSupported: true)
-        let software = FakeBrightnessService(isSupported: true)
+        let hardware = FakeBrightnessService(isSupported: true, isHardware: true, isSoftware: false)
+        let software = FakeBrightnessService(isSupported: true, isHardware: false, isSoftware: true)
         let service = BrightnessFallbackService(hardware: hardware, software: software)
 
         service.setBrightness(percent: 40)
@@ -24,8 +24,8 @@ struct MainViewModelTests {
 
     @Test("Routing to hardware resets software dimming so the two never compound")
     func hardwareRoutingResetsSoftwareDimming() {
-        let hardware = FakeBrightnessService(isSupported: true)
-        let software = FakeBrightnessService(isSupported: true)
+        let hardware = FakeBrightnessService(isSupported: true, isHardware: true, isSoftware: false)
+        let software = FakeBrightnessService(isSupported: true, isHardware: false, isSoftware: true)
         let service = BrightnessFallbackService(hardware: hardware, software: software)
 
         service.setBrightness(percent: 40)
@@ -37,8 +37,8 @@ struct MainViewModelTests {
 
     @Test("Software brightness is used when hardware DDC is unavailable")
     func softwareBrightnessIsFallback() {
-        let hardware = FakeBrightnessService(isSupported: false)
-        let software = FakeBrightnessService(isSupported: true)
+        let hardware = FakeBrightnessService(isSupported: false, isHardware: true, isSoftware: false)
+        let software = FakeBrightnessService(isSupported: true, isHardware: false, isSoftware: true)
         let service = BrightnessFallbackService(hardware: hardware, software: software)
 
         service.setBrightness(percent: 40)
@@ -153,6 +153,7 @@ struct MainViewModelTests {
         settings.autoColorTemperature = false
         settings.manualColorTempK = 3400
         settings.manualBrightness = 47
+        settings.softwareBrightnessEnabled = false
         let harness = makeHarness(settings: settings)
         harness.viewModel.applyInitialState()
         let previousWrites = harness.color.applied.count
@@ -184,7 +185,7 @@ struct MainViewModelTests {
         let supported = makeHarness()
         #expect(supported.viewModel.hasBrightnessSupport)
         #expect(supported.viewModel.hasColorSupport)
-        #expect(supported.viewModel.brightnessStatus == "Brightness control is available.")
+        #expect(supported.viewModel.brightnessStatus == "Hardware brightness is available. Software dimming is limited to 50% until a restore shortcut is registered.")
         #expect(supported.viewModel.colorStatus == "CoreGraphics gamma control is available.")
 
         let unsupported = makeHarness(brightnessSupported: false, colorSupported: false)
@@ -407,6 +408,7 @@ struct MainViewModelTests {
     func brightnessHotKeysStep() {
         var settings = AppSettings.default
         settings.manualBrightness = 99
+        settings.softwareBrightnessEnabled = false
         let harness = makeHarness(settings: settings)
 
         harness.viewModel.increaseBrightness()
@@ -428,6 +430,40 @@ struct MainViewModelTests {
 
         #expect(harness.brightness.applied.isEmpty)
         #expect(harness.viewModel.brightness == AppSettings.defaultManualBrightness)
+    }
+
+    @Test("Split-mode hot keys cascade software to hardware and back")
+    func splitModeHotKeysCascade() {
+        var settings = AppSettings.default
+        settings.splitBrightnessControls = true
+        settings.manualHardwareBrightness = 80
+        settings.manualSoftwareBrightness = 95
+        let harness = makeHarness(settings: settings)
+
+        // Increase steps software from 95 to 100
+        harness.viewModel.increaseBrightness()
+        #expect(harness.viewModel.softwareBrightness == 100)
+        #expect(harness.viewModel.hardwareBrightness == 80)
+
+        // Further increase cascades to hardware (80 -> 85)
+        harness.viewModel.increaseBrightness()
+        #expect(harness.viewModel.softwareBrightness == 100)
+        #expect(harness.viewModel.hardwareBrightness == 85)
+
+        // Decrease cascades hardware down first (85 -> 80)
+        harness.viewModel.decreaseBrightness()
+        #expect(harness.viewModel.hardwareBrightness == 80)
+        #expect(harness.viewModel.softwareBrightness == 100)
+    }
+
+    @Test("Saved brightness survives late hardware probe without overwrite")
+    func savedBrightnessSurvivesLateProbe() {
+        var settings = AppSettings.default
+        settings.manualBrightness = 40
+        let harness = makeHarness(settings: settings, brightnessSupported: false)
+
+        #expect(harness.viewModel.brightness == 40)
+        #expect(harness.store.load().manualBrightness == 40)
     }
 
     @Test("Temperature hot keys leave automatic mode and step")
@@ -604,6 +640,7 @@ struct MainViewModelTests {
         settings.autoColorTemperature = false
         settings.manualBrightness = 70
         settings.manualColorTempK = 4400
+        settings.softwareBrightnessEnabled = false
         let harness = makeHarness(settings: settings)
 
         harness.viewModel.applyInitialState()
@@ -738,15 +775,41 @@ private final class FakeDisplayService: DisplayService {
 
 private final class FakeBrightnessService: BrightnessService {
     let isSupported: Bool
+    let isHardware: Bool
+    let isSoftware: Bool
     private(set) var applied: [Int] = []
+    private(set) var appliedHardware: [Int] = []
+    private(set) var appliedSoftware: [Int] = []
     private(set) var refreshCount = 0
 
-    init(isSupported: Bool) {
+    init(isSupported: Bool, isHardware: Bool = true, isSoftware: Bool = false) {
         self.isSupported = isSupported
+        self.isHardware = isHardware
+        self.isSoftware = isSoftware
     }
+
+    var isHardwareSupported: Bool { isSupported && isHardware }
+    var isSoftwareSupported: Bool { isSupported && isSoftware }
 
     func setBrightness(percent: Int) {
         applied.append(percent)
+        if isSoftware {
+            appliedSoftware.append(percent)
+        } else {
+            appliedHardware.append(percent)
+        }
+    }
+
+    func setHardwareBrightness(percent: Int) {
+        applied.append(percent)
+        appliedHardware.append(percent)
+    }
+
+    func setSoftwareBrightness(percent: Int) {
+        appliedSoftware.append(percent)
+        if isSoftware && !isHardware {
+            applied.append(percent)
+        }
     }
 
     func refreshSupport() {
@@ -759,9 +822,21 @@ private final class FakeBrightnessService: BrightnessService {
 private final class LateBrightnessService: BrightnessService {
     private(set) var isSupported = false
     private(set) var applied: [Int] = []
+    private(set) var appliedHardware: [Int] = []
+    private(set) var appliedSoftware: [Int] = []
 
     func setBrightness(percent: Int) {
         applied.append(percent)
+        appliedHardware.append(percent)
+    }
+
+    func setHardwareBrightness(percent: Int) {
+        applied.append(percent)
+        appliedHardware.append(percent)
+    }
+
+    func setSoftwareBrightness(percent: Int) {
+        appliedSoftware.append(percent)
     }
 
     func refreshSupport() {
@@ -780,9 +855,10 @@ private final class FakeHotKeyService: HotKeyService {
     private(set) var assignments: [(action: HotKeyAction, shortcut: HotKeyShortcut?)] = []
     private(set) var updateCount = 0
 
-    func updateHotKeys(_ assignments: [(action: HotKeyAction, shortcut: HotKeyShortcut?)]) {
+    func updateHotKeys(_ assignments: [(action: HotKeyAction, shortcut: HotKeyShortcut?)]) -> Set<HotKeyAction> {
         self.assignments = assignments
         updateCount += 1
+        return Set(assignments.compactMap { $0.shortcut == nil ? nil : $0.action })
     }
 
     func shortcut(for action: HotKeyAction) -> HotKeyShortcut? {
@@ -871,7 +947,11 @@ private func makeHarness(
     ]
 
     let displayService = FakeDisplayService(displays: displayList)
-    let brightnessService = FakeBrightnessService(isSupported: brightnessSupported)
+    let brightnessService = FakeBrightnessService(
+        isSupported: brightnessSupported,
+        isHardware: brightnessSupported,
+        isSoftware: brightnessSupported && colorSupported
+    )
     let colorService = FakeColorService(isSupported: colorSupported)
     let schedule = ScheduleService(colorService: colorService)
     let loginItemService = FakeLoginItemService(

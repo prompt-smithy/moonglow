@@ -50,9 +50,22 @@ def check_schema() -> None:
 
     props = schema.get("properties", {})
     for key in ("dayColorTempK", "nightColorTempK", "morningStart", "morningEnd",
-                "eveningStart", "eveningEnd"):
+                "eveningStart", "eveningEnd", "hardwareBrightnessEnabled",
+                "softwareBrightnessEnabled", "splitBrightnessControls",
+                "manualHardwareBrightness", "manualSoftwareBrightness"):
         if key not in props:
             fail(f"settings.schema.json: missing property {key!r}")
+
+    for key in ("hardwareBrightnessEnabled", "softwareBrightnessEnabled", "splitBrightnessControls"):
+        prop = props.get(key, {})
+        if prop.get("type") != "boolean" or not isinstance(prop.get("default"), bool):
+            fail(f"settings.schema.json: {key} must define a boolean default")
+    for key in ("manualHardwareBrightness", "manualSoftwareBrightness"):
+        prop = props.get(key, {})
+        default = 80 if key == "manualHardwareBrightness" else 100
+        if (prop.get("type") != "integer" or prop.get("default") != default
+                or prop.get("minimum") != 1 or prop.get("maximum") != 100):
+            fail(f"settings.schema.json: {key} must be an integer in [1, 100] with its documented default")
 
 
 def check_kelvin() -> None:
@@ -168,13 +181,62 @@ def check_settings() -> None:
     for row in data["cases"]:
         expected = row["expected"]
         for key in ("manualColorTempK", "dayColorTempK", "nightColorTempK"):
-            if not 900 <= expected[key] <= 6600 or expected[key] % 100:
+            if key in expected and (not 900 <= expected[key] <= 6600 or expected[key] % 100):
                 fail(f"settings.json: {row['name']} has an invalid {key}")
-        times = [expected[key] for key in ("morningStart", "morningEnd", "eveningStart", "eveningEnd")]
-        if not times[0] < times[1] <= times[2] < times[3]:
+        time_keys = ("morningStart", "morningEnd", "eveningStart", "eveningEnd")
+        if all(key in expected for key in time_keys):
+            times = [expected[key] for key in time_keys]
+        else:
+            times = []
+        if times and not times[0] < times[1] <= times[2] < times[3]:
             fail(f"settings.json: {row['name']} has an invalid schedule order")
-        if expected["nightColorTempK"] > expected["dayColorTempK"]:
+        if ("nightColorTempK" in expected and "dayColorTempK" in expected
+                and expected["nightColorTempK"] > expected["dayColorTempK"]):
             fail(f"settings.json: {row['name']} has inverted targets")
+        for key in ("hardwareBrightnessEnabled", "softwareBrightnessEnabled", "splitBrightnessControls"):
+            if not isinstance(expected.get(key), bool):
+                fail(f"settings.json: {row['name']} has an invalid {key}")
+        for key in ("manualBrightness", "manualHardwareBrightness", "manualSoftwareBrightness"):
+            value = expected.get(key)
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 100:
+                fail(f"settings.json: {row['name']} has an invalid {key}")
+
+    defaults = next((row for row in data["cases"] if row["name"] == "brightness-defaults"), None)
+    if defaults is None:
+        fail("settings.json: missing brightness-defaults vector")
+    else:
+        expected_defaults = {
+            "hardwareBrightnessEnabled": True,
+            "softwareBrightnessEnabled": True,
+            "splitBrightnessControls": False,
+            "manualHardwareBrightness": 80,
+            "manualSoftwareBrightness": 100,
+        }
+        for key, value in expected_defaults.items():
+            if defaults["expected"].get(key) != value:
+                fail(f"settings.json: brightness-defaults has an incorrect {key}")
+
+
+def check_brightness_routing() -> None:
+    path = VECTORS / "brightness-routing.json"
+    data = load(path)
+    if data is None:
+        return
+    if "softwareBrightnessFloor" not in data or data["softwareBrightnessFloor"] != 50:
+        fail("brightness-routing.json: softwareBrightnessFloor must be 50")
+    if "vectors" not in data or not data["vectors"]:
+        fail("brightness-routing.json: missing vectors")
+    for row in data.get("vectors", []):
+        for key in ("name", "master", "split", "hardwareAvailable", "softwareAvailable",
+                    "recoveryRegistered", "expectedSoftware"):
+            if key not in row:
+                fail(f"brightness-routing.json: row missing {key!r}: {row}")
+        hw = row.get("expectedHardware")
+        if hw is not None and (isinstance(hw, bool) or not isinstance(hw, int) or not 1 <= hw <= 100):
+            fail(f"brightness-routing.json: {row.get('name')} invalid expectedHardware")
+        sw = row.get("expectedSoftware")
+        if isinstance(sw, bool) or not isinstance(sw, int) or not 1 <= sw <= 100:
+            fail(f"brightness-routing.json: {row.get('name')} invalid expectedSoftware")
 
 
 def main() -> int:
@@ -183,6 +245,7 @@ def main() -> int:
     check_schedule()
     check_temperature_range()
     check_settings()
+    check_brightness_routing()
 
     if errors:
         for error in errors:

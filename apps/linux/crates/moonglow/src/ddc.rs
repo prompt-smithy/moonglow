@@ -11,6 +11,7 @@ use i2cdev::linux::{LinuxI2CBus, LinuxI2CError, LinuxI2CMessage};
 use moonglow_core::ddc::{self, CHIP_ADDRESS, DEBOUNCE_DELAY, MAX_ATTEMPTS, WRITE_DELAY};
 use moonglow_core::settings::AppSettings;
 use moonglow_core::traits::BrightnessService;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 
@@ -135,6 +136,8 @@ pub struct LinuxDdcService {
 
 struct Inner {
     supported: bool,
+    /// DRM connector names whose sysfs `ddc` link points at an answering I²C bus.
+    supported_connectors: HashSet<String>,
     /// Why the probe came back empty, if anything actionable was found.
     note: Option<String>,
     /// Shared with the worker thread: the latest requested brightness.
@@ -152,6 +155,10 @@ impl LinuxDdcService {
     }
 
     pub fn probe_under(dev_dir: &Path) -> Self {
+        Self::probe_under_with_drm_dir(dev_dir, Path::new("/sys/class/drm"))
+    }
+
+    fn probe_under_with_drm_dir(dev_dir: &Path, drm_dir: &Path) -> Self {
         let buses = enumerate_buses(dev_dir);
         let mut answering = Vec::new();
         let mut denied = 0;
@@ -166,10 +173,15 @@ impl LinuxDdcService {
         if let Some(note) = &note {
             eprintln!("brightness: DDC/CI unavailable ({note})");
         }
-        Self::with_buses(answering, note)
+        let supported_connectors = connectors_for_answering_buses(drm_dir, &answering);
+        Self::with_buses(answering, note, supported_connectors)
     }
 
-    fn with_buses(buses: Vec<PathBuf>, note: Option<String>) -> Self {
+    fn with_buses(
+        buses: Vec<PathBuf>,
+        note: Option<String>,
+        supported_connectors: HashSet<String>,
+    ) -> Self {
         let supported = !buses.is_empty();
         let (notify_tx, notify_rx) = mpsc::channel::<()>();
         // The worker owns its bus handles and applies the latest pending
@@ -200,6 +212,7 @@ impl LinuxDdcService {
         Self {
             inner: Mutex::new(Inner {
                 supported: supported && worker.is_some(),
+                supported_connectors,
                 note,
                 pending_brightness: pending,
                 notify_tx: Some(notify_tx),
@@ -207,6 +220,20 @@ impl LinuxDdcService {
                 disposed: false,
             }),
         }
+    }
+
+    /// DRM connector names backed by a DDC bus that answered the luminance probe.
+    pub fn supported_connectors(&self) -> HashSet<String> {
+        self.inner
+            .lock()
+            .map(|inner| {
+                if inner.supported {
+                    inner.supported_connectors.clone()
+                } else {
+                    HashSet::new()
+                }
+            })
+            .unwrap_or_default()
     }
 
     /// Re-runs the bus probe, e.g. after the display set changed. Disposes
@@ -228,6 +255,7 @@ impl LinuxDdcService {
         Self {
             inner: Mutex::new(Inner {
                 supported: false,
+                supported_connectors: HashSet::new(),
                 note: None,
                 pending_brightness: Arc::new(Mutex::new(DEFAULT_BRIGHTNESS)),
                 notify_tx: Some(notify_tx),
@@ -236,6 +264,99 @@ impl LinuxDdcService {
             }),
         }
     }
+}
+
+/// Maps DRM connectors to answering I²C adapter names through each connector's
+/// sysfs `ddc` symlink. Card-qualified names are used by the Wayland display
+/// enumerator; suffix aliases remain for RandR output names on X11.
+fn connectors_for_answering_buses(drm_dir: &Path, buses: &[PathBuf]) -> HashSet<String> {
+    let answering: HashSet<String> = buses
+        .iter()
+        .filter_map(|path| path.file_name()?.to_str().map(str::to_owned))
+        .collect();
+    if answering.is_empty() {
+        return HashSet::new();
+    }
+
+    let Ok(entries) = std::fs::read_dir(drm_dir) else {
+        return HashSet::new();
+    };
+    let entries: Vec<_> = entries.flatten().collect();
+    let mut suffix_counts = HashMap::<String, usize>::new();
+    for entry in &entries {
+        let entry_name = entry.file_name().to_string_lossy().into_owned();
+        if entry_name.starts_with("card") {
+            if let Some((_, connector)) = entry_name.split_once('-') {
+                *suffix_counts.entry(connector.to_owned()).or_default() += 1;
+            }
+        }
+    }
+
+    let mut connectors = HashSet::new();
+    for entry in &entries {
+        let entry_name = entry.file_name().to_string_lossy().into_owned();
+        if !entry_name.starts_with("card") || !entry_name.contains('-') {
+            continue;
+        }
+        let ddc = entry.path().join("ddc");
+        let target = std::fs::canonicalize(&ddc)
+            .ok()
+            .or_else(|| std::fs::read_link(&ddc).ok());
+        let Some(target) = target else { continue };
+        let bus_name = target
+            .components()
+            .filter_map(|component| component.as_os_str().to_str())
+            .filter(|component| {
+                component.starts_with("i2c-")
+                    && component[4..]
+                        .chars()
+                        .all(|character| character.is_ascii_digit())
+            })
+            .last();
+        let Some(bus_name) = bus_name else { continue };
+        if !answering.contains(bus_name) {
+            continue;
+        }
+        if let Some((_, connector)) = entry_name.split_once('-') {
+            connectors.insert(entry_name);
+            // RandR exposes connector suffixes without the DRM card name. Only
+            // publish that alias when it identifies exactly one DRM connector;
+            // an ambiguous name must conservatively fall back to software.
+            if suffix_counts.get(connector) == Some(&1) {
+                connectors.insert(connector.to_owned());
+            }
+        }
+    }
+
+    if connectors.is_empty() && !answering.is_empty() {
+        // Fallback: if no sysfs ddc symlink resolved, but answering external buses exist,
+        // map connected external connectors if their count matches answering buses.
+        let mut externals = Vec::new();
+        for entry in &entries {
+            let entry_name = entry.file_name().to_string_lossy().into_owned();
+            if entry_name.starts_with("card") && entry_name.contains('-') {
+                if let Some((_, connector)) = entry_name.split_once('-') {
+                    if !connector.starts_with("eDP") && !connector.starts_with("LVDS") {
+                        if let Ok(status) = std::fs::read_to_string(entry.path().join("status")) {
+                            if status.trim() == "connected" {
+                                externals.push((entry_name, connector.to_owned()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if !externals.is_empty() && externals.len() == answering.len() {
+            for (card_conn, connector) in externals {
+                connectors.insert(card_conn);
+                if suffix_counts.get(&connector) == Some(&1) {
+                    connectors.insert(connector);
+                }
+            }
+        }
+    }
+
+    connectors
 }
 
 impl BrightnessService for LinuxDdcService {

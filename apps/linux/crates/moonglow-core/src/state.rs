@@ -48,6 +48,9 @@ pub struct StateManager<S: SettingsPersistence> {
     /// The temperature currently on screen. In automatic mode this tracks the
     /// schedule rather than the saved manual value, hence separate storage.
     displayed_temperature: i32,
+    /// True only after the active desktop accepted the restore-to-100 shortcut.
+    brightness_recovery_shortcut_registered: bool,
+    hardware_owned: bool,
     login_registration_failed: bool,
     login_requires_approval: bool,
     on_show_settings: Option<Box<dyn FnMut() + Send>>,
@@ -78,6 +81,8 @@ impl<S: SettingsPersistence> StateManager<S> {
             settings: loaded,
             displays,
             displayed_temperature,
+            brightness_recovery_shortcut_registered: false,
+            hardware_owned: false,
             login_registration_failed: false,
             login_requires_approval: false,
             on_show_settings: None,
@@ -109,12 +114,54 @@ impl<S: SettingsPersistence> StateManager<S> {
         self.displays.is_empty()
     }
 
-    pub fn has_brightness_support(&self) -> bool {
+    pub fn all_displays_support_hardware_brightness(&self) -> bool {
+        !self.displays.is_empty()
+            && self
+                .brightness
+                .lock()
+                .map(|b| b.is_hardware_supported())
+                .unwrap_or(false)
+            && self
+                .displays
+                .iter()
+                .all(|display| display.supports_hardware_brightness)
+    }
+
+    pub fn has_hardware_brightness_support(&self) -> bool {
+        self.settings.hardware_brightness_enabled && self.all_displays_support_hardware_brightness()
+    }
+
+    pub fn has_software_brightness_support(&self) -> bool {
         self.brightness
             .lock()
-            .map(|b| b.is_supported())
+            .map(|b| b.is_software_supported())
             .unwrap_or(false)
-            && self.displays.iter().any(|d| d.supports_brightness)
+            && !self.displays.is_empty()
+            && self
+                .displays
+                .iter()
+                .all(|display| display.supports_software_brightness)
+    }
+
+    pub fn has_brightness_support(&self) -> bool {
+        self.has_hardware_brightness_support() || self.has_software_brightness_support()
+    }
+
+    pub fn has_brightness_recovery_shortcut(&self) -> bool {
+        self.settings.restore_brightness_shortcut.is_some()
+            && self.brightness_recovery_shortcut_registered
+    }
+
+    pub fn brightness_control_enabled(&self) -> bool {
+        self.hardware_brightness_control_enabled() || self.software_brightness_control_enabled()
+    }
+
+    pub fn hardware_brightness_control_enabled(&self) -> bool {
+        self.settings.hardware_brightness_enabled && self.all_displays_support_hardware_brightness()
+    }
+
+    pub fn software_brightness_control_enabled(&self) -> bool {
+        self.settings.software_brightness_enabled && self.has_software_brightness_support()
     }
 
     pub fn has_color_support(&self) -> bool {
@@ -123,8 +170,42 @@ impl<S: SettingsPersistence> StateManager<S> {
     }
 
     pub fn brightness_status(&self) -> String {
-        if self.has_brightness_support() {
-            return "Brightness control is available.".to_string();
+        if !self.settings.hardware_brightness_enabled && !self.settings.software_brightness_enabled
+        {
+            return "Hardware and software brightness are disabled in Settings.".to_string();
+        }
+        if self.hardware_brightness_control_enabled() {
+            if self.software_brightness_control_enabled() {
+                return if self.has_brightness_recovery_shortcut() {
+                    "Hardware brightness is available. Software dimming provides extra-low levels.".to_string()
+                } else {
+                    "Hardware brightness is available. Software dimming is limited to 50% until a restore shortcut is registered.".to_string()
+                };
+            }
+            return "Hardware brightness is available. Software Digital Shade is disabled in Settings.".to_string();
+        }
+        if self.settings.hardware_brightness_enabled
+            && self.brightness.lock().map(|b| b.is_hardware_supported()).unwrap_or(false)
+            && !self.all_displays_support_hardware_brightness()
+        {
+            if self.software_brightness_control_enabled() {
+                return if self.has_brightness_recovery_shortcut() {
+                    "At least one display lacks hardware brightness. Software dimming is applied across all displays.".to_string()
+                } else {
+                    "At least one display lacks hardware brightness. Software dimming is limited to 50% until a restore shortcut is registered.".to_string()
+                };
+            }
+            return "All connected displays must support hardware brightness, or software brightness must be enabled.".to_string();
+        }
+        if self.has_software_brightness_support() {
+            if !self.settings.software_brightness_enabled {
+                return "Software Digital Shade is disabled in Settings.".to_string();
+            }
+            return if self.has_brightness_recovery_shortcut() {
+                "Software brightness is available. The recovery shortcut restores it to 100%.".to_string()
+            } else {
+                "Software dimming is limited to 50% until a restore shortcut is registered.".to_string()
+            };
         }
         if let Some(detail) = self.brightness.lock().ok().and_then(|b| b.status_detail()) {
             return format!("Brightness control is unavailable. {detail}");
@@ -169,13 +250,11 @@ impl<S: SettingsPersistence> StateManager<S> {
         }
         if let Ok(mut brightness) = self.brightness.lock() {
             brightness.reprobe();
-            if brightness.is_supported() {
-                brightness.set_brightness(self.settings.manual_brightness);
-            }
         }
         // Capabilities are read again after probing, so newly discovered hardware
         // is immediately available to controls as well as to the backend.
         self.displays = self.display.refresh();
+        self.apply_brightness_safely();
         if !self.settings.auto_color_temperature && self.has_color_support() {
             if let Ok(color) = self.color.lock() {
                 color.apply(self.displayed_temperature);
@@ -186,23 +265,131 @@ impl<S: SettingsPersistence> StateManager<S> {
 
     // MARK: - Brightness
 
+    pub fn release_hardware_if_owned(&mut self) {
+        if !self.hardware_owned {
+            return;
+        }
+        if let Ok(brightness) = self.brightness.lock() {
+            if brightness.is_hardware_supported() {
+                brightness.set_hardware_brightness(100);
+            }
+        }
+        self.hardware_owned = false;
+    }
+
     pub fn brightness(&self) -> i32 {
-        self.settings.manual_brightness
+        if !self.hardware_brightness_control_enabled()
+            && self.software_brightness_control_enabled()
+            && !self.has_brightness_recovery_shortcut()
+        {
+            self.settings.manual_brightness.max(crate::settings::SOFTWARE_BRIGHTNESS_FLOOR)
+        } else {
+            self.settings.manual_brightness
+        }
     }
 
     pub fn set_brightness(&mut self, value: i32) {
+        if self.settings.split_brightness_controls {
+            return;
+        }
         let clamped = AppSettings::clamp_brightness(value);
         if clamped == self.settings.manual_brightness {
             return;
         }
         self.mutate_settings(|s| s.manual_brightness = clamped);
-        // The setting persists regardless; hardware only moves with a
-        // brightness-capable display attached.
-        if self.has_brightness_support() {
-            if let Ok(b) = self.brightness.lock() {
-                b.set_brightness(clamped);
+        self.apply_brightness_safely();
+    }
+
+    pub fn hardware_brightness(&self) -> i32 {
+        AppSettings::clamp_brightness(self.settings.manual_hardware_brightness)
+    }
+
+    pub fn set_hardware_brightness(&mut self, value: i32) {
+        if !self.hardware_brightness_control_enabled() {
+            return;
+        }
+        let value = AppSettings::clamp_brightness(value);
+        if value == self.settings.manual_hardware_brightness {
+            return;
+        }
+        self.mutate_settings(|settings| settings.manual_hardware_brightness = value);
+        self.apply_brightness_safely();
+    }
+
+    pub fn software_brightness(&self) -> i32 {
+        if !self.has_brightness_recovery_shortcut() {
+            AppSettings::clamp_brightness(self.settings.manual_software_brightness).max(crate::settings::SOFTWARE_BRIGHTNESS_FLOOR)
+        } else {
+            AppSettings::clamp_brightness(self.settings.manual_software_brightness)
+        }
+    }
+
+    pub fn set_software_brightness(&mut self, value: i32) {
+        if !self.software_brightness_control_enabled() {
+            return;
+        }
+        let value = AppSettings::clamp_brightness(value);
+        if value == self.settings.manual_software_brightness {
+            return;
+        }
+        self.mutate_settings(|settings| settings.manual_software_brightness = value);
+        self.apply_brightness_safely();
+    }
+
+    pub fn set_hardware_brightness_enabled(&mut self, enabled: bool) {
+        if enabled == self.settings.hardware_brightness_enabled {
+            return;
+        }
+        if !enabled {
+            self.release_hardware_if_owned();
+        }
+        self.mutate_settings(|settings| settings.hardware_brightness_enabled = enabled);
+        self.apply_brightness_safely();
+    }
+
+    pub fn set_software_brightness_enabled(&mut self, enabled: bool) {
+        if enabled == self.settings.software_brightness_enabled {
+            return;
+        }
+        if !enabled {
+            if let Ok(brightness) = self.brightness.lock() {
+                brightness.set_software_brightness(100);
             }
         }
+        self.mutate_settings(|settings| settings.software_brightness_enabled = enabled);
+        self.apply_brightness_safely();
+    }
+
+    pub fn set_split_brightness_controls(&mut self, enabled: bool) {
+        if enabled == self.settings.split_brightness_controls {
+            return;
+        }
+        if enabled {
+            let split = crate::brightness_plan::unified_to_split(
+                self.settings.manual_brightness,
+                self.hardware_brightness_control_enabled(),
+                self.software_brightness_control_enabled(),
+                self.has_brightness_recovery_shortcut(),
+            );
+            self.mutate_settings(|settings| {
+                settings.split_brightness_controls = true;
+                settings.manual_hardware_brightness = split.hardware;
+                settings.manual_software_brightness = split.software;
+            });
+        } else {
+            let master = crate::brightness_plan::split_to_unified(
+                self.settings.manual_hardware_brightness,
+                self.settings.manual_software_brightness,
+                self.hardware_brightness_control_enabled(),
+                self.software_brightness_control_enabled(),
+                self.has_brightness_recovery_shortcut(),
+            );
+            self.mutate_settings(|settings| {
+                settings.split_brightness_controls = false;
+                settings.manual_brightness = master;
+            });
+        }
+        self.apply_brightness_safely();
     }
 
     /// Brightness points per shortcut press.
@@ -211,16 +398,93 @@ impl<S: SettingsPersistence> StateManager<S> {
     /// One shortcut step up. Does nothing without a brightness-capable display,
     /// matching the macOS hot key.
     pub fn increase_brightness(&mut self) {
-        if self.has_brightness_support() {
-            self.set_brightness(self.brightness() + Self::HOTKEY_BRIGHTNESS_STEP);
+        if self.brightness_control_enabled() {
+            if self.settings.split_brightness_controls {
+                if self.software_brightness_control_enabled() && self.software_brightness() < 100 {
+                    self.set_software_brightness(
+                        self.software_brightness() + Self::HOTKEY_BRIGHTNESS_STEP,
+                    );
+                } else if self.hardware_brightness_control_enabled() {
+                    self.set_hardware_brightness(
+                        self.hardware_brightness() + Self::HOTKEY_BRIGHTNESS_STEP,
+                    );
+                }
+            } else {
+                self.set_brightness(self.brightness() + Self::HOTKEY_BRIGHTNESS_STEP);
+            }
         }
     }
 
     /// One shortcut step down.
     pub fn decrease_brightness(&mut self) {
-        if self.has_brightness_support() {
-            self.set_brightness(self.brightness() - Self::HOTKEY_BRIGHTNESS_STEP);
+        if self.brightness_control_enabled() {
+            if self.settings.split_brightness_controls {
+                if self.hardware_brightness_control_enabled() && self.hardware_brightness() > 1 {
+                    self.set_hardware_brightness(
+                        self.hardware_brightness() - Self::HOTKEY_BRIGHTNESS_STEP,
+                    );
+                } else if self.software_brightness_control_enabled() {
+                    self.set_software_brightness(
+                        self.software_brightness() - Self::HOTKEY_BRIGHTNESS_STEP,
+                    );
+                }
+            } else {
+                self.set_brightness(self.brightness() - Self::HOTKEY_BRIGHTNESS_STEP);
+            }
         }
+    }
+
+    /// Restores brightness immediately, even when the normal software control is locked.
+    pub fn restore_brightness_to_full(&mut self) {
+        self.mutate_settings(|settings| {
+            settings.manual_brightness = 100;
+            settings.manual_hardware_brightness = 100;
+            settings.manual_software_brightness = 100;
+        });
+        self.apply_brightness_with_recovery_override(true);
+    }
+
+    /// Called by the platform shortcut worker after a binding is accepted or rejected.
+    pub fn set_brightness_recovery_shortcut_registered(&mut self, registered: bool) {
+        self.brightness_recovery_shortcut_registered =
+            registered && self.settings.restore_brightness_shortcut.is_some();
+        self.apply_brightness_safely();
+    }
+
+    fn apply_brightness_safely(&mut self) {
+        self.apply_brightness_with_recovery_override(false);
+    }
+
+    fn apply_brightness_with_recovery_override(&mut self, allow_software_without_recovery: bool) {
+        let hardware_usable = self.hardware_brightness_control_enabled();
+        let software_usable = self.software_brightness_control_enabled();
+        let Ok(brightness) = self.brightness.lock() else {
+            return;
+        };
+
+        let route = crate::brightness_plan::compute_routing(
+            self.settings.manual_brightness,
+            self.settings.split_brightness_controls,
+            self.settings.manual_hardware_brightness,
+            self.settings.manual_software_brightness,
+            hardware_usable,
+            software_usable,
+            self.has_brightness_recovery_shortcut() || allow_software_without_recovery,
+        );
+
+        if let Some(hw) = route.hardware {
+            brightness.set_hardware_brightness(hw);
+            self.hardware_owned = true;
+        } else {
+            if self.hardware_owned {
+                if brightness.is_hardware_supported() {
+                    brightness.set_hardware_brightness(100);
+                }
+                self.hardware_owned = false;
+            }
+        }
+
+        brightness.set_software_brightness(route.software);
     }
 
     // MARK: - Colour temperature
@@ -345,6 +609,7 @@ impl<S: SettingsPersistence> StateManager<S> {
 
     pub fn shortcut(&self, action: ShortcutAction) -> Option<Shortcut> {
         match action {
+            ShortcutAction::RestoreBrightness => self.settings.restore_brightness_shortcut,
             ShortcutAction::IncreaseBrightness => self.settings.increase_brightness_shortcut,
             ShortcutAction::DecreaseBrightness => self.settings.decrease_brightness_shortcut,
             ShortcutAction::IncreaseTemperature => self.settings.increase_temperature_shortcut,
@@ -367,6 +632,7 @@ impl<S: SettingsPersistence> StateManager<S> {
         if self.shortcut(action) == value {
             return;
         }
+        let previous_recovery_shortcut = self.settings.restore_brightness_shortcut;
         self.mutate_settings(|settings| {
             if let Some(value) = value {
                 for other in ShortcutAction::ALL {
@@ -377,6 +643,10 @@ impl<S: SettingsPersistence> StateManager<S> {
             }
             set_shortcut(settings, action, value);
         });
+        if self.settings.restore_brightness_shortcut != previous_recovery_shortcut {
+            self.brightness_recovery_shortcut_registered = false;
+            self.apply_brightness_safely();
+        }
     }
 
     pub fn schedule_time(&self, which: ScheduleTime) -> TimeOfDay {
@@ -591,12 +861,7 @@ impl<S: SettingsPersistence> StateManager<S> {
 
     /// Pushes the persisted values to the hardware. Called once at launch.
     pub fn apply_initial_state(&mut self) {
-        if self.has_brightness_support() {
-            let level = self.settings.manual_brightness;
-            if let Ok(b) = self.brightness.lock() {
-                b.set_brightness(level);
-            }
-        }
+        self.apply_brightness_safely();
         if !self.settings.auto_color_temperature && self.has_color_support() {
             let kelvin = self.displayed_temperature;
             if let Ok(c) = self.color.lock() {
@@ -680,6 +945,7 @@ impl<S: SettingsPersistence> StateManager<S> {
 
 fn shortcut_of(settings: &AppSettings, action: ShortcutAction) -> Option<Shortcut> {
     match action {
+        ShortcutAction::RestoreBrightness => settings.restore_brightness_shortcut,
         ShortcutAction::IncreaseBrightness => settings.increase_brightness_shortcut,
         ShortcutAction::DecreaseBrightness => settings.decrease_brightness_shortcut,
         ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut,
@@ -690,6 +956,7 @@ fn shortcut_of(settings: &AppSettings, action: ShortcutAction) -> Option<Shortcu
 
 fn set_shortcut(settings: &mut AppSettings, action: ShortcutAction, value: Option<Shortcut>) {
     match action {
+        ShortcutAction::RestoreBrightness => settings.restore_brightness_shortcut = value,
         ShortcutAction::IncreaseBrightness => settings.increase_brightness_shortcut = value,
         ShortcutAction::DecreaseBrightness => settings.decrease_brightness_shortcut = value,
         ShortcutAction::IncreaseTemperature => settings.increase_temperature_shortcut = value,
@@ -739,18 +1006,37 @@ mod tests {
     }
 
     struct FakeBrightness {
-        supported: bool,
-        applied: Arc<StdMutex<Vec<i32>>>,
+        is_hardware: bool,
+        is_software: bool,
+        applied_hardware: Arc<StdMutex<Vec<i32>>>,
+        applied_software: Arc<StdMutex<Vec<i32>>>,
         detail: Option<String>,
         reprobes: Arc<StdMutex<usize>>,
     }
 
     impl BrightnessService for FakeBrightness {
         fn is_supported(&self) -> bool {
-            self.supported
+            self.is_hardware || self.is_software
+        }
+        fn is_hardware_supported(&self) -> bool {
+            self.is_hardware
+        }
+        fn is_software_supported(&self) -> bool {
+            self.is_software
         }
         fn set_brightness(&self, percent: i32) {
-            self.applied.lock().unwrap().push(percent);
+            if self.is_hardware {
+                self.applied_hardware.lock().unwrap().push(percent);
+            }
+            if self.is_software {
+                self.applied_software.lock().unwrap().push(percent);
+            }
+        }
+        fn set_hardware_brightness(&self, percent: i32) {
+            self.applied_hardware.lock().unwrap().push(percent);
+        }
+        fn set_software_brightness(&self, percent: i32) {
+            self.applied_software.lock().unwrap().push(percent);
         }
         fn status_detail(&self) -> Option<String> {
             self.detail.clone()
@@ -818,6 +1104,8 @@ mod tests {
         store: Arc<MemStore>,
         display_inner: Arc<StdMutex<FakeDisplayInner>>,
         brightness_applied: Arc<StdMutex<Vec<i32>>>,
+        #[allow(dead_code)]
+        brightness_software_applied: Arc<StdMutex<Vec<i32>>>,
         brightness_reprobes: Arc<StdMutex<usize>>,
         color_applied: Arc<StdMutex<Vec<i32>>>,
         login_inner: Arc<StdMutex<FakeLoginInner>>,
@@ -852,6 +1140,7 @@ mod tests {
             refresh_count: 0,
         }));
         let brightness_applied = Arc::new(StdMutex::new(Vec::new()));
+        let brightness_software_applied = Arc::new(StdMutex::new(Vec::new()));
         let brightness_reprobes = Arc::new(StdMutex::new(0usize));
         let color_applied = Arc::new(StdMutex::new(Vec::new()));
         let login_inner = Arc::new(StdMutex::new(FakeLoginInner {
@@ -865,8 +1154,10 @@ mod tests {
                 inner: display_inner.clone(),
             }),
             Arc::new(StdMutex::new(FakeBrightness {
-                supported: brightness_supported,
-                applied: brightness_applied.clone(),
+                is_hardware: brightness_supported,
+                is_software: brightness_supported && color_supported,
+                applied_hardware: brightness_applied.clone(),
+                applied_software: brightness_software_applied.clone(),
                 detail: None,
                 reprobes: brightness_reprobes.clone(),
             })),
@@ -884,6 +1175,7 @@ mod tests {
             store,
             display_inner,
             brightness_applied,
+            brightness_software_applied,
             brightness_reprobes,
             color_applied,
             login_inner,
@@ -907,7 +1199,11 @@ mod tests {
 
     #[test]
     fn brightness_clamps_to_range() {
-        let mut h = default_harness();
+        let settings = AppSettings {
+            software_brightness_enabled: false,
+            ..Default::default()
+        };
+        let mut h = make_harness(settings, true, true, None, true, false, false);
         h.state.set_brightness(500);
         assert_eq!(h.state.brightness(), 100);
         assert_eq!(*h.brightness_applied.lock().unwrap(), [100]);
@@ -1040,7 +1336,7 @@ mod tests {
         assert!(supported.state.has_color_support());
         assert_eq!(
             supported.state.brightness_status(),
-            "Brightness control is available."
+            "Hardware brightness is available. Software dimming is limited to 50% until a restore shortcut is registered."
         );
         assert_eq!(
             supported.state.color_status(),
@@ -1080,8 +1376,10 @@ mod tests {
                 })),
             }),
             Arc::new(StdMutex::new(FakeBrightness {
-                supported: false,
-                applied: Arc::new(StdMutex::new(Vec::new())),
+                is_hardware: false,
+                is_software: false,
+                applied_hardware: Arc::new(StdMutex::new(Vec::new())),
+                applied_software: Arc::new(StdMutex::new(Vec::new())),
                 detail: Some("permission denied on /dev/i2c-*".to_string()),
                 reprobes: Arc::new(StdMutex::new(0usize)),
             })),
@@ -1253,7 +1551,11 @@ mod tests {
 
     #[test]
     fn display_change_reprobes_and_reapplies_brightness() {
-        let mut h = default_harness();
+        let settings = AppSettings {
+            software_brightness_enabled: false,
+            ..Default::default()
+        };
+        let mut h = make_harness(settings, true, true, None, true, false, false);
         // Unchanged refresh: no reprobe, no re-apply.
         assert!(!h.state.refresh_displays());
         assert_eq!(*h.brightness_reprobes.lock().unwrap(), 0);
@@ -1340,6 +1642,7 @@ mod tests {
             auto_color_temperature: false,
             manual_brightness: 70,
             manual_color_temp_k: 4400,
+            software_brightness_enabled: false,
             ..Default::default()
         };
         let mut h = make_harness(settings, true, true, None, true, false, false);
@@ -1568,14 +1871,18 @@ mod tests {
         let hw_applied = Arc::new(StdMutex::new(Vec::new()));
         let sw_applied = Arc::new(StdMutex::new(Vec::new()));
         let hw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
-            supported: true,
-            applied: hw_applied.clone(),
+            is_hardware: true,
+            is_software: false,
+            applied_hardware: hw_applied.clone(),
+            applied_software: Arc::new(StdMutex::new(Vec::new())),
             detail: None,
             reprobes: Arc::new(StdMutex::new(0usize)),
         }));
         let sw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
-            supported: true,
-            applied: sw_applied.clone(),
+            is_hardware: false,
+            is_software: true,
+            applied_hardware: Arc::new(StdMutex::new(Vec::new())),
+            applied_software: sw_applied.clone(),
             detail: None,
             reprobes: Arc::new(StdMutex::new(0usize)),
         }));
@@ -1593,14 +1900,18 @@ mod tests {
         let hw_applied = Arc::new(StdMutex::new(Vec::new()));
         let sw_applied = Arc::new(StdMutex::new(Vec::new()));
         let hw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
-            supported: true,
-            applied: hw_applied.clone(),
+            is_hardware: true,
+            is_software: false,
+            applied_hardware: hw_applied.clone(),
+            applied_software: Arc::new(StdMutex::new(Vec::new())),
             detail: None,
             reprobes: Arc::new(StdMutex::new(0usize)),
         }));
         let sw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
-            supported: true,
-            applied: sw_applied.clone(),
+            is_hardware: false,
+            is_software: true,
+            applied_hardware: Arc::new(StdMutex::new(Vec::new())),
+            applied_software: sw_applied.clone(),
             detail: None,
             reprobes: Arc::new(StdMutex::new(0usize)),
         }));
@@ -1617,14 +1928,18 @@ mod tests {
         let hw_reprobes = Arc::new(StdMutex::new(0usize));
         let sw_reprobes = Arc::new(StdMutex::new(0usize));
         let hw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
-            supported: false,
-            applied: Arc::new(StdMutex::new(Vec::new())),
+            is_hardware: false,
+            is_software: false,
+            applied_hardware: Arc::new(StdMutex::new(Vec::new())),
+            applied_software: Arc::new(StdMutex::new(Vec::new())),
             detail: None,
             reprobes: hw_reprobes.clone(),
         }));
         let sw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
-            supported: true,
-            applied: Arc::new(StdMutex::new(Vec::new())),
+            is_hardware: false,
+            is_software: true,
+            applied_hardware: Arc::new(StdMutex::new(Vec::new())),
+            applied_software: Arc::new(StdMutex::new(Vec::new())),
             detail: None,
             reprobes: sw_reprobes.clone(),
         }));
@@ -1640,14 +1955,18 @@ mod tests {
         let hw_applied = Arc::new(StdMutex::new(Vec::new()));
         let sw_applied = Arc::new(StdMutex::new(Vec::new()));
         let hw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
-            supported: false,
-            applied: hw_applied.clone(),
+            is_hardware: false,
+            is_software: false,
+            applied_hardware: hw_applied.clone(),
+            applied_software: Arc::new(StdMutex::new(Vec::new())),
             detail: Some("no reply".to_string()),
             reprobes: Arc::new(StdMutex::new(0usize)),
         }));
         let sw: Arc<StdMutex<dyn BrightnessService>> = Arc::new(StdMutex::new(FakeBrightness {
-            supported: true,
-            applied: sw_applied.clone(),
+            is_hardware: false,
+            is_software: true,
+            applied_hardware: Arc::new(StdMutex::new(Vec::new())),
+            applied_software: sw_applied.clone(),
             detail: None,
             reprobes: Arc::new(StdMutex::new(0usize)),
         }));
@@ -1762,7 +2081,42 @@ mod tests {
             .set_shortcut(ShortcutAction::DecreaseBrightness, Some(naked));
         assert_eq!(
             harness.state.shortcut(ShortcutAction::DecreaseBrightness),
-            Some(ShortcutAction::DecreaseBrightness.default_shortcut())
+            ShortcutAction::DecreaseBrightness.default_shortcut()
         );
+    }
+
+    #[test]
+    fn split_mode_hotkeys_cascade_software_to_hardware_and_back() {
+        let mut settings = AppSettings::default();
+        settings.split_brightness_controls = true;
+        settings.manual_hardware_brightness = 1;
+        settings.manual_software_brightness = 100;
+        let mut harness = make_harness(settings, true, true, None, true, false, false);
+
+        // Dimmer: software steps down from 100 to 95 because hardware is already at 1.
+        harness.state.decrease_brightness();
+        assert_eq!(harness.state.software_brightness(), 95);
+        assert_eq!(harness.state.hardware_brightness(), 1);
+
+        // Brighter: software steps back up to 100.
+        harness.state.increase_brightness();
+        assert_eq!(harness.state.software_brightness(), 100);
+        assert_eq!(harness.state.hardware_brightness(), 1);
+
+        // Brighter again: software is at 100, so hardware cascades up from 1 to 6.
+        harness.state.increase_brightness();
+        assert_eq!(harness.state.software_brightness(), 100);
+        assert_eq!(harness.state.hardware_brightness(), 6);
+    }
+
+    #[test]
+    fn saved_brightness_survives_late_hardware_probe_without_overwrite() {
+        let mut settings = AppSettings::default();
+        settings.manual_brightness = 40;
+        settings.restore_brightness_shortcut = None;
+        let mut harness = make_harness(settings, false, true, None, true, false, false);
+        harness.state.apply_initial_state();
+        assert_eq!(harness.state.settings().manual_brightness, 40);
+        assert_eq!(harness.store.load().manual_brightness, 40);
     }
 }

@@ -82,6 +82,16 @@
                 </TextBlock>
             </Grid>
 
+            <TextBlock Text="Brightness controls" Style="{StaticResource SectionHeader}" />
+            <CheckBox Content="Enable Hardware Backlight Control (DDC/CI or internal panel)"
+                      IsChecked="{Binding HardwareBrightnessEnabled, Mode=TwoWay}" />
+            <CheckBox Content="Enable Digital Shade (Software Dimming)"
+                      IsChecked="{Binding SoftwareBrightnessEnabled, Mode=TwoWay}" />
+            <CheckBox Content="Show split sliders in the tray by default"
+                      IsChecked="{Binding SplitBrightnessControls, Mode=TwoWay}" />
+            <TextBlock Text="When any active display lacks hardware brightness, software dimming is used across all displays. Software dimming requires a registered Restore brightness to 100% shortcut."
+                       Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,6,0,0" TextWrapping="Wrap" />
+
             <TextBlock Text="Morning transition (warm → cool)" Style="{StaticResource SectionHeader}" />
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -200,6 +210,22 @@
                                     Click="ClearHotkey_Click" Tag="{x:Static core:HotkeySlot.DecreaseTemperature}" />
                             <Button Grid.Column="2" Content="{Binding DecreaseTemperatureHotkeyText}" MinWidth="130" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
                                     Click="RecordHotkey_Click" Tag="{x:Static core:HotkeySlot.DecreaseTemperature}" />
+                        </Grid>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="Restore brightness to 100%" />
+                                <TextBlock Text="Emergency reset for software brightness" FontSize="11" Foreground="{DynamicResource ThemeSecondaryText}" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Clear" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    IsEnabled="{Binding HasRestoreBrightnessHotkey}"
+                                    Click="ClearHotkey_Click" Tag="{x:Static core:HotkeySlot.RestoreBrightness}" />
+                            <Button Grid.Column="2" Content="{Binding RestoreBrightnessHotkeyText}" MinWidth="130" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    Click="RecordHotkey_Click" Tag="{x:Static core:HotkeySlot.RestoreBrightness}" />
                         </Grid>
                         <TextBlock Text="{Binding HotkeyMessage}" Foreground="{DynamicResource ThemeSecondaryText}" Margin="0,8,0,0" TextWrapping="Wrap" />
                         <Button Content="Reset defaults" HorizontalAlignment="Left" Margin="0,8,0,0" Padding="12,5" Click="ResetHotkeys_Click" />

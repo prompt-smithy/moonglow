@@ -6,14 +6,16 @@
 
 use moonglow_core::traits::DisplayService;
 use moonglow_core::DisplayInfo;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
-type CapabilityProvider = Box<dyn Fn() -> (bool, bool, bool) + Send>;
+type CapabilityProvider = Box<dyn Fn() -> (HashSet<String>, bool, bool) + Send>;
 
 /// Enumerates connected DRM connectors.
 pub struct SysfsDisplayService {
     drm_dir: PathBuf,
     ddc_brightness_supported: bool,
+    ddc_connectors: Option<HashSet<String>>,
     software_brightness_supported: bool,
     gamma_supported: bool,
     displays: Vec<DisplayInfo>,
@@ -22,7 +24,7 @@ pub struct SysfsDisplayService {
 
 impl SysfsDisplayService {
     pub fn with_live_capabilities(
-        provider: impl Fn() -> (bool, bool, bool) + Send + 'static,
+        provider: impl Fn() -> (HashSet<String>, bool, bool) + Send + 'static,
     ) -> Self {
         let mut service = Self::new(false, false, false);
         service.live_capabilities = Some(Box::new(provider));
@@ -53,6 +55,7 @@ impl SysfsDisplayService {
         Self {
             drm_dir,
             ddc_brightness_supported: ddc,
+            ddc_connectors: None,
             software_brightness_supported: software_brightness,
             gamma_supported: gamma,
             displays: Vec::new(),
@@ -68,37 +71,47 @@ impl DisplayService for SysfsDisplayService {
 
     fn refresh(&mut self) -> Vec<DisplayInfo> {
         if let Some(provider) = &self.live_capabilities {
-            let (ddc, software, gamma) = provider();
-            self.ddc_brightness_supported = ddc;
+            let (ddc_connectors, software, gamma) = provider();
+            self.ddc_brightness_supported = !ddc_connectors.is_empty();
+            self.ddc_connectors = Some(ddc_connectors);
             self.software_brightness_supported = software;
             self.gamma_supported = gamma;
         }
         let mut connectors = connected_connectors(&self.drm_dir);
-        connectors.sort();
+        connectors.sort_by(|left, right| left.0.cmp(&right.0));
         self.displays = connectors
             .iter()
             .enumerate()
-            .map(|(index, name)| {
+            .map(|(index, (drm_name, name))| {
                 // First connected connector is treated as primary; sysfs has no
                 // primary concept. eDP/LVDS panels are internal: DDC never
                 // reaches them, but gamma and (laptop) software dimming do.
                 let internal = name.contains("eDP") || name.contains("LVDS");
+                let hardware_supported = !internal
+                    && self
+                        .ddc_connectors
+                        .as_ref()
+                        .map_or(self.ddc_brightness_supported, |connectors| {
+                            connectors.contains(drm_name)
+                        });
                 DisplayInfo::new(
                     name.clone(),
                     name.clone(),
-                    format!("drm-{name}"),
+                    format!("drm-{drm_name}"),
                     index == 0,
-                    (self.ddc_brightness_supported && !internal)
-                        || self.software_brightness_supported,
+                    hardware_supported || self.software_brightness_supported,
                     self.gamma_supported,
                 )
+                .with_brightness_modes(hardware_supported, self.software_brightness_supported)
             })
             .collect();
         self.displays.clone()
     }
 }
 
-fn connected_connectors(drm_dir: &PathBuf) -> Vec<String> {
+/// Returns `(card-qualified DRM connector, display name)` pairs. Connector
+/// suffixes such as `DP-1` can repeat on different graphics cards.
+fn connected_connectors(drm_dir: &PathBuf) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let entries = match std::fs::read_dir(drm_dir) {
         Ok(entries) => entries,
@@ -112,8 +125,9 @@ fn connected_connectors(drm_dir: &PathBuf) -> Vec<String> {
         let status = entry.path().join("status");
         if let Ok(text) = std::fs::read_to_string(&status) {
             if text.trim() == "connected" {
-                if let Some(connector) = name.split_once('-').map(|(_, c)| c.to_string()) {
-                    out.push(connector);
+                if let Some((_, connector)) = name.split_once('-') {
+                    let display_name = connector.to_string();
+                    out.push((name, display_name));
                 }
             }
         }

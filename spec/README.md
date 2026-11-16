@@ -13,7 +13,8 @@ spec/
 │   ├── kelvin.json               kelvin → normalized RGB channel scale
 │   ├── schedule.json             schedule evaluation at fixed times
 │   ├── temperature-range.json    snapping and clamping
-│   └── settings.json             normalization on load
+│   ├── settings.json             normalization on load
+│   └── brightness-routing.json   dual brightness routing, floor & mode transitions
 └── learnings/
     └── windows-popup-color-slider.md   post-merge Windows slider bugs and the
                                         rules that stop them coming back
@@ -33,6 +34,12 @@ happened to be read first. The defaults are now reconciled across all three impl
 | --- | --- | --- | --- |
 | `nightColorTempK` | 1200 | 1200 | 1200 |
 | `manualBrightness` | 80 | 80 | 80 |
+| `hardwareBrightnessEnabled` | true | true | true |
+| `softwareBrightnessEnabled` | true | true | true |
+| `splitBrightnessControls` | false | false | false |
+| `manualHardwareBrightness` | 80 | 80 | 80 |
+| `manualSoftwareBrightness` | 100 | 100 | 100 |
+| `softwareBrightnessFloor` (constant) | 50 | 50 | 50 |
 | `morningStart` / `morningEnd` | 06:00 / 07:00 | 06:00 / 07:00 | 06:00 / 07:00 |
 | `eveningStart` / `eveningEnd` | 17:30 / 18:30 | 17:30 / 18:30 | 17:30 / 18:30 |
 | `launchAtLogin` key | present | present | present |
@@ -40,11 +47,17 @@ happened to be read first. The defaults are now reconciled across all three impl
 Ranges, the 100 K step, the five-state schedule model, lenient decoding, and the
 schedule-ordering clamp also agree everywhere.
 
-Global shortcuts share the four setting keys but not their representation: macOS
-stores `{keyCode, modifiers}`, while Linux stores a readable `"Ctrl+Alt+Up"`
-string. Both are documented by the `hotKey` definition in the schema, are
-platform-specific, and are not portable between operating systems. `null`
-disables one action without disturbing the others.
+Global shortcuts share five setting keys: increase/decrease brightness, increase/decrease
+temperature, and restore brightness to 100%. macOS stores `{keyCode, modifiers}`, while
+Linux stores a readable `"Ctrl+Alt+Up"` string, and Windows stores standard key gestures.
+`restoreBrightnessShortcut` deliberately has no default and unlocks software dimming below
+the 50% safety floor down to 1%.
+
+Brightness control supports dual engines: hardware (DDC/CI or internal panel) and
+software (GPU gamma ramp or digital shade). Under unified mode, the 1–100% slider maps
+50–100% to hardware (with software at 100%), and 1–49% to software (with hardware at 1%).
+Without a registered recovery shortcut, software dimming is floored at 50% (`softwareBrightnessFloor`).
+`vectors/brightness-routing.json` pins the routing and mode transition calculations.
 
 Persisted settings are normalized before use: temperatures snap to 100 K, targets are
 ordered, and an inverted or overlapping schedule falls back to the four default times.

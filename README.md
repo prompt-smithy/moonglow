@@ -10,7 +10,7 @@ apps share a product, a behavioural contract, and a release process, not source 
 | | Language | Package | Notes |
 |---|---|---|---|
 | [`apps/windows`](apps/windows) | C# / .NET Framework 4.8 / WPF | `Moonglow.csproj` | Tray app, Inno Setup installer |
-| [`apps/linux`](apps/linux) | Rust (eframe) | `moonglow` + `moonglow-core` | Desktop app, global shortcuts, deb/rpm/AUR |
+| [`apps/linux`](apps/linux) | Rust (GTK4 / libadwaita) | `moonglow` + `moonglow-core` | Desktop app, global shortcuts, deb/rpm/AUR |
 | [`apps/macos`](apps/macos) | Swift / SwiftUI | `Moonglow` + `MoonglowKit` | Menu bar app, DMG/ZIP |
 
 The Windows app's data handling is described in the [privacy policy](PRIVACY.md).

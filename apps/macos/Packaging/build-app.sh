@@ -31,6 +31,12 @@ configuration="${MOONGLOW_CONFIGURATION:-release}"
 signing_identity="${MOONGLOW_SIGNING_IDENTITY:-}"
 notarize="${MOONGLOW_NOTARIZE:-0}"
 notary_keychain_profile="${MOONGLOW_NOTARY_KEYCHAIN_PROFILE:-}"
+sandbox_prototype="${MOONGLOW_APP_SANDBOXED:-0}"
+bundle_identifier="${MOONGLOW_BUNDLE_IDENTIFIER:-com.prompt-smithy.Moonglow}"
+signing_entitlements=()
+if [ "$sandbox_prototype" = "1" ]; then
+    signing_entitlements=(--entitlements "$script_dir/AppStoreSandbox.entitlements")
+fi
 # Single source for the release version, stamped into the built plist below.
 deployment_target="12.0"
 arm64_triple="arm64-apple-macosx$deployment_target"
@@ -53,9 +59,9 @@ fi
 sign_app() {
     local path="$1"
     if [ -n "$signing_identity" ]; then
-        codesign --force --options runtime --timestamp --sign "$signing_identity" "$path"
+        codesign --force --options runtime --timestamp ${signing_entitlements[@]+"${signing_entitlements[@]}"} --sign "$signing_identity" "$path"
     else
-        codesign --force --sign - "$path"
+        codesign --force ${signing_entitlements[@]+"${signing_entitlements[@]}"} --sign - "$path"
     fi
 }
 
@@ -131,6 +137,11 @@ cp "$script_dir/Info.plist" "$app_dir/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$moonglow_version" "$app_dir/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$moonglow_build" "$app_dir/Contents/Info.plist"
 plutil -insert MoonglowInstallationID -string "$moonglow_version ($moonglow_build)" "$app_dir/Contents/Info.plist"
+if [ "$sandbox_prototype" = "1" ]; then
+    plutil -replace CFBundleIdentifier -string "$bundle_identifier" "$app_dir/Contents/Info.plist"
+    plutil -replace CFBundleDisplayName -string "Moonglow Sandbox Prototype" "$app_dir/Contents/Info.plist"
+    plutil -replace CFBundleName -string "Moonglow Sandbox Prototype" "$app_dir/Contents/Info.plist"
+fi
 
 sips -z 16 16 "$icon_source" --out "$iconset_dir/icon_16x16.png" >/dev/null
 sips -z 32 32 "$icon_source" --out "$iconset_dir/icon_16x16@2x.png" >/dev/null

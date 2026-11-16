@@ -235,6 +235,7 @@ fn dispatch<S: SettingsPersistence>(
             Some(action) => match state.lock() {
                 Ok(mut s) => {
                     match action {
+                        "restore-brightness" => s.restore_brightness_to_full(),
                         "increase-brightness" => s.increase_brightness(),
                         "decrease-brightness" => s.decrease_brightness(),
                         "increase-temperature" => s.increase_color_temperature(),
@@ -395,6 +396,7 @@ fn dispatch<S: SettingsPersistence>(
                 },
                 "login": s.launch_at_login(),
                 "hasBrightness": s.has_brightness_support(),
+                "brightnessEnabled": s.brightness_control_enabled(),
                 "hasColor": s.has_color_support(),
                 "brightnessStatus": s.brightness_status(),
                 "colorStatus": s.color_status(),

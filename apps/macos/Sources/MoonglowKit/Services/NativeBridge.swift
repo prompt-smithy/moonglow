@@ -22,6 +22,7 @@ import Foundation
 /// The service object they return is a Core Foundation value: it is held as an `Unmanaged`
 /// reference and released explicitly, or it leaks.
 
+#if !MOONGLOW_APP_SANDBOXED
 /// Runtime binding for the private CoreDisplay DDC/CI entry points.
 private enum CoreDisplayBridge {
 
@@ -65,6 +66,7 @@ private enum CoreDisplayBridge {
         Unmanaged<AnyObject>.fromOpaque(service).release()
     }
 }
+#endif
 
 // MARK: - Display enumeration
 
@@ -114,14 +116,17 @@ public final class CoreGraphicsDisplayService: DisplayService {
             // DDC/CI only reaches an external panel, and only the primary display is addressed.
             let isBuiltin = CGDisplayIsBuiltin(id) != 0
 
+            let supportsHardware = ddcBrightnessSupported() && isPrimary && !isBuiltin
+            let supportsSoftware = supportsGamma
+
             return DisplayInfo(
                 nativeId: id,
                 name: isPrimary ? "Built-in or primary display" : "External display \(index + 1)",
                 isPrimary: isPrimary,
-                supportsBrightness: ddcBrightnessSupported()
-                    ? isPrimary && !isBuiltin
-                    : supportsGamma,
-                supportsColorTemperature: supportsGamma
+                supportsBrightness: supportsHardware || supportsSoftware,
+                supportsColorTemperature: supportsGamma,
+                supportsHardwareBrightness: supportsHardware,
+                supportsSoftwareBrightness: supportsSoftware
             )
         }
 
@@ -315,6 +320,8 @@ public final class CoreGraphicsBrightnessService: BrightnessService {
     }
 
     public var isSupported: Bool { colorService.supportsSoftwareBrightness }
+    public var isHardwareSupported: Bool { false }
+    public var isSoftwareSupported: Bool { isSupported }
 
     public func setBrightness(percent: Int) {
         colorService.setSoftwareBrightness(percent: percent)
@@ -322,6 +329,8 @@ public final class CoreGraphicsBrightnessService: BrightnessService {
 }
 
 // MARK: - Hardware brightness
+
+#if !MOONGLOW_APP_SANDBOXED
 
 /// DDC/CI transaction transport behind ``AppleSiliconBrightnessService``.
 ///
@@ -674,3 +683,4 @@ public final class AppleSiliconBrightnessService: BrightnessService {
 private func hex(_ bytes: [UInt8]) -> String {
     bytes.map { String(format: "%02x", $0) }.joined(separator: " ")
 }
+#endif

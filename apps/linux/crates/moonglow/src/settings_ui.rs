@@ -112,6 +112,11 @@ pub const CLI_COMMANDS: &[CliCommand] = &[
         desc: "Shortcut action: brightness -5%.",
     },
     CliCommand {
+        name: "restore-brightness",
+        usage: "--restore-brightness",
+        desc: "Shortcut action: restore brightness to 100%.",
+    },
+    CliCommand {
         name: "set-temp",
         usage: "--set-temp KELVIN",
         desc: "Set temperature (manual mode).",
@@ -183,8 +188,9 @@ pub const CLI_COMMANDS: &[CliCommand] = &[
     },
 ];
 
-fn shortcuts_of(settings: &AppSettings) -> [Option<Shortcut>; 5] {
+fn shortcuts_of(settings: &AppSettings) -> [Option<Shortcut>; 6] {
     [
+        settings.restore_brightness_shortcut,
         settings.increase_brightness_shortcut,
         settings.decrease_brightness_shortcut,
         settings.increase_temperature_shortcut,
@@ -195,6 +201,7 @@ fn shortcuts_of(settings: &AppSettings) -> [Option<Shortcut>; 5] {
 
 fn shortcut_hint(action: ShortcutAction) -> &'static str {
     match action {
+        ShortcutAction::RestoreBrightness => "Emergency reset to 100%",
         ShortcutAction::IncreaseBrightness => "Brightness +5%",
         ShortcutAction::DecreaseBrightness => "Brightness −5%",
         ShortcutAction::IncreaseTemperature => "+100 K, cooler",
@@ -266,15 +273,24 @@ struct UiWidgets {
     status_row: adw::ActionRow,
     brightness_scale: gtk::Scale,
     brightness_value: gtk::Label,
+    brightness_info: gtk::Button,
+    brightness_master_row: adw::ActionRow,
     brightness_group: adw::PreferencesGroup,
+    brightness_split_expander: gtk::Expander,
+    hardware_brightness_scale: gtk::Scale,
+    hardware_brightness_value: gtk::Label,
+    software_brightness_scale: gtk::Scale,
+    software_brightness_value: gtk::Label,
+    hardware_brightness_switch: gtk::Switch,
+    software_brightness_switch: gtk::Switch,
     temp_scale: gtk::Scale,
     temp_value: gtk::Label,
     temp_hint: gtk::Label,
     auto_switch: gtk::Switch,
     range_area: gtk::DrawingArea,
     range_text: gtk::Label,
-    record_buttons: [gtk::Button; 5],
-    clear_buttons: [gtk::Button; 5],
+    record_buttons: [gtk::Button; 6],
+    clear_buttons: [gtk::Button; 6],
     shortcut_message: gtk::Label,
     backend_detail: gtk::Label,
     time_drops: [[gtk::DropDown; 3]; 4],
@@ -301,12 +317,17 @@ struct Model<S: SettingsPersistence> {
     // Local control state, re-synced whenever settings change elsewhere.
     last_seen: AppSettings,
     brightness: i32,
+    hardware_brightness: i32,
+    software_brightness: i32,
+    hardware_brightness_enabled: bool,
+    software_brightness_enabled: bool,
+    split_brightness_controls: bool,
     temperature: i32,
     auto: bool,
     launch_at_login: bool,
     times: [TwelveHourTime; 4],
     range: TemperatureRange,
-    shortcuts: [Option<Shortcut>; 5],
+    shortcuts: [Option<Shortcut>; 6],
     recording: Option<usize>,
     shortcut_message: Option<(String, Instant)>,
     last_activity: Instant,
@@ -339,6 +360,11 @@ impl<S: SettingsPersistence> Model<S> {
         {
             let mut m = model.borrow_mut();
             m.brightness = settings.manual_brightness;
+            m.hardware_brightness = settings.manual_hardware_brightness;
+            m.software_brightness = settings.manual_software_brightness;
+            m.hardware_brightness_enabled = settings.hardware_brightness_enabled;
+            m.software_brightness_enabled = settings.software_brightness_enabled;
+            m.split_brightness_controls = settings.split_brightness_controls;
             m.auto = settings.auto_color_temperature;
             m.launch_at_login = settings.launch_at_login;
             m.times = [
@@ -360,16 +386,44 @@ impl<S: SettingsPersistence> Model<S> {
     fn push_to_widgets(model: &SharedModel<S>) {
         struct Snap {
             brightness: i32,
+            hardware_brightness: i32,
+            software_brightness: i32,
+            hardware_enabled: bool,
+            software_enabled: bool,
+            split: bool,
             temperature: i32,
             auto: bool,
             login: bool,
             times: [TwelveHourTime; 4],
         }
-        let (snap, bscale, bval, tscale, tval, asw, lsw, drops, area) = {
+        let (
+            snap,
+            bscale,
+            bval,
+            master_row,
+            hscale,
+            hval,
+            sscale,
+            sval,
+            split,
+            hswitch,
+            sswitch,
+            tscale,
+            tval,
+            asw,
+            lsw,
+            drops,
+            area,
+        ) = {
             let m = model.borrow();
             (
                 Snap {
                     brightness: m.brightness,
+                    hardware_brightness: m.hardware_brightness,
+                    software_brightness: m.software_brightness,
+                    hardware_enabled: m.hardware_brightness_enabled,
+                    software_enabled: m.software_brightness_enabled,
+                    split: m.split_brightness_controls,
                     temperature: m.temperature,
                     auto: m.auto,
                     login: m.launch_at_login,
@@ -377,6 +431,14 @@ impl<S: SettingsPersistence> Model<S> {
                 },
                 m.w.brightness_scale.clone(),
                 m.w.brightness_value.clone(),
+                m.w.brightness_master_row.clone(),
+                m.w.hardware_brightness_scale.clone(),
+                m.w.hardware_brightness_value.clone(),
+                m.w.software_brightness_scale.clone(),
+                m.w.software_brightness_value.clone(),
+                m.w.brightness_split_expander.clone(),
+                m.w.hardware_brightness_switch.clone(),
+                m.w.software_brightness_switch.clone(),
                 m.w.temp_scale.clone(),
                 m.w.temp_value.clone(),
                 m.w.auto_switch.clone(),
@@ -388,6 +450,15 @@ impl<S: SettingsPersistence> Model<S> {
         suppressed(model, move || {
             bscale.set_value(snap.brightness as f64);
             bval.set_label(&format!("{}%", snap.brightness));
+            bscale.set_visible(!snap.split);
+            bval.set_visible(!snap.split);
+            hscale.set_value(snap.hardware_brightness as f64);
+            hval.set_label(&format!("{}%", snap.hardware_brightness));
+            sscale.set_value(snap.software_brightness as f64);
+            sval.set_label(&format!("{}%", snap.software_brightness));
+            split.set_expanded(snap.split);
+            hswitch.set_active(snap.hardware_enabled);
+            sswitch.set_active(snap.software_enabled);
             tscale.set_value(snap.temperature as f64);
             tval.set_label(&format!("{} K", snap.temperature));
             asw.set_active(snap.auto);
@@ -687,6 +758,19 @@ fn build_widgets(
     let brightness_group = adw::PreferencesGroup::builder().title("Brightness").build();
     let brightness_scale = make_scale(settings.manual_brightness as f64, 1.0, 100.0, 1.0);
     let brightness_value = value_label(&format!("{}%", settings.manual_brightness));
+    let hardware_brightness_scale =
+        make_scale(settings.manual_hardware_brightness as f64, 1.0, 100.0, 1.0);
+    let hardware_brightness_value =
+        value_label(&format!("{}%", settings.manual_hardware_brightness));
+    let software_brightness_scale =
+        make_scale(settings.manual_software_brightness as f64, 1.0, 100.0, 1.0);
+    let software_brightness_value =
+        value_label(&format!("{}%", settings.manual_software_brightness));
+    let brightness_info = gtk::Button::builder()
+        .icon_name("dialog-information-symbolic")
+        .tooltip_text("Why is brightness disabled?")
+        .valign(gtk::Align::Center)
+        .build();
     let brightness_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
         .spacing(6)
@@ -694,9 +778,44 @@ fn build_widgets(
         .build();
     brightness_box.append(&brightness_scale);
     brightness_box.append(&brightness_value);
-    let brightness_row = adw::ActionRow::builder().title("Level").build();
-    brightness_row.add_suffix(&brightness_box);
-    brightness_group.add(&brightness_row);
+    brightness_box.append(&brightness_info);
+    let brightness_master_row = adw::ActionRow::builder().title("Level").build();
+    brightness_master_row.add_suffix(&brightness_box);
+    brightness_group.add(&brightness_master_row);
+
+    let brightness_split_expander = gtk::Expander::builder()
+        .label("Advanced: separate Backlight and Digital Shade")
+        .expanded(settings.split_brightness_controls)
+        .build();
+    let split_box = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(4)
+        .build();
+    for (title, scale, value) in [
+        (
+            "Backlight",
+            &hardware_brightness_scale,
+            &hardware_brightness_value,
+        ),
+        (
+            "Digital Shade",
+            &software_brightness_scale,
+            &software_brightness_value,
+        ),
+    ] {
+        let row = adw::ActionRow::builder().title(title).build();
+        let controls = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(6)
+            .hexpand(true)
+            .build();
+        controls.append(scale);
+        controls.append(value);
+        row.add_suffix(&controls);
+        split_box.append(&row);
+    }
+    brightness_split_expander.set_child(Some(&split_box));
+    brightness_group.add(&brightness_split_expander);
     display_page.add(&brightness_group);
 
     // Colour temperature.
@@ -762,7 +881,22 @@ fn build_widgets(
         status_row,
         brightness_scale,
         brightness_value,
+        brightness_info,
+        brightness_master_row,
         brightness_group,
+        brightness_split_expander,
+        hardware_brightness_scale,
+        hardware_brightness_value,
+        software_brightness_scale,
+        software_brightness_value,
+        hardware_brightness_switch: gtk::Switch::builder()
+            .active(settings.hardware_brightness_enabled)
+            .valign(gtk::Align::Center)
+            .build(),
+        software_brightness_switch: gtk::Switch::builder()
+            .active(settings.software_brightness_enabled)
+            .valign(gtk::Align::Center)
+            .build(),
         temp_scale,
         temp_value,
         temp_hint,
@@ -816,6 +950,31 @@ fn build_tail(
     preferences_page: &adw::PreferencesPage,
     w: &UiWidgets,
 ) {
+    let brightness_engines = adw::PreferencesGroup::builder()
+        .title("Brightness engines")
+        .description("When multiple displays are connected, hardware is used only if every display supports it; otherwise software dimming is applied across all displays.")
+        .build();
+    for (title, subtitle, switch) in [
+        (
+            "Hardware Backlight (DDC/CI)",
+            "Allow Moonglow to adjust physical display brightness.",
+            &w.hardware_brightness_switch,
+        ),
+        (
+            "Software Digital Shade",
+            "Dim the image through gamma control. A registered restore shortcut is required.",
+            &w.software_brightness_switch,
+        ),
+    ] {
+        let row = adw::ActionRow::builder()
+            .title(title)
+            .subtitle(subtitle)
+            .build();
+        row.add_suffix(switch);
+        brightness_engines.add(&row);
+    }
+    preferences_page.add(&brightness_engines);
+
     // Schedule.
     let schedule_group = adw::PreferencesGroup::builder()
         .title("Schedule")
@@ -846,6 +1005,7 @@ fn build_tail(
         .build();
     for (index, action) in ShortcutAction::ALL.into_iter().enumerate() {
         let title = match action {
+            ShortcutAction::RestoreBrightness => "Restore brightness",
             ShortcutAction::IncreaseBrightness => "Brightness up",
             ShortcutAction::DecreaseBrightness => "Brightness down",
             ShortcutAction::IncreaseTemperature => "Temperature up",
@@ -1010,6 +1170,146 @@ fn connect_signals<S: SettingsPersistence + 'static>(model: &SharedModel<S>) {
             model.mark_written();
         });
     }
+    // Advanced physical backlight slider.
+    {
+        let scale = model.borrow().w.hardware_brightness_scale.clone();
+        let model = model.clone();
+        scale.connect_value_changed(move |scale| {
+            let mut model = model.borrow_mut();
+            if model.guard || !scale.is_sensitive() {
+                return;
+            }
+            let value = (scale.value().round() as i32).clamp(1, 100);
+            if value == model.hardware_brightness {
+                return;
+            }
+            model.hardware_brightness = value;
+            model
+                .w
+                .hardware_brightness_value
+                .set_label(&format!("{value}%"));
+            if let Ok(mut state) = model.state.lock() {
+                state.set_hardware_brightness(value);
+            }
+            model.mark_written();
+        });
+    }
+    // Advanced software gamma slider. StateManager rejects changes until the
+    // registered recovery shortcut is active, and the insensitive widget is
+    // also guarded here for accessibility-driven value changes.
+    {
+        let scale = model.borrow().w.software_brightness_scale.clone();
+        let model = model.clone();
+        scale.connect_value_changed(move |scale| {
+            let mut model = model.borrow_mut();
+            if model.guard || !scale.is_sensitive() {
+                return;
+            }
+            let value = (scale.value().round() as i32).clamp(1, 100);
+            if value == model.software_brightness {
+                return;
+            }
+            model.software_brightness = value;
+            model
+                .w
+                .software_brightness_value
+                .set_label(&format!("{value}%"));
+            if let Ok(mut state) = model.state.lock() {
+                state.set_software_brightness(value);
+            }
+            model.mark_written();
+        });
+    }
+    // The expander is also the persisted split-controls preference.
+    {
+        let expander = model.borrow().w.brightness_split_expander.clone();
+        let model = model.clone();
+        expander.connect_expanded_notify(move |expander| {
+            let mut model = model.borrow_mut();
+            if model.guard {
+                return;
+            }
+            let expanded = expander.is_expanded();
+            model.split_brightness_controls = expanded;
+            model.w.brightness_master_row.set_visible(!expanded);
+            if let Ok(mut state) = model.state.lock() {
+                state.set_split_brightness_controls(expanded);
+            }
+            model.mark_written();
+        });
+    }
+    // Brightness engine switches.
+    for (hardware, switch) in [
+        (true, model.borrow().w.hardware_brightness_switch.clone()),
+        (false, model.borrow().w.software_brightness_switch.clone()),
+    ] {
+        let model = model.clone();
+        switch.connect_active_notify(move |switch| {
+            let mut model = model.borrow_mut();
+            if model.guard {
+                return;
+            }
+            let enabled = switch.is_active();
+            if hardware {
+                model.hardware_brightness_enabled = enabled;
+                if let Ok(mut state) = model.state.lock() {
+                    state.set_hardware_brightness_enabled(enabled);
+                }
+            } else {
+                model.software_brightness_enabled = enabled;
+                if let Ok(mut state) = model.state.lock() {
+                    state.set_software_brightness_enabled(enabled);
+                }
+            }
+            model.mark_written();
+        });
+    }
+    // A disabled brightness control explains the hardware/software paths and
+    // directs the user to configure the emergency restore shortcut.
+    {
+        let button = model.borrow().w.brightness_info.clone();
+        let state = model.borrow().state.clone();
+        let window = model.borrow().w.window.clone();
+        button.connect_clicked(move |_| {
+            let (hardware_on, software_on, all_hardware, software_available, ready) = state
+                .lock()
+                .map(|state| {
+                    (
+                        state.settings().hardware_brightness_enabled,
+                        state.settings().software_brightness_enabled,
+                        state.all_displays_support_hardware_brightness(),
+                        state.has_software_brightness_support(),
+                        state.has_brightness_recovery_shortcut(),
+                    )
+                })
+                .unwrap_or((false, false, false, false, false));
+            let explanation = if !hardware_on && !software_on {
+                "Hardware and software brightness are both disabled in Preferences → Brightness engines. Enable at least one engine to use brightness control."
+            } else if !software_on {
+                "Software Digital Shade is disabled in Preferences. Hardware backlight control works only when every active display supports DDC/CI."
+            } else if !software_available {
+                "This display session does not provide software gamma brightness. Hardware control is available only when every active display supports DDC/CI."
+            } else if !ready {
+                "Set a global Restore brightness to 100% shortcut in Preferences → Shortcuts and confirm that the desktop registers it. Software Digital Shade changes the image rather than the physical backlight and remains disabled until this recovery shortcut is active."
+            } else if !hardware_on {
+                "Hardware Backlight is disabled in Preferences. Software Digital Shade changes the image rather than the physical backlight, and your registered Restore brightness shortcut returns the image to 100%."
+            } else if all_hardware {
+                "All active displays support hardware backlight control. Software Digital Shade is available for extra dimming, and your registered Restore brightness shortcut returns it to 100%."
+            } else {
+                "At least one active display lacks DDC/CI brightness. Moonglow uses software dimming across displays to keep them in sync; any supported hardware backlights are restored to 100%. Your registered Restore brightness shortcut returns the image to full brightness."
+            };
+            let dialog = gtk::MessageDialog::builder()
+                .transient_for(&window)
+                .modal(true)
+                .message_type(gtk::MessageType::Info)
+                .buttons(gtk::ButtonsType::Close)
+                .text("Brightness control")
+                .secondary_text(explanation)
+                .build();
+            dialog.connect_response(|dialog, _| dialog.close());
+            dialog.present();
+        });
+    }
     // Temperature slider.
     {
         let scale = model.borrow().w.temp_scale.clone();
@@ -1106,7 +1406,7 @@ fn connect_signals<S: SettingsPersistence + 'static>(model: &SharedModel<S>) {
         });
     }
     // Shortcut record/clear buttons.
-    for index in 0..4 {
+    for index in 0..ShortcutAction::ALL.len() {
         {
             let button = model.borrow().w.record_buttons[index].clone();
             let model = model.clone();
@@ -1349,23 +1649,67 @@ impl<S: SettingsPersistence> Model<S> {
     /// only through [`Model::sync_from`] (settings changed elsewhere) or the
     /// automatic-temperature tick, never from these labels.
     fn refresh_labels(&mut self) {
-        let (automatic, temperature, brightness) = match self.state.lock() {
-            Ok(state) => (
-                state.auto_color_temperature(),
-                state.color_temperature(),
-                state.brightness(),
-            ),
-            Err(_) => (self.auto, self.temperature, self.brightness),
+        let (automatic, temperature, brightness, hardware_value, software_value, split) =
+            match self.state.lock() {
+                Ok(state) => (
+                    state.auto_color_temperature(),
+                    state.color_temperature(),
+                    state.brightness(),
+                    state.hardware_brightness(),
+                    state.settings().manual_software_brightness,
+                    state.settings().split_brightness_controls,
+                ),
+                Err(_) => (
+                    self.auto,
+                    self.temperature,
+                    self.brightness,
+                    self.hardware_brightness,
+                    self.software_brightness,
+                    self.split_brightness_controls,
+                ),
+            };
+        let brightness_status = if split {
+            format!("Backlight {hardware_value}% · Digital Shade {software_value}%")
+        } else {
+            format!("Brightness {brightness}%")
         };
         self.w.status_row.set_title(&format!(
-            "{} · {temperature} K · Brightness {brightness}%",
+            "{} · {temperature} K · {brightness_status}",
             if automatic { "Automatic" } else { "Manual" },
         ));
-        let (supported, status) = match self.state.lock() {
-            Ok(state) => (state.has_brightness_support(), state.brightness_status()),
-            Err(_) => (false, String::new()),
+        let (enabled, hardware, software, split, recovery_needed, status) = match self.state.lock()
+        {
+            Ok(state) => (
+                state.brightness_control_enabled(),
+                state.hardware_brightness_control_enabled(),
+                state.software_brightness_control_enabled(),
+                state.settings().split_brightness_controls,
+                state.settings().software_brightness_enabled
+                    && state.has_software_brightness_support()
+                    && !state.has_brightness_recovery_shortcut(),
+                state.brightness_status(),
+            ),
+            Err(_) => (false, false, false, false, false, String::new()),
         };
-        self.w.brightness_scale.set_sensitive(supported);
+        self.w.brightness_scale.set_sensitive(enabled && !split);
+        self.w.brightness_scale.set_visible(!split);
+        self.w.brightness_value.set_visible(!split);
+        self.w
+            .brightness_master_row
+            .set_title(if split { "Brightness info" } else { "Level" });
+        self.w
+            .brightness_master_row
+            .set_visible(!split || !hardware || recovery_needed);
+        self.w
+            .hardware_brightness_scale
+            .set_sensitive(hardware && self.hardware_brightness_enabled);
+        self.w
+            .software_brightness_scale
+            .set_sensitive(software && self.software_brightness_enabled);
+        self.w
+            .brightness_info
+            .set_visible(!hardware || recovery_needed);
+        self.w.brightness_info.set_tooltip_text(Some(&status));
         self.w.brightness_group.set_description(Some(&status));
         let (color_supported, color_status) = match self.state.lock() {
             Ok(state) => (state.has_color_support(), state.color_status()),
@@ -1385,7 +1729,7 @@ impl<S: SettingsPersistence> Model<S> {
             },
         );
         set_caption(&self.w.range_text, &self.range.display_text());
-        let record_labels: [String; 5] = std::array::from_fn(|index| {
+        let record_labels: [String; 6] = std::array::from_fn(|index| {
             if self.recording == Some(index) {
                 "Press keys…".to_string()
             } else {
@@ -1498,6 +1842,11 @@ fn assemble<S: SettingsPersistence + 'static>(
         guard: false,
         last_seen: settings.clone(),
         brightness: settings.manual_brightness,
+        hardware_brightness: settings.manual_hardware_brightness,
+        software_brightness: settings.manual_software_brightness,
+        hardware_brightness_enabled: settings.hardware_brightness_enabled,
+        software_brightness_enabled: settings.software_brightness_enabled,
+        split_brightness_controls: settings.split_brightness_controls,
         temperature: settings.manual_color_temp_k,
         auto: settings.auto_color_temperature,
         launch_at_login: settings.launch_at_login,

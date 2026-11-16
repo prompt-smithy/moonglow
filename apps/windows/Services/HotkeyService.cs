@@ -4,7 +4,7 @@ using Moonglow.Native;
 
 namespace Moonglow.Services;
 
-/// <summary>System-wide hotkeys for the four shortcut actions.</summary>
+/// <summary>System-wide hotkeys for the shortcut actions.</summary>
 /// <remarks>
 /// The hook lives on a message-only window so shortcuts fire while the settings
 /// window is closed. Registration maps slot order to hotkey ids; a combo the OS
@@ -46,7 +46,10 @@ internal sealed class HotkeyService : IDisposable
         Register(settings.DecreaseBrightnessShortcut, HotkeySlot.DecreaseBrightness);
         Register(settings.IncreaseTemperatureShortcut, HotkeySlot.IncreaseTemperature);
         Register(settings.DecreaseTemperatureShortcut, HotkeySlot.DecreaseTemperature);
+        Register(settings.RestoreBrightnessShortcut, HotkeySlot.RestoreBrightness);
     }
+
+    public bool IsRegistered(HotkeySlot slot) => _ids.ContainsKey((int)slot);
 
     private void Register(string? gesture, HotkeySlot slot)
     {

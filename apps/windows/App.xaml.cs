@@ -35,6 +35,7 @@ public partial class App : Application
     private HotkeyService? _hotkeys;
     private MainWindow? _settingsWindow;
     private readonly DispatcherTimer _supportProbeTimer = new() { Interval = TimeSpan.FromSeconds(20) };
+    private int _probeAttempts;
     private bool _sessionLocked;
     private DateTime _lastResumeUtc = DateTime.MinValue;
     private int _resumeSequence;
@@ -131,7 +132,7 @@ public partial class App : Application
         _viewModel.OpenSettingsRequested += (_, _) => OpenSettings();
         _viewModel.ExitRequested += (_, _) => Shutdown();
 
-        _hotkeys = new HotkeyService(slot =>
+        var hotkeyService = new HotkeyService(slot =>
         {
             switch (slot)
             {
@@ -147,10 +148,20 @@ public partial class App : Application
                 case HotkeySlot.DecreaseTemperature:
                     _viewModel.NudgeTemperature(-1);
                     break;
+                case HotkeySlot.RestoreBrightness:
+                    _viewModel.RestoreBrightnessToFull();
+                    break;
             }
         });
-        _viewModel.HotkeysChanged += (_, _) => _hotkeys.Refresh(_settingsService.Settings);
-        _hotkeys.Refresh(_settingsService.Settings);
+        _hotkeys = hotkeyService;
+        void RefreshHotkeys()
+        {
+            hotkeyService.Refresh(_settingsService.Settings);
+            _viewModel.SetRestoreBrightnessHotkeyRegistered(
+                hotkeyService.IsRegistered(HotkeySlot.RestoreBrightness));
+        }
+        _viewModel.HotkeysChanged += (_, _) => RefreshHotkeys();
+        RefreshHotkeys();
 
         var popup = new TrayPopup { DataContext = _viewModel };
         // Opening the popup is the moment before a brightness change, so refresh the display
@@ -179,8 +190,14 @@ public partial class App : Application
         // periodically until brightness becomes available, then stop probing.
         _supportProbeTimer.Tick += (_, _) =>
         {
-            if (!_viewModel.HasBrightnessSupport)
-                _viewModel.RefreshDisplaysAsync();
+            bool worthProbing = _settingsService.Settings.HardwareBrightnessEnabled
+                && !_brightness.IsSupported;
+            if (!worthProbing || ++_probeAttempts > 15)
+            {
+                _supportProbeTimer.Stop();
+                return;
+            }
+            _viewModel.RefreshDisplaysAsync();
         };
         _supportProbeTimer.Start();
 
@@ -329,6 +346,9 @@ public partial class App : Application
             // The display set changed under us, so ramps captured for a panel that is no
             // longer attached must not be restored onto one that reuses its name.
             _color.Invalidate();
+            _probeAttempts = 0;
+            if (!_supportProbeTimer.IsEnabled)
+                _supportProbeTimer.Start();
             _viewModel.RefreshDisplaysAsync();
             _viewModel.ReapplyColorTemperature();
         }));

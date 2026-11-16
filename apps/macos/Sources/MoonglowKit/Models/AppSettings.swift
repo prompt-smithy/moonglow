@@ -12,6 +12,8 @@ public struct AppSettings: Equatable, Sendable {
 
     /// Hardware brightness, in percent.
     public static let brightnessRange = 1...100
+    /// Minimum percent for software dimming when no recovery shortcut is registered.
+    public static let softwareBrightnessFloor = 50
     /// Colour temperature in kelvin. Lower is warmer.
     public static let kelvinRange = 900...6600
     /// Slider step and schedule rounding step.
@@ -28,6 +30,8 @@ public struct AppSettings: Equatable, Sendable {
     public static let defaultNightColorTempK = 1200
     public static let defaultManualColorTempK = 6500
     public static let defaultManualBrightness = 80
+    public static let defaultManualHardwareBrightness = 80
+    public static let defaultManualSoftwareBrightness = 100
 
     /// Ctrl+Option+arrows: vertical for brightness, horizontal along the warm-to-cool
     /// track for colour temperature. Any of them can be re-recorded or cleared in
@@ -47,6 +51,11 @@ public struct AppSettings: Equatable, Sendable {
     public var eveningEnd: TimeOfDay = defaultEveningEnd
     public var autoColorTemperature: Bool = true
     public var manualBrightness: Int = defaultManualBrightness
+    public var hardwareBrightnessEnabled: Bool = true
+    public var softwareBrightnessEnabled: Bool = true
+    public var splitBrightnessControls: Bool = false
+    public var manualHardwareBrightness: Int = defaultManualHardwareBrightness
+    public var manualSoftwareBrightness: Int = defaultManualSoftwareBrightness
     public var manualColorTempK: Int = defaultManualColorTempK
     /// Whether the user wants Moonglow to start with the Mac.
     ///
@@ -59,10 +68,21 @@ public struct AppSettings: Equatable, Sendable {
     public var decreaseBrightnessShortcut: HotKeyShortcut? = defaultDecreaseBrightnessShortcut
     public var increaseTemperatureShortcut: HotKeyShortcut? = defaultIncreaseTemperatureShortcut
     public var decreaseTemperatureShortcut: HotKeyShortcut? = defaultDecreaseTemperatureShortcut
+    /// Required recovery hot key for sandboxed software brightness. Deliberately has no default:
+    /// the user must choose and register it before the brightness control is enabled.
+    public var restoreBrightnessShortcut: HotKeyShortcut? = nil
 
     public init() {}
 
-    public static let `default` = AppSettings()
+    public static let `default`: AppSettings = {
+        var settings = AppSettings()
+        #if MOONGLOW_APP_SANDBOXED
+        // Keep the prototype neutral on first launch; gamma changes are exercised explicitly.
+        settings.autoColorTemperature = false
+        settings.manualBrightness = 100
+        #endif
+        return settings
+    }()
 
     // MARK: - Clamping
 
@@ -79,6 +99,8 @@ public struct AppSettings: Equatable, Sendable {
         var copy = self
 
         copy.manualBrightness = AppSettings.clampBrightness(manualBrightness)
+        copy.manualHardwareBrightness = AppSettings.clampBrightness(manualHardwareBrightness)
+        copy.manualSoftwareBrightness = AppSettings.clampBrightness(manualSoftwareBrightness)
         copy.manualColorTempK = TemperatureRange.snap(manualColorTempK)
         let targets = TemperatureRange(night: nightColorTempK, day: dayColorTempK)
         copy.dayColorTempK = targets.day
@@ -101,7 +123,9 @@ public struct AppSettings: Equatable, Sendable {
         if copy.decreaseBrightnessShortcut?.isValid == false { copy.decreaseBrightnessShortcut = nil }
         if copy.increaseTemperatureShortcut?.isValid == false { copy.increaseTemperatureShortcut = nil }
         if copy.decreaseTemperatureShortcut?.isValid == false { copy.decreaseTemperatureShortcut = nil }
+        if copy.restoreBrightnessShortcut?.isValid == false { copy.restoreBrightnessShortcut = nil }
         let paths: [WritableKeyPath<AppSettings, HotKeyShortcut?>] = [
+            \.restoreBrightnessShortcut,
             \.increaseBrightnessShortcut, \.decreaseBrightnessShortcut,
             \.increaseTemperatureShortcut, \.decreaseTemperatureShortcut,
         ]
@@ -128,12 +152,18 @@ extension AppSettings: Codable {
         case eveningEnd
         case autoColorTemperature
         case manualBrightness
+        case hardwareBrightnessEnabled
+        case softwareBrightnessEnabled
+        case splitBrightnessControls
+        case manualHardwareBrightness
+        case manualSoftwareBrightness
         case manualColorTempK
         case launchAtLogin
         case increaseBrightnessShortcut
         case decreaseBrightnessShortcut
         case increaseTemperatureShortcut
         case decreaseTemperatureShortcut
+        case restoreBrightnessShortcut
     }
 
     /// Decodes leniently: any missing or malformed value falls back to its default
@@ -151,12 +181,18 @@ extension AppSettings: Codable {
         eveningEnd = Self.decode(container, .eveningEnd, eveningEnd)
         autoColorTemperature = Self.decode(container, .autoColorTemperature, autoColorTemperature)
         manualBrightness = Self.decode(container, .manualBrightness, manualBrightness)
+        hardwareBrightnessEnabled = Self.decode(container, .hardwareBrightnessEnabled, hardwareBrightnessEnabled)
+        softwareBrightnessEnabled = Self.decode(container, .softwareBrightnessEnabled, softwareBrightnessEnabled)
+        splitBrightnessControls = Self.decode(container, .splitBrightnessControls, splitBrightnessControls)
+        manualHardwareBrightness = Self.decode(container, .manualHardwareBrightness, manualHardwareBrightness)
+        manualSoftwareBrightness = Self.decode(container, .manualSoftwareBrightness, manualSoftwareBrightness)
         manualColorTempK = Self.decode(container, .manualColorTempK, manualColorTempK)
         launchAtLogin = Self.decode(container, .launchAtLogin, launchAtLogin)
         increaseBrightnessShortcut = Self.decode(container, .increaseBrightnessShortcut, increaseBrightnessShortcut)
         decreaseBrightnessShortcut = Self.decode(container, .decreaseBrightnessShortcut, decreaseBrightnessShortcut)
         increaseTemperatureShortcut = Self.decode(container, .increaseTemperatureShortcut, increaseTemperatureShortcut)
         decreaseTemperatureShortcut = Self.decode(container, .decreaseTemperatureShortcut, decreaseTemperatureShortcut)
+        restoreBrightnessShortcut = Self.decode(container, .restoreBrightnessShortcut, restoreBrightnessShortcut)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -170,12 +206,18 @@ extension AppSettings: Codable {
         try container.encode(eveningEnd, forKey: .eveningEnd)
         try container.encode(autoColorTemperature, forKey: .autoColorTemperature)
         try container.encode(manualBrightness, forKey: .manualBrightness)
+        try container.encode(hardwareBrightnessEnabled, forKey: .hardwareBrightnessEnabled)
+        try container.encode(softwareBrightnessEnabled, forKey: .softwareBrightnessEnabled)
+        try container.encode(splitBrightnessControls, forKey: .splitBrightnessControls)
+        try container.encode(manualHardwareBrightness, forKey: .manualHardwareBrightness)
+        try container.encode(manualSoftwareBrightness, forKey: .manualSoftwareBrightness)
         try container.encode(manualColorTempK, forKey: .manualColorTempK)
         try container.encode(launchAtLogin, forKey: .launchAtLogin)
         try container.encode(increaseBrightnessShortcut, forKey: .increaseBrightnessShortcut)
         try container.encode(decreaseBrightnessShortcut, forKey: .decreaseBrightnessShortcut)
         try container.encode(increaseTemperatureShortcut, forKey: .increaseTemperatureShortcut)
         try container.encode(decreaseTemperatureShortcut, forKey: .decreaseTemperatureShortcut)
+        try container.encode(restoreBrightnessShortcut, forKey: .restoreBrightnessShortcut)
     }
 
     private static func decode<T: Decodable>(

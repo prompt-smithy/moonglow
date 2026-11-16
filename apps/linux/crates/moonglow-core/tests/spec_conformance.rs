@@ -6,9 +6,10 @@
 
 use std::path::PathBuf;
 
+use moonglow_core::brightness_plan;
 use moonglow_core::kelvin;
 use moonglow_core::schedule::ScheduleCalculator;
-use moonglow_core::settings::AppSettings;
+use moonglow_core::settings::{AppSettings, SOFTWARE_BRIGHTNESS_FLOOR};
 use moonglow_core::temperature_range::TemperatureRange;
 use moonglow_core::time_of_day::TimeOfDay;
 use serde::Deserialize;
@@ -109,6 +110,16 @@ struct Profile {
     auto_color_temperature: bool,
     #[serde(rename = "manualBrightness")]
     manual_brightness: i32,
+    #[serde(default, rename = "hardwareBrightnessEnabled")]
+    hardware_brightness_enabled: Option<bool>,
+    #[serde(default, rename = "softwareBrightnessEnabled")]
+    software_brightness_enabled: Option<bool>,
+    #[serde(default, rename = "splitBrightnessControls")]
+    split_brightness_controls: Option<bool>,
+    #[serde(default, rename = "manualHardwareBrightness")]
+    manual_hardware_brightness: Option<i32>,
+    #[serde(default, rename = "manualSoftwareBrightness")]
+    manual_software_brightness: Option<i32>,
     #[serde(rename = "manualColorTempK")]
     manual_color_temp_k: i32,
     #[serde(rename = "launchAtLogin")]
@@ -127,6 +138,21 @@ impl Profile {
         settings.evening_end = pair(self.evening_end);
         settings.auto_color_temperature = self.auto_color_temperature;
         settings.manual_brightness = self.manual_brightness;
+        if let Some(hw) = self.hardware_brightness_enabled {
+            settings.hardware_brightness_enabled = hw;
+        }
+        if let Some(sw) = self.software_brightness_enabled {
+            settings.software_brightness_enabled = sw;
+        }
+        if let Some(sp) = self.split_brightness_controls {
+            settings.split_brightness_controls = sp;
+        }
+        if let Some(mhw) = self.manual_hardware_brightness {
+            settings.manual_hardware_brightness = mhw;
+        }
+        if let Some(msw) = self.manual_software_brightness {
+            settings.manual_software_brightness = msw;
+        }
         settings.manual_color_temp_k = self.manual_color_temp_k;
         settings.launch_at_login = self.launch_at_login;
         settings
@@ -233,6 +259,61 @@ fn settings_normalization_vectors_match() {
         let actual = serde_json::to_value(actual.normalized()).unwrap();
         for (key, expected) in row["expected"].as_object().unwrap() {
             assert_eq!(&actual[key], expected, "{}: {}", row["name"], key);
+        }
+    }
+}
+
+#[test]
+fn brightness_routing_vectors_match() {
+    let document: serde_json::Value = load("brightness-routing.json");
+    let floor = document["softwareBrightnessFloor"].as_i64().unwrap() as i32;
+    assert_eq!(floor, SOFTWARE_BRIGHTNESS_FLOOR);
+
+    for row in document["vectors"].as_array().unwrap() {
+        let name = row["name"].as_str().unwrap();
+        let master = row["master"].as_i64().unwrap() as i32;
+        let hw_input = row["hardwareInput"].as_i64().unwrap() as i32;
+        let sw_input = row["softwareInput"].as_i64().unwrap() as i32;
+        let split = row["split"].as_bool().unwrap();
+        let hw_avail = row["hardwareAvailable"].as_bool().unwrap();
+        let sw_avail = row["softwareAvailable"].as_bool().unwrap();
+        let rec_reg = row["recoveryRegistered"].as_bool().unwrap();
+
+        let output = brightness_plan::compute_routing(
+            master, split, hw_input, sw_input, hw_avail, sw_avail, rec_reg,
+        );
+
+        let expected_hw = row["expectedHardware"].as_i64().map(|v| v as i32);
+        let expected_sw = row["expectedSoftware"].as_i64().unwrap() as i32;
+
+        assert_eq!(output.hardware, expected_hw, "{name} hardware");
+        assert_eq!(output.software, expected_sw, "{name} software");
+    }
+
+    for row in document["transitions"].as_array().unwrap() {
+        let name = row["name"].as_str().unwrap();
+        let hw_avail = row["hardwareAvailable"].as_bool().unwrap();
+        let sw_avail = row["softwareAvailable"].as_bool().unwrap();
+        let rec_reg = row["recoveryRegistered"].as_bool().unwrap();
+
+        if let Some(expected_master) = row.get("expectedMaster").and_then(|v| v.as_i64()) {
+            let hw = row["hardware"].as_i64().unwrap() as i32;
+            let sw = row["software"].as_i64().unwrap() as i32;
+            let master = brightness_plan::split_to_unified(hw, sw, hw_avail, sw_avail, rec_reg);
+            assert_eq!(master, expected_master as i32, "{name} master");
+        } else {
+            let master = row["master"].as_i64().unwrap() as i32;
+            let split = brightness_plan::unified_to_split(master, hw_avail, sw_avail, rec_reg);
+            assert_eq!(
+                split.hardware,
+                row["expectedHardware"].as_i64().unwrap() as i32,
+                "{name} hardware"
+            );
+            assert_eq!(
+                split.software,
+                row["expectedSoftware"].as_i64().unwrap() as i32,
+                "{name} software"
+            );
         }
     }
 }

@@ -11,6 +11,7 @@ public sealed class AppSettings
 {
     public const int MinBrightnessPercent = 1;
     public const int MaxBrightnessPercent = 100;
+    public const int SoftwareBrightnessFloor = 50;
     public const int MinKelvin = 900;
     public const int MaxKelvin = 6600;
     public const int KelvinStep = 100;
@@ -29,6 +30,11 @@ public sealed class AppSettings
     private static readonly TimeSpan OneDay = TimeSpan.FromDays(1);
 
     public int ManualBrightness { get; set; } = 80;
+    public bool HardwareBrightnessEnabled { get; set; } = true;
+    public bool SoftwareBrightnessEnabled { get; set; } = true;
+    public bool SplitBrightnessControls { get; set; }
+    public int ManualHardwareBrightness { get; set; } = 80;
+    public int ManualSoftwareBrightness { get; set; } = 100;
     public int ManualColorTempK { get; set; } = 6500;
     public bool AutoColorTemperature { get; set; } = true;
     public int DayColorTempK { get; set; } = 6500;
@@ -51,6 +57,8 @@ public sealed class AppSettings
     public string? DecreaseBrightnessShortcut { get; set; } = DefaultDecreaseBrightnessShortcut;
     public string? IncreaseTemperatureShortcut { get; set; } = DefaultIncreaseTemperatureShortcut;
     public string? DecreaseTemperatureShortcut { get; set; } = DefaultDecreaseTemperatureShortcut;
+    /// <summary>Global safety shortcut that restores software brightness to 100%.</summary>
+    public string? RestoreBrightnessShortcut { get; set; }
 
     // Parsed forms never throw: a hand-edited or truncated file falls back to the default
     // wall-clock time instead of crashing the scheduler on its next tick.
@@ -97,6 +105,8 @@ public sealed class AppSettings
         var copy = (AppSettings)MemberwiseClone();
 
         copy.ManualBrightness = ClampBrightness(copy.ManualBrightness);
+        copy.ManualHardwareBrightness = ClampBrightness(copy.ManualHardwareBrightness);
+        copy.ManualSoftwareBrightness = ClampBrightness(copy.ManualSoftwareBrightness);
         copy.ManualColorTempK = TemperatureRange.Snap(copy.ManualColorTempK);
         var targets = TemperatureRange.FromSettings(copy);
         copy.DayColorTempK = targets.Day;
@@ -114,12 +124,16 @@ public sealed class AppSettings
             copy.EveningEnd = DefaultEveningEnd;
         }
 
+        copy.RestoreBrightnessShortcut = Hotkey.Normalize(copy.RestoreBrightnessShortcut, string.Empty);
+        if (copy.RestoreBrightnessShortcut == string.Empty)
+            copy.RestoreBrightnessShortcut = null;
         copy.IncreaseBrightnessShortcut = Hotkey.Normalize(copy.IncreaseBrightnessShortcut, DefaultIncreaseBrightnessShortcut);
         copy.DecreaseBrightnessShortcut = Hotkey.Normalize(copy.DecreaseBrightnessShortcut, DefaultDecreaseBrightnessShortcut);
         copy.IncreaseTemperatureShortcut = Hotkey.Normalize(copy.IncreaseTemperatureShortcut, DefaultIncreaseTemperatureShortcut);
         copy.DecreaseTemperatureShortcut = Hotkey.Normalize(copy.DecreaseTemperatureShortcut, DefaultDecreaseTemperatureShortcut);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         string? Unique(string? gesture) => gesture is null || seen.Add(gesture) ? gesture : null;
+        copy.RestoreBrightnessShortcut = Unique(copy.RestoreBrightnessShortcut);
         copy.IncreaseBrightnessShortcut = Unique(copy.IncreaseBrightnessShortcut);
         copy.DecreaseBrightnessShortcut = Unique(copy.DecreaseBrightnessShortcut);
         copy.IncreaseTemperatureShortcut = Unique(copy.IncreaseTemperatureShortcut);

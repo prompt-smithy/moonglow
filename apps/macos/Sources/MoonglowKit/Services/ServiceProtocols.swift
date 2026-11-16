@@ -13,7 +13,12 @@ public protocol DisplayService: AnyObject {
 /// Ported from `IBrightnessService`.
 public protocol BrightnessService: AnyObject {
     var isSupported: Bool { get }
+    var isHardwareSupported: Bool { get }
+    var isSoftwareSupported: Bool { get }
     func setBrightness(percent: Int)
+    func setBrightness(percent: Int, allowSoftwareFallback: Bool)
+    func setHardwareBrightness(percent: Int)
+    func setSoftwareBrightness(percent: Int)
     func dispose()
     /// Re-probes the backend when support is currently unavailable.
     ///
@@ -35,6 +40,17 @@ public protocol BrightnessService: AnyObject {
 }
 
 public extension BrightnessService {
+    var isHardwareSupported: Bool { isSupported }
+    var isSoftwareSupported: Bool { false }
+    func setBrightness(percent: Int, allowSoftwareFallback: Bool) {
+        if allowSoftwareFallback && isSoftwareSupported {
+            setSoftwareBrightness(percent: percent)
+        } else if isHardwareSupported {
+            setHardwareBrightness(percent: percent)
+        }
+    }
+    func setHardwareBrightness(percent: Int) { setBrightness(percent: percent) }
+    func setSoftwareBrightness(percent: Int) { setBrightness(percent: percent) }
     func dispose() {}
     func refreshSupport() {}
     func refreshSupportAsync(completion: (@Sendable (Bool) -> Void)?) {
@@ -56,24 +72,41 @@ public final class BrightnessFallbackService: BrightnessService {
     }
 
     public var isSupported: Bool {
-        hardware.isSupported || software.isSupported
+        isHardwareSupported || isSoftwareSupported
     }
 
+    public var isHardwareSupported: Bool { hardware.isHardwareSupported }
+    public var isSoftwareSupported: Bool { software.isSoftwareSupported }
+
     public func setBrightness(percent: Int) {
-        if hardware.isSupported {
+        setBrightness(percent: percent, allowSoftwareFallback: true)
+    }
+
+    public func setBrightness(percent: Int, allowSoftwareFallback: Bool) {
+        if hardware.isHardwareSupported {
             // Exactly one mechanism owns brightness: a fallback episode may have left
             // the gamma dimmed, so reset it before the hardware write or the two would
             // compound. Nearly free on the steady path — the gamma cache skips the
             // rewrite when already at 100%.
-            software.setBrightness(percent: 100)
-            AppLog.shared.log(.brightness, "brightness \(percent)% → hardware DDC")
-            hardware.setBrightness(percent: percent)
-        } else if software.isSupported {
-            AppLog.shared.log(.brightness, "brightness \(percent)% → software gamma")
-            software.setBrightness(percent: percent)
+            software.setSoftwareBrightness(percent: 100)
+            setHardwareBrightness(percent: percent)
+        } else if allowSoftwareFallback && software.isSoftwareSupported {
+            setSoftwareBrightness(percent: percent)
         } else {
             AppLog.shared.log(.brightness, "brightness \(percent)% → unsupported, dropped")
         }
+    }
+
+    public func setHardwareBrightness(percent: Int) {
+        guard hardware.isHardwareSupported else { return }
+        AppLog.shared.log(.brightness, "brightness \(percent)% → hardware DDC")
+        hardware.setHardwareBrightness(percent: percent)
+    }
+
+    public func setSoftwareBrightness(percent: Int) {
+        guard software.isSoftwareSupported else { return }
+        AppLog.shared.log(.brightness, "brightness \(percent)% → software gamma")
+        software.setSoftwareBrightness(percent: percent)
     }
 
     public func refreshSupport() {
@@ -115,13 +148,14 @@ public extension ColorTemperatureService {
     func invalidate() {}
 }
 
-/// The four global hot-key actions. Raw values double as Carbon hot-key IDs, so they
+/// The global hot-key actions. Raw values double as Carbon hot-key IDs, so they
 /// are part of the contract: never renumber.
-public enum HotKeyAction: UInt32, Sendable, CaseIterable {
+public enum HotKeyAction: UInt32, Sendable, CaseIterable, Hashable {
     case increaseBrightness = 1
     case decreaseBrightness = 2
     case increaseTemperature = 3
     case decreaseTemperature = 4
+    case restoreBrightness = 5
 }
 
 /// Registers the global hot keys with the system.
@@ -129,7 +163,9 @@ public enum HotKeyAction: UInt32, Sendable, CaseIterable {
 /// The view model owns the assignments (they are settings); this service only carries
 /// them to the platform API. A nil shortcut disables its action.
 public protocol HotKeyService: AnyObject {
-    func updateHotKeys(_ assignments: [(action: HotKeyAction, shortcut: HotKeyShortcut?)])
+    /// Returns the actions the operating system successfully registered.
+    @discardableResult
+    func updateHotKeys(_ assignments: [(action: HotKeyAction, shortcut: HotKeyShortcut?)]) -> Set<HotKeyAction>
 }
 
 /// Registers Moonglow as a login item so it starts with the Mac.
