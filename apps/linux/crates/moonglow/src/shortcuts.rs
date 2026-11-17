@@ -93,17 +93,19 @@ impl ShortcutHandle {
 /// Current bindings, in [`ShortcutAction::ALL`] order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Bindings {
-    shortcuts: [Option<Shortcut>; 4],
+    shortcuts: [Option<Shortcut>; 6],
 }
 
 impl Bindings {
     fn from_settings(settings: &AppSettings) -> Self {
         Self {
             shortcuts: [
+                settings.restore_brightness_shortcut,
                 settings.increase_brightness_shortcut,
                 settings.decrease_brightness_shortcut,
                 settings.increase_temperature_shortcut,
                 settings.decrease_temperature_shortcut,
+                settings.show_settings_shortcut,
             ],
         }
     }
@@ -113,7 +115,7 @@ impl Bindings {
             .lock()
             .map(|s| Self::from_settings(s.settings()))
             .unwrap_or(Bindings {
-                shortcuts: [None; 4],
+                shortcuts: [None; 6],
             })
     }
 
@@ -153,6 +155,17 @@ fn set_status(shared: &SharedShortcutStatus, backend: ShortcutBackend, detail: i
             eprintln!("shortcuts: {} - {}", next.backend.label(), next.detail);
             *status = next;
         }
+    }
+}
+
+fn set_brightness_recovery_registration<S: SettingsPersistence>(
+    state: &SharedState<S>,
+    bindings: &Bindings,
+    backend_accepted: bool,
+) {
+    let registered = backend_accepted && bindings.get(ShortcutAction::RestoreBrightness).is_some();
+    if let Ok(mut state) = state.lock() {
+        state.set_brightness_recovery_shortcut_registered(registered);
     }
 }
 
@@ -196,6 +209,11 @@ fn run<S: SettingsPersistence>(
         ShortcutBackend::Unavailable,
         "This desktop does not expose global shortcuts to applications. Set them in your keyboard settings to run the CLI commands below.",
     );
+    let bindings = Bindings::from_state(&state);
+    set_brightness_recovery_registration(&state, &bindings, false);
+    if let Ok(mut state) = state.lock() {
+        state.set_shortcut_backend_unavailable(true);
+    }
 }
 
 /// Applies one shortcut action to the shared state.
@@ -204,10 +222,12 @@ fn apply_action<S: SettingsPersistence>(state: &SharedState<S>, action: Shortcut
         return;
     };
     match action {
+        ShortcutAction::RestoreBrightness => state.restore_brightness_to_full(),
         ShortcutAction::IncreaseBrightness => state.increase_brightness(),
         ShortcutAction::DecreaseBrightness => state.decrease_brightness(),
         ShortcutAction::IncreaseTemperature => state.increase_color_temperature(),
         ShortcutAction::DecreaseTemperature => state.decrease_color_temperature(),
+        ShortcutAction::ShowSettings => state.show_settings(),
     }
 }
 
@@ -251,10 +271,12 @@ mod gnome {
     /// CLI flag the desktop should run for an action.
     fn cli_flag(action: ShortcutAction) -> &'static str {
         match action {
+            ShortcutAction::RestoreBrightness => "--restore-brightness",
             ShortcutAction::IncreaseBrightness => "--brightness-up",
             ShortcutAction::DecreaseBrightness => "--brightness-down",
             ShortcutAction::IncreaseTemperature => "--temperature-up",
             ShortcutAction::DecreaseTemperature => "--temperature-down",
+            ShortcutAction::ShowSettings => "--show-settings",
         }
     }
 
@@ -381,7 +403,9 @@ mod gnome {
         while !stop.load(Ordering::Relaxed) {
             let bindings = Bindings::from_state(state);
             if last != Some(bindings) {
-                match register(&bindings) {
+                let result = register(&bindings);
+                set_brightness_recovery_registration(state, &bindings, result.is_ok());
+                match result {
                     Ok(()) => set_status(
                         status,
                         ShortcutBackend::Gnome,
@@ -610,7 +634,9 @@ mod x11 {
         while !stop.load(Ordering::Relaxed) {
             let bindings = Bindings::from_state(state);
             if last != Some(bindings) {
-                match backend.register(&bindings) {
+                let result = backend.register(&bindings);
+                set_brightness_recovery_registration(state, &bindings, result.is_ok());
+                match result {
                     Ok(detail) => set_status(status, ShortcutBackend::X11, detail),
                     Err(error) => set_status(status, ShortcutBackend::Unavailable, error),
                 }

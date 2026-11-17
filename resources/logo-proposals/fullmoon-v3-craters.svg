@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="moon-clip-3">
+      <circle cx="512" cy="512" r="215"/>
+    </clipPath>
+  </defs>
+  <rect width="1024" height="1024" rx="245.760" fill="#ffb300"/>
+  <circle cx="512" cy="512" r="215" fill="#18181c"/>
+  <g clip-path="url(#moon-clip-3)">
+    <!-- Smooth charcoal shadow on right/bottom edge giving spherical phase feel -->
+    <path d="M 512 297 A 215 215 0 0 1 664 664 A 215 215 0 0 0 512 297 Z" fill="#0e0e12" opacity="0.7"/>
+    <!-- Distinct graphic craters with rim highlights -->
+    <!-- Crater 1 -->
+    <circle cx="440" cy="420" r="38" fill="#101014"/>
+    <circle cx="440" cy="420" r="32" fill="#252530"/>
+    <circle cx="436" cy="416" r="24" fill="#18181c"/>
+    <!-- Crater 2 -->
+    <circle cx="550" cy="470" r="48" fill="#101014"/>
+    <circle cx="550" cy="470" r="40" fill="#252530"/>
+    <circle cx="546" cy="466" r="30" fill="#18181c"/>
+    <!-- Crater 3 -->
+    <circle cx="460" cy="560" r="34" fill="#101014"/>
+    <circle cx="460" cy="560" r="28" fill="#23232c"/>
+    <circle cx="456" cy="556" r="20" fill="#18181c"/>
+    <!-- Small craters -->
+    <circle cx="580" cy="380" r="18" fill="#252530"/>
+    <circle cx="578" cy="378" r="14" fill="#101014"/>
+    <circle cx="390" cy="520" r="20" fill="#252530"/>
+    <circle cx="388" cy="518" r="15" fill="#101014"/>
+  </g>
+  <line x1="857.000" y1="512.000" x2="947.000" y2="512.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="755.952" y1="755.952" x2="819.591" y2="819.591" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="512.000" y1="857.000" x2="512.000" y2="947.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="268.048" y1="755.952" x2="204.409" y2="819.591" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="167.000" y1="512.000" x2="77.000" y2="512.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="268.048" y1="268.048" x2="204.409" y2="204.409" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="512.000" y1="167.000" x2="512.000" y2="77.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="755.952" y1="268.048" x2="819.591" y2="204.409" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+</svg>

@@ -16,7 +16,7 @@ use std::str::FromStr;
 /// One physical key in the shortcut table.
 ///
 /// A table index is used instead of one enum variant per key: every backend
-/// needs the same four spellings (settings, portal, GNOME, label), and a row
+/// needs the same spellings (settings, portal, GNOME, label), and a row
 /// per key keeps them from drifting apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ShortcutKey(u8);
@@ -384,57 +384,70 @@ impl<'de> Deserialize<'de> for Shortcut {
 /// Which action a shortcut fires. The ids double as binding names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShortcutAction {
+    RestoreBrightness,
     IncreaseBrightness,
     DecreaseBrightness,
     IncreaseTemperature,
     DecreaseTemperature,
+    ShowSettings,
 }
 
 impl ShortcutAction {
-    pub const ALL: [ShortcutAction; 4] = [
+    pub const ALL: [ShortcutAction; 6] = [
+        ShortcutAction::RestoreBrightness,
         ShortcutAction::IncreaseBrightness,
         ShortcutAction::DecreaseBrightness,
         ShortcutAction::IncreaseTemperature,
         ShortcutAction::DecreaseTemperature,
+        ShortcutAction::ShowSettings,
     ];
 
     pub const fn id(self) -> &'static str {
         match self {
+            ShortcutAction::RestoreBrightness => "restore-brightness",
             ShortcutAction::IncreaseBrightness => "increase-brightness",
             ShortcutAction::DecreaseBrightness => "decrease-brightness",
             ShortcutAction::IncreaseTemperature => "increase-temperature",
             ShortcutAction::DecreaseTemperature => "decrease-temperature",
+            ShortcutAction::ShowSettings => "show-settings",
         }
     }
 
     /// Label for the settings window and desktop binding names.
     pub const fn label(self) -> &'static str {
         match self {
+            ShortcutAction::RestoreBrightness => "Restore brightness to 100%",
             ShortcutAction::IncreaseBrightness => "Increase brightness",
             ShortcutAction::DecreaseBrightness => "Decrease brightness",
             ShortcutAction::IncreaseTemperature => "Increase temperature (cooler)",
             ShortcutAction::DecreaseTemperature => "Decrease temperature (warmer)",
+            ShortcutAction::ShowSettings => "Show settings",
         }
     }
 
     /// Deliberately avoids Ctrl+Alt+arrows: GNOME binds all four to workspace
     /// switching. PageUp/PageDown read as up/down for brightness, and the
     /// bracket keys sit left/right on the warm-to-cool track.
-    pub const fn default_shortcut(self) -> Shortcut {
+    /// RestoreBrightness has no default by design.
+    pub const fn default_shortcut(self) -> Option<Shortcut> {
         // Table indices: 4 = PageUp, 5 = PageDown, 17 = BracketLeft,
         // 18 = BracketRight.
         match self {
+            ShortcutAction::RestoreBrightness => None,
             ShortcutAction::IncreaseBrightness => {
-                Shortcut::new(ShortcutKey(4), true, true, false, false)
+                Some(Shortcut::new(ShortcutKey(4), true, true, false, false))
             }
             ShortcutAction::DecreaseBrightness => {
-                Shortcut::new(ShortcutKey(5), true, true, false, false)
+                Some(Shortcut::new(ShortcutKey(5), true, true, false, false))
             }
             ShortcutAction::IncreaseTemperature => {
-                Shortcut::new(ShortcutKey(18), true, true, false, false)
+                Some(Shortcut::new(ShortcutKey(18), true, true, false, false))
             }
             ShortcutAction::DecreaseTemperature => {
-                Shortcut::new(ShortcutKey(17), true, true, false, false)
+                Some(Shortcut::new(ShortcutKey(17), true, true, false, false))
+            }
+            ShortcutAction::ShowSettings => {
+                Some(Shortcut::new(ShortcutKey(50), true, true, false, false))
             }
         }
     }
@@ -519,10 +532,13 @@ mod tests {
     fn every_action_has_a_distinct_valid_default() {
         let mut seen = Vec::new();
         for action in ShortcutAction::ALL {
-            let shortcut = action.default_shortcut();
-            assert!(shortcut.is_valid());
-            assert!(!seen.iter().any(|other| shortcut.conflicts_with(*other)));
-            seen.push(shortcut);
+            if let Some(shortcut) = action.default_shortcut() {
+                assert!(shortcut.is_valid());
+                assert!(!seen.iter().any(|other| shortcut.conflicts_with(*other)));
+                seen.push(shortcut);
+            } else {
+                assert_eq!(action, ShortcutAction::RestoreBrightness);
+            }
         }
     }
 

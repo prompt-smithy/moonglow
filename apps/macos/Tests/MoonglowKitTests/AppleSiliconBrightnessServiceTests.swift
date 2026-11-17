@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import MoonglowKit
 
-#if arch(arm64)
+#if !MOONGLOW_APP_SANDBOXED && arch(arm64)
 // The recovery logic only runs on Apple Silicon: elsewhere the probe is compiled out
 // and hardware is always down.
 
@@ -15,6 +15,35 @@ struct AppleSiliconBrightnessServiceTests {
     /// Well-formed GetVCP reply: current = 50, max = 100.
     fileprivate static let probeReply: [UInt8] =
         [0x6E, 0x88, 0x02, 0x00, 0x10, 0x00, 0x00, 0x64, 0x00, 0x32, 0xF2]
+
+    @Test("Changing the main display retires the previous DDC target")
+    func changingDisplayRetiresOldTarget() async {
+        let transport = FakeDDCTransport()
+        let service = AppleSiliconBrightnessService(transport: transport)
+        service.refreshSupport()
+        let old = transport.created.last!
+        transport.displayID = 2
+        #expect(!service.isSupported)
+        service.refreshSupport()
+        #expect(service.isSupported)
+        #expect(transport.released.contains(old))
+        service.setBrightness(percent: 45)
+        #expect(await waitUntil { !transport.brightnessWrites.isEmpty })
+        #expect(transport.brightnessWrites.allSatisfy { $0.handle != old })
+        service.dispose()
+    }
+
+    @Test("DDC target matching requires the intended display identity and a valid EDID")
+    func displayIdentityMatching() {
+        var edid = [UInt8](repeating: 0, count: 128)
+        edid.replaceSubrange(0..<8, with: [0,255,255,255,255,255,255,0])
+        edid.replaceSubrange(8..<16, with: [0x12,0x34,0x78,0x56,0x78,0x56,0x34,0x12])
+        edid[127] = 0 &- edid.prefix(127).reduce(UInt8(0), { $0 &+ $1 })
+        #expect(CoreDisplayDDCTransport.matches(edid: edid, vendor: 0x1234, model: 0x5678, serial: 0x12345678))
+        #expect(!CoreDisplayDDCTransport.matches(edid: edid, vendor: 0x1234, model: 0x5678, serial: 7))
+        edid[127] ^= 1
+        #expect(!CoreDisplayDDCTransport.matches(edid: edid, vendor: 0x1234, model: 0x5678, serial: 0x12345678))
+    }
 
     @Test("A stale handle recovers with a fresh handle and keeps hardware up")
     func staleHandleRecovers() async {
@@ -50,7 +79,9 @@ struct AppleSiliconBrightnessServiceTests {
         transport.panelAnswers = false
         service.setBrightness(percent: 70)
 
-        #expect(await waitUntil(timeout: 10) { !service.isSupported })
+        #expect(await waitUntil(timeout: 10) {
+            !service.isSupported && transport.created.count == 2 && transport.released.count == 2
+        })
         #expect(transport.created.count == 2)
         #expect(transport.released.sorted() == transport.created.sorted())
 
@@ -95,6 +126,12 @@ private final class FakeDDCTransport: DDCTransport {
     private var _writes: [(handle: Int, packet: [UInt8])] = []
     private var _staleHandles: Set<Int> = []
     private var _panelAnswers = true
+
+    private var _displayID: UInt32 = 1
+    var displayID: UInt32 {
+        get { locked { _displayID } }
+        set { locked { _displayID = newValue } }
+    }
 
     var isAvailable: Bool {
         get { locked { _isAvailable } }

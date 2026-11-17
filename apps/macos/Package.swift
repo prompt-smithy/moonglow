@@ -1,5 +1,11 @@
 // swift-tools-version: 6.0
 import PackageDescription
+import Foundation
+
+let sandboxPrototype = ProcessInfo.processInfo.environment["MOONGLOW_APP_SANDBOXED"] == "1"
+let appSwiftSettings: [SwiftSetting] = [.swiftLanguageMode(.v5)]
+    + (sandboxPrototype ? [.define("MOONGLOW_APP_SANDBOXED")] : [])
+let appLinkerSettings: [LinkerSetting] = sandboxPrototype ? [] : [.linkedFramework("IOKit")]
 
 // Moonglow — macOS menu-bar app for external-display brightness and colour temperature.
 //
@@ -22,19 +28,19 @@ let package = Package(
     targets: [
         .target(
             name: "MoonglowKit",
-            swiftSettings: [.swiftLanguageMode(.v5)],
-            linkerSettings: [.linkedFramework("IOKit")]
+            swiftSettings: appSwiftSettings,
+            linkerSettings: appLinkerSettings
         ),
         .executableTarget(
             name: "Moonglow",
             dependencies: ["MoonglowKit"],
             resources: [.process("Resources")],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: appSwiftSettings
         ),
         .testTarget(
             name: "MoonglowKitTests",
             dependencies: ["MoonglowKit"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: appSwiftSettings
         ),
     ]
 )

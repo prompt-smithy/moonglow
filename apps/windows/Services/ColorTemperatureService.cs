@@ -29,11 +29,13 @@ public sealed class ColorTemperatureService : IDisposable
     private readonly Thread _workerThread;
     private RAMP? _savedDesktopGammaRamp;
     private int _targetKelvin = -1;
+    private int _targetBrightness = 100;
     // About 60 frames/s and at most 50 K per accepted frame. A full-range move takes
     // roughly 1.7 s; a 100 K schedule tick fades without changing the schedule itself.
     private const int FrameIntervalMilliseconds = 16;
     private const int FadeStepKelvin = 50;
     private int _displayedKelvin = 6500;
+    private int _displayedBrightness = 100;
     private bool _useMagnification;
     private bool _disposed;
     private bool _restoreRequested;
@@ -55,6 +57,36 @@ public sealed class ColorTemperatureService : IDisposable
         _useMagnification = useMagnification;
         _workerThread = new Thread(ApplyLoop) { IsBackground = true, Name = "ColorApply" };
         _workerThread.Start();
+    }
+
+    private volatile bool _supportsSoftwareBrightness = true;
+    private bool _gammaDimmingRefused;
+
+    /// <summary>Whether the current Windows display backend can apply software dimming.</summary>
+    public bool SupportsSoftwareBrightness => _supportsSoftwareBrightness;
+    public event EventHandler? SoftwareBrightnessSupportChanged;
+
+    private void PublishSoftwareBrightnessSupport(bool supported)
+    {
+        if (_supportsSoftwareBrightness == supported) return;
+        _supportsSoftwareBrightness = supported;
+        SoftwareBrightnessSupportChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Queues a software brightness value while preserving the active temperature.</summary>
+    public void SetSoftwareBrightness(int percent)
+    {
+        lock (_applyGate)
+        {
+            if (_disposed)
+                return;
+
+            _targetBrightness = AppSettings.ClampBrightness(percent);
+            if (_targetKelvin < 0)
+                _targetKelvin = _displayedKelvin;
+            _workAvailable.Set();
+            _stateChanged.Set();
+        }
     }
 
     /// <summary>Queues a color temperature for all displays. Only the latest value is
@@ -148,6 +180,10 @@ public sealed class ColorTemperatureService : IDisposable
             foreach (IntPtr hdc in _deviceContexts.Values)
                 DeleteDC(hdc);
             _deviceContexts.Clear();
+
+            // The next apply discovers capability on the worker using actual writes.
+            _gammaDimmingRefused = false;
+            PublishSoftwareBrightnessSupport(true);
         }
     }
 
@@ -220,12 +256,14 @@ public sealed class ColorTemperatureService : IDisposable
             Thread.Sleep(FrameIntervalMilliseconds);
 
             int target;
+            int targetBrightness;
             bool restore;
             bool invalidate;
             lock (_applyGate)
             {
                 if (_disposed) return;
                 target = _targetKelvin;
+                targetBrightness = _targetBrightness;
                 restore = _restoreRequested;
                 invalidate = _invalidateRequested;
                 _restoreRequested = false;
@@ -238,7 +276,10 @@ public sealed class ColorTemperatureService : IDisposable
                 {
                     RestoreOriginalGammaRampsLocked();
                     if (ClearMagnification())
+                    {
                         _displayedKelvin = 6500;
+                        _displayedBrightness = 100;
+                    }
                     else
                     {
                         lock (_applyGate) _restoreRequested = true;
@@ -274,7 +315,7 @@ public sealed class ColorTemperatureService : IDisposable
             var watch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                result = ApplySynchronously(next);
+                result = ApplySynchronously(next, targetBrightness);
             }
             catch
             {
@@ -283,7 +324,10 @@ public sealed class ColorTemperatureService : IDisposable
             }
             watch.Stop();
             if (result == ApplyResult.Applied)
+            {
                 _displayedKelvin = next;
+                _displayedBrightness = targetBrightness;
+            }
 
             // A hung driver call below looks exactly like a lost update from the outside:
             // the UI keeps queueing while the screen freezes. Name it when it happens.
@@ -295,7 +339,8 @@ public sealed class ColorTemperatureService : IDisposable
                 if (_disposed)
                     return;
 
-                if (_targetKelvin != target || _restoreRequested || _invalidateRequested)
+                if (_targetKelvin != target || _targetBrightness != targetBrightness
+                    || _restoreRequested || _invalidateRequested)
                 {
                     // A newer value arrived while applying: serve it immediately.
                     continue;
@@ -306,7 +351,8 @@ public sealed class ColorTemperatureService : IDisposable
                     // Drained: sleep until the next Apply. The reset is under the same
                     // gate as the queue write, so a value arriving between the check
                     // and the reset re-wakes the thread instead of being lost.
-                    if (next == target) _workAvailable.Reset();
+                    if (next == target && _displayedBrightness == _targetBrightness)
+                        _workAvailable.Reset();
                     continue;
                 }
 
@@ -332,9 +378,10 @@ public sealed class ColorTemperatureService : IDisposable
         return _displayedKelvin + Math.Sign(target - _displayedKelvin) * Math.Min(FadeStepKelvin, Math.Abs(target - _displayedKelvin));
     }
 
-    private ApplyResult ApplySynchronously(int kelvin)
+    private ApplyResult ApplySynchronously(int kelvin, int brightness)
     {
         var (redScale, greenScale, blueScale) = KelvinConversion.RgbScale(kelvin);
+        double brightnessScale = AppSettings.ClampBrightness(brightness) / 100.0;
         lock (_gammaGate)
         {
             if (_disposed)
@@ -347,21 +394,29 @@ public sealed class ColorTemperatureService : IDisposable
             {
                 try
                 {
-                    if (!ApplyMagnification(redScale, greenScale, blueScale))
+                    double mRed = redScale * brightnessScale;
+                    double mGreen = greenScale * brightnessScale;
+                    double mBlue = blueScale * brightnessScale;
+                    if (!ApplyMagnification(mRed, mGreen, mBlue))
                         return ApplyResult.RetryLater;
-                    LogColorApply($"apply {kelvin}K rgb=({redScale:F3},{greenScale:F3},{blueScale:F3}) via=magnification");
+                    LogColorApply($"apply {kelvin}K rgb=({mRed:F3},{mGreen:F3},{mBlue:F3}) via=magnification");
+                    PublishSoftwareBrightnessSupport(true);
                     return ApplyResult.Applied;
                 }
                 catch (EntryPointNotFoundException) { _useMagnification = false; }
                 catch (DllNotFoundException) { _useMagnification = false; }
             }
 
-            RAMP ramp = BuildRamp(redScale, greenScale, blueScale);
-            bool gammaApplied = ApplyToMonitors(ramp, out bool anyMonitorApplied);
-            // The desktop DC can only be trusted when no individual panel took a
-            // ramp; a desktop write after partial success could overwrite accepted panels.
-            if (!gammaApplied && !anyMonitorApplied)
-                gammaApplied = ApplyToDesktop(ramp);
+            bool hasDimming = brightness < 100;
+            RAMP fullRamp = BuildRamp(redScale * brightnessScale, greenScale * brightnessScale, blueScale * brightnessScale);
+            RAMP colorOnlyRamp = BuildRamp(redScale, greenScale, blueScale);
+
+            bool gammaApplied = ApplyToMonitors(fullRamp, colorOnlyRamp, hasDimming, out bool mayFallbackToDesktop);
+            // Use the desktop path only before a per-monitor ramp has been
+            // captured/applied, so it cannot stack with a partial monitor state.
+            if (!gammaApplied && mayFallbackToDesktop)
+                gammaApplied = ApplyToDesktop(fullRamp);
+
             if (gammaApplied)
             {
                 LogColorApply($"apply {kelvin}K rgb=({redScale:F3},{greenScale:F3},{blueScale:F3}) via=gamma");
@@ -379,43 +434,70 @@ public sealed class ColorTemperatureService : IDisposable
     /// </remarks>
     private static void LogColorApply(string message) => DiagnosticLog.Write(message);
 
-    private bool ApplyToMonitors(RAMP ramp, out bool anyApplied)
+    private bool ApplyToMonitors(RAMP ramp, RAMP colorOnlyRamp, bool hasDimming, out bool mayFallbackToDesktop)
     {
-        anyApplied = false;
+        mayFallbackToDesktop = true;
         var monitors = _monitors.Snapshot();
-        bool allApplied = monitors.Count > 0;
+        if (monitors.Count == 0)
+            return false;
+
+        bool allSupportFull = true;
+        var applied = new List<string>();
+        // Once a monitor refuses gamma, later fade frames carry temperature only.
+        // Retest dimming after display invalidation, not on every frame.
+        bool tryDimming = hasDimming && _supportsSoftwareBrightness;
+        RAMP targetRamp = tryDimming ? ramp : colorOnlyRamp;
 
         foreach (var monitor in monitors)
         {
             IntPtr hdc = GetDeviceContext(monitor.DeviceName);
             if (hdc == IntPtr.Zero)
             {
-                allApplied = false;
+                allSupportFull = false;
                 continue;
             }
 
-            bool captured = _savedGammaRamps.TryGetValue(monitor.DeviceName, out RAMP originalRamp);
-            if (!captured)
+            if (!_savedGammaRamps.ContainsKey(monitor.DeviceName))
             {
-                originalRamp = CreateEmptyRamp();
-                captured = GetDeviceGammaRamp(hdc, ref originalRamp);
+                RAMP previousRamp = CreateEmptyRamp();
+                if (!GetDeviceGammaRamp(hdc, ref previousRamp))
+                {
+                    allSupportFull = false;
+                    continue;
+                }
+                _savedGammaRamps[monitor.DeviceName] = previousRamp;
             }
-
-            if (captured && SetDeviceGammaRamp(hdc, ref ramp))
+            if (SetDeviceGammaRamp(hdc, ref targetRamp))
             {
-                if (!_savedGammaRamps.ContainsKey(monitor.DeviceName))
-                    _savedGammaRamps[monitor.DeviceName] = originalRamp;
-                anyApplied = true;
+                applied.Add(monitor.DeviceName);
             }
             else
             {
-                allApplied = false;
+                allSupportFull = false;
                 // A DC can go stale after a driver reset; recreate it on the next write.
                 ReleaseDeviceContext(monitor.DeviceName);
             }
         }
 
-        return allApplied;
+        // A temperature-only success does not prove that a previously refused
+        // dimming ramp will work. Keep that capability down until invalidation.
+        _gammaDimmingRefused |= !allSupportFull;
+        PublishSoftwareBrightnessSupport(!_gammaDimmingRefused);
+        // Undo only the dimming component of a partial write. Temperature remains
+        // best effort, including when there was no dimming in the requested ramp.
+        if (!allSupportFull && tryDimming)
+        {
+            foreach (string deviceName in applied)
+            {
+                IntPtr hdc = GetDeviceContext(deviceName);
+                if (hdc != IntPtr.Zero)
+                {
+                    SetDeviceGammaRamp(hdc, ref colorOnlyRamp);
+                }
+            }
+        }
+        mayFallbackToDesktop = applied.Count == 0 && _savedGammaRamps.Count == 0;
+        return applied.Count > 0;
     }
 
     private bool ApplyToDesktop(RAMP ramp)

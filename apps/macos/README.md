@@ -75,18 +75,32 @@ automatically. Set `MOONGLOW_SIGNING_IDENTITY` to choose a specific identity. Se
 `MOONGLOW_NOTARIZE=1` and `MOONGLOW_NOTARY_KEYCHAIN_PROFILE=<profile>` after configuring an
 `xcrun notarytool` keychain profile to notarize and staple the DMG.
 
+### Build flavors
+
+- `bash Packaging/build-app.sh` builds the full version for direct download and the Homebrew tap.
+  It uses one unified brightness slider by default, with optional split Backlight and Digital Shade
+  sliders. Hardware brightness remains available on the primary external display in mixed
+  setups. Digital Shade can dim all gamma-capable displays down to 50%; a registered recovery
+  shortcut unlocks lower levels.
+- `bash Packaging/build-sandbox-prototype.sh` builds an isolated, software-only App Sandbox
+  prototype at `artifacts/sandbox-prototype/Moonglow.app`. Software brightness is available down
+  to 50%, and registering a restore-to-100% shortcut unlocks lower levels. Its initial settings
+  are neutral (100% brightness and manual temperature); saved settings are retained. This prototype is for App Store feasibility work; it is not yet
+  signed or provisioned as a Mac App Store submission.
+
 For a local ad-hoc build, explicitly clear the identity:
 
 ```bash
 MOONGLOW_SIGNING_IDENTITY='' bash Packaging/build-app.sh
 ```
 
-The app targets macOS 12 or later. Hardware DDC/CI
-brightness targets the main display, and only when it is an external panel: on a MacBook whose
-main display is the built-in panel, or for any display that is not main, the brightness slider
-is unavailable and the Displays section says why. When DDC/CI cannot be used at all, brightness
-falls back to software gamma dimming. Software dimming changes image output, not the display's
-backlight, and requires CoreGraphics gamma support. Login-item management requires macOS 13 or
+The app targets macOS 12 or later. Hardware DDC/CI brightness targets the main display only when
+it is an external panel. A mixed setup keeps that hardware control; Digital Shade in split controls
+dims all gamma-capable displays. The unified 50% hardware/software handoff is used when every
+active display supports hardware brightness. Backlights that Moonglow has never managed are left
+untouched. Disabling an owned hardware route releases it once to 100%. Software dimming changes
+the image rather than the physical backlight and has a 50% floor until a recovery shortcut is
+registered. Both engines can be switched independently in Settings. Login-item management requires macOS 13 or
 later. Without a Developer ID identity, the build script uses an ad-hoc signature and does not
 notarize the app. For public releases, use a Developer ID identity and enable notarization as
 described above.
@@ -130,10 +144,12 @@ container, matching the original design.
   brightness uses the private CoreDisplay `IOAVService*` API on Apple Silicon and IOKit framebuffer
   I2C on Intel, with gamma dimming as the fallback when DDC/CI is unavailable.
 
-The private API is isolated in `Sources/MoonglowKit/Services/NativeBridge.swift`. The app is
-distributed directly rather than through the Mac App Store because of that dependency. Public
-releases are Developer ID signed, and the release DMG is notarized and stapled. Builds made without
-a Developer ID identity use an ad-hoc signature for local testing.
+The hardware-enabled build uses a private API isolated in `Sources/MoonglowKit/Services/NativeBridge.swift`,
+so it is distributed directly rather than through the Mac App Store. The sandbox prototype excludes
+that hardware path and is being evaluated separately for App Store compatibility; its existence
+does not guarantee App Review approval. Public direct-download releases are Developer ID signed,
+and the release DMG is notarized and stapled. Builds made without a Developer ID identity use an
+ad-hoc signature for local testing.
 
 Startup is a login item registered through `SMAppService.mainApp`, which registers *the running
 bundle*: the toggle in the settings window does nothing when Moonglow is launched

@@ -12,6 +12,7 @@
 .build/
 # Scratch dir used by `swiftbuild` and by `swift build --scratch-path .build-run`.
 .build-run/
+.build-sandbox/
 .swiftpm/
 Packages/
 index-build/

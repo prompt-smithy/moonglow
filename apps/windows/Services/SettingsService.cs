@@ -196,12 +196,18 @@ public sealed class SettingsService : IDisposable
             EveningEnd = ReadTime(root, "eveningEnd", defaults.EveningEnd),
             AutoColorTemperature = ReadBool(root, "autoColorTemperature", defaults.AutoColorTemperature),
             ManualBrightness = ReadInt(root, "manualBrightness", defaults.ManualBrightness),
+            HardwareBrightnessEnabled = ReadBool(root, "hardwareBrightnessEnabled", defaults.HardwareBrightnessEnabled),
+            SoftwareBrightnessEnabled = ReadBool(root, "softwareBrightnessEnabled", defaults.SoftwareBrightnessEnabled),
+            SplitBrightnessControls = ReadBool(root, "splitBrightnessControls", defaults.SplitBrightnessControls),
+            ManualHardwareBrightness = ReadInt(root, "manualHardwareBrightness", defaults.ManualHardwareBrightness),
+            ManualSoftwareBrightness = ReadInt(root, "manualSoftwareBrightness", defaults.ManualSoftwareBrightness),
             ManualColorTempK = ReadInt(root, "manualColorTempK", defaults.ManualColorTempK),
             LaunchAtLogin = ReadBool(root, "launchAtLogin", defaults.LaunchAtLogin, legacyName: "runAtStartup"),
             IncreaseBrightnessShortcut = ReadHotkey(root, "increaseBrightnessShortcut", defaults.IncreaseBrightnessShortcut),
             DecreaseBrightnessShortcut = ReadHotkey(root, "decreaseBrightnessShortcut", defaults.DecreaseBrightnessShortcut),
             IncreaseTemperatureShortcut = ReadHotkey(root, "increaseTemperatureShortcut", defaults.IncreaseTemperatureShortcut),
             DecreaseTemperatureShortcut = ReadHotkey(root, "decreaseTemperatureShortcut", defaults.DecreaseTemperatureShortcut),
+            RestoreBrightnessShortcut = ReadHotkey(root, "restoreBrightnessShortcut", defaults.RestoreBrightnessShortcut),
         };
     }
 

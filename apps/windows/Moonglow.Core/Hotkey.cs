@@ -1,12 +1,13 @@
 namespace Moonglow.Core;
 
-/// <summary>Identifies one of the four global-shortcut actions.</summary>
+/// <summary>Identifies one of the global-shortcut actions.</summary>
 public enum HotkeySlot
 {
     IncreaseBrightness,
     DecreaseBrightness,
     IncreaseTemperature,
     DecreaseTemperature,
+    RestoreBrightness,
 }
 
 /// <summary>A parsed global shortcut: Win32 modifier bits plus a virtual-key code.</summary>
@@ -34,12 +35,13 @@ public sealed class Hotkey
     }
 
     /// <summary>Linux-parity defaults: arrows stay clear of workspace switching.</summary>
-    public static string DefaultFor(HotkeySlot slot) => slot switch
+    public static string? DefaultFor(HotkeySlot slot) => slot switch
     {
         HotkeySlot.IncreaseBrightness => "Ctrl+Alt+PageUp",
         HotkeySlot.DecreaseBrightness => "Ctrl+Alt+PageDown",
         HotkeySlot.IncreaseTemperature => "Ctrl+Alt+]",
         HotkeySlot.DecreaseTemperature => "Ctrl+Alt+[",
+        HotkeySlot.RestoreBrightness => null,
         _ => throw new ArgumentOutOfRangeException(nameof(slot)),
     };
 

@@ -154,10 +154,11 @@ impl WlrGammaService {
             });
         }
         queue.roundtrip(&mut state)?;
-        state
+        if !state
             .controls
-            .retain(|c| !c.failed && c.size.unwrap_or(0) > 0);
-        if state.controls.is_empty() {
+            .iter()
+            .any(|c| !c.failed && c.size.unwrap_or(0) > 0)
+        {
             return Err("no output with a gamma table".into());
         }
         Ok(Self {
@@ -175,7 +176,13 @@ impl WlrGammaService {
     pub fn supports_software_brightness(&self) -> bool {
         self.state
             .lock()
-            .map(|s| !s.controls.is_empty())
+            .map(|s| {
+                !s.outputs.is_empty()
+                    && s.controls.len() == s.outputs.len()
+                    && s.controls
+                        .iter()
+                        .all(|c| !c.failed && c.size.unwrap_or(0) > 0)
+            })
             .unwrap_or(false)
     }
 
@@ -190,6 +197,11 @@ impl WlrGammaService {
         let (kelvin_value, brightness) = match self.shared.lock() {
             Ok(shared) => (shared.kelvin, shared.software_brightness),
             Err(_) => return false,
+        };
+        let brightness = if self.supports_software_brightness() {
+            brightness
+        } else {
+            100
         };
         self.apply_ramps(|capacity| {
             let scale = kelvin::rgb_scale(kelvin_value);
@@ -212,14 +224,16 @@ impl WlrGammaService {
             let _ = queue.flush();
         }
         let mut applied = false;
-        let mut state = match self.state.lock() {
+        let state = match self.state.lock() {
             Ok(s) => s,
             Err(_) => return false,
         };
-        state
+        // Keep indices stable: protocol callback data indexes this vector.
+        for output in state
             .controls
-            .retain(|c| !c.failed && c.size.unwrap_or(0) > 0);
-        for output in &state.controls {
+            .iter()
+            .filter(|c| !c.failed && c.size.unwrap_or(0) > 0)
+        {
             let size = output.size.unwrap_or(0) as usize;
             if size == 0 {
                 continue;
@@ -272,7 +286,14 @@ impl ColorTemperatureService for WlrGammaService {
     }
 
     fn is_supported(&self) -> bool {
-        self.supports_software_brightness()
+        self.state
+            .lock()
+            .map(|s| {
+                s.controls
+                    .iter()
+                    .any(|c| !c.failed && c.size.unwrap_or(0) > 0)
+            })
+            .unwrap_or(false)
     }
 
     fn apply(&self, kelvin: i32) -> bool {
@@ -340,6 +361,14 @@ impl moonglow_core::traits::BrightnessService for WlrSoftwareBrightnessService {
             .lock()
             .map(|g| g.supports_software_brightness())
             .unwrap_or(false)
+    }
+
+    fn is_hardware_supported(&self) -> bool {
+        false
+    }
+
+    fn is_software_supported(&self) -> bool {
+        self.is_supported()
     }
 
     fn set_brightness(&self, percent: i32) {

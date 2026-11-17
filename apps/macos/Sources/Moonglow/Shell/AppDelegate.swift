@@ -24,12 +24,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var temperatureMenuRow: MenuTemperatureSliderRow?
     private var automaticMenuRow: MenuToggleRow?
     private var menuStatusItem: NSMenuItem?
+    private var restoreBrightnessMenuItem: NSMenuItem?
     private var settingsWindow: HidingWindow?
 
     private var themeService: ThemeService?
     private var schedule: ScheduleService?
     private var colorService: ColorTemperatureService?
-    private var brightnessService: BrightnessFallbackService?
+    private var brightnessService: BrightnessService?
     private var loginItemService: LoginItemService?
     private var hotKeyService: CarbonHotKeyService?
     private var viewModel: MainViewModel?
@@ -76,7 +77,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             CGDisplayRestoreColorSyncSettings()
         }
 
+        #if MOONGLOW_APP_SANDBOXED
+        var prototypeDefaults = AppSettings.default
+        prototypeDefaults.autoColorTemperature = false
+        prototypeDefaults.manualBrightness = 100
+        let store = SettingsStore(defaultSettings: prototypeDefaults)
+        #else
         let store = SettingsStore()
+        #endif
         let installationStore = InstallationStore()
         let installIdentifier = Bundle.main.object(forInfoDictionaryKey: "MoonglowInstallationID") as? String
             ?? "legacy-or-unpackaged"
@@ -84,22 +92,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AppLog.shared.log(.lifecycle, "launched \(Self.versionDescription), install=\(installIdentifier)\(isFirstLaunchAfterInstall ? " (first launch)" : "")")
         let themeService = ThemeService()
 
+        let displayService: CoreGraphicsDisplayService
+        let colorService: CoreGraphicsColorTemperatureService
+        let brightnessService: BrightnessService
+        #if MOONGLOW_APP_SANDBOXED
+        displayService = CoreGraphicsDisplayService()
+        colorService = CoreGraphicsColorTemperatureService(displayService: displayService)
+        brightnessService = CoreGraphicsBrightnessService(colorService: colorService)
+        #else
         // Order matters: the brightness backend owns the DDC probe, and the display service needs its
         // answer before it can claim any display is brightness-capable.
         let hardwareBrightnessService: BrightnessService
         #if arch(arm64)
         hardwareBrightnessService = AppleSiliconBrightnessService()
         #else
-        hardwareBrightnessService = IntelDDCBrightnessService(displayID: CGMainDisplayID())
+        hardwareBrightnessService = IntelDDCBrightnessService()
         #endif
-        let displayService = CoreGraphicsDisplayService(
+        displayService = CoreGraphicsDisplayService(
             ddcBrightnessSupported: { hardwareBrightnessService.isSupported }
         )
-        let colorService = CoreGraphicsColorTemperatureService(displayService: displayService)
-        let brightnessService = BrightnessFallbackService(
+        colorService = CoreGraphicsColorTemperatureService(displayService: displayService)
+        brightnessService = BrightnessFallbackService(
             hardware: hardwareBrightnessService,
             software: CoreGraphicsBrightnessService(colorService: colorService)
         )
+        #endif
         let schedule = ScheduleService(colorService: colorService)
         let loginItemService = SMAppServiceLoginItemService()
         let hotKeyService = CarbonHotKeyService()
@@ -121,11 +138,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         viewModel.onQuit = {
             NSApp.terminate(nil)
         }
+        viewModel.onBrightnessRecoverySetupRequested = { [weak self] in
+            self?.presentBrightnessRecoveryNotice()
+        }
         hotKeyService.handlers = [
             .increaseBrightness: { [weak viewModel] in viewModel?.increaseBrightness() },
             .decreaseBrightness: { [weak viewModel] in viewModel?.decreaseBrightness() },
             .increaseTemperature: { [weak viewModel] in viewModel?.increaseColorTemperature() },
             .decreaseTemperature: { [weak viewModel] in viewModel?.decreaseColorTemperature() },
+            .restoreBrightness: { [weak viewModel] in viewModel?.restoreBrightnessToFull() },
         ]
         // A temperature key needs automatic mode off to stick. The key may arrive while
         // another app is active, so activate first or the alert hides behind it.
@@ -152,11 +173,101 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         viewModel.applyInitialState()
         viewModel.applyLoginItemState(isFirstLaunchAfterInstall: isFirstLaunchAfterInstall)
+#if MOONGLOW_APP_SANDBOXED
+        runSandboxGammaProbeIfRequested()
+#endif
         if isFirstLaunchAfterInstall {
             installationStore.markSeen(identifier: installIdentifier)
         }
         schedule.start()
     }
+
+    /// Explains the safety requirement and points to the hardware build and public source.
+    private func presentBrightnessRecoveryNotice() {
+        guard let viewModel else { return }
+        NSApp.activate(ignoringOtherApps: true)
+
+        let softwareBrightnessAvailable = viewModel.hasSoftwareBrightnessSupport
+        let softwareBrightnessEnabled = viewModel.settings.softwareBrightnessEnabled
+        let softwarePathAvailable = softwareBrightnessAvailable && softwareBrightnessEnabled
+        let recoveryShortcutReady = viewModel.hasBrightnessRecoveryShortcut
+        let hardwareContext: String
+        if !viewModel.settings.hardwareBrightnessEnabled {
+            hardwareContext = "Hardware Backlight is disabled in Settings."
+        } else if viewModel.allDisplaysSupportHardwareBrightness {
+            hardwareContext = "Hardware backlight control is available on every active display."
+        } else {
+            hardwareContext = "Hardware brightness controls the primary external display when available. Digital Shade in split controls dims all displays."
+        }
+        let alert = NSAlert()
+        alert.messageText = softwarePathAvailable
+            ? (recoveryShortcutReady ? "Software brightness is ready" : "Dim below 50% with a recovery shortcut")
+            : softwareBrightnessAvailable
+                ? "Enable Software Digital Shade"
+            : "Brightness control is unavailable"
+        if softwarePathAvailable {
+            alert.informativeText = recoveryShortcutReady
+                ? "\(hardwareContext) Digital Shade changes the image rather than the physical backlight. Your global recovery shortcut restores the image to 100% immediately."
+                : "\(hardwareContext) Digital Shade changes the image rather than the physical backlight. Software dimming is available down to 50%. Register a global shortcut that restores brightness to 100% to unlock lower values."
+        } else if softwareBrightnessAvailable {
+            alert.informativeText = "\(hardwareContext) Software Digital Shade is turned off in Settings. Enable it to dim down to 50%. A global Restore brightness to 100% shortcut unlocks lower levels."
+        } else {
+            alert.informativeText = "\(hardwareContext) macOS does not provide a usable software gamma ramp for this display session. Use the display's physical controls or connect a compatible external display."
+        }
+        alert.alertStyle = .informational
+        if softwareBrightnessAvailable {
+            let title = softwarePathAvailable
+                ? (recoveryShortcutReady ? "Change Shortcut" : "Set Up Shortcut")
+                : "Open Settings"
+            alert.addButton(withTitle: title)
+        }
+        #if MOONGLOW_APP_SANDBOXED
+        alert.addButton(withTitle: "Homebrew Hardware Build")
+        alert.addButton(withTitle: "Open Source Code")
+        #endif
+        alert.addButton(withTitle: "OK")
+
+        let response = alert.runModal()
+        if softwareBrightnessAvailable && response == .alertFirstButtonReturn {
+            showSettingsWindow()
+            return
+        }
+        #if MOONGLOW_APP_SANDBOXED
+        if response == (softwareBrightnessAvailable ? .alertSecondButtonReturn : .alertFirstButtonReturn) {
+            if let url = URL(string: "https://github.com/prompt-smithy/homebrew-apps/blob/main/Casks/moonglow.rb") {
+                NSWorkspace.shared.open(url)
+            }
+        } else if response == (softwareBrightnessAvailable ? .alertThirdButtonReturn : .alertSecondButtonReturn) {
+            if let url = URL(string: "https://github.com/prompt-smithy/moonglow") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+#endif
+    }
+
+#if MOONGLOW_APP_SANDBOXED
+    private func runSandboxGammaProbeIfRequested() {
+        guard ProcessInfo.processInfo.arguments.contains("--sandbox-gamma-probe") else { return }
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("moonglow-sandbox-probe-\(UUID().uuidString).json")
+        let tempStore = SettingsStore(fileURL: tempURL)
+        tempStore.save(AppSettings.default)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        AppLog.shared.log(.settings, "sandbox settings file: \(tempStore.fileURL.path)")
+        AppLog.shared.log(.display, "sandbox gamma probe started")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, let colorService = self.colorService else { return }
+            let applied = colorService.apply(kelvin: 2800)
+            AppLog.shared.log(.display, "sandbox gamma probe apply 2800K: \(applied ? "success" : "failed")")
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.colorService?.reset()
+                AppLog.shared.log(.display, "sandbox gamma probe restored ColorSync state")
+                NSApp.terminate(nil)
+            }
+        }
+    }
+#endif
 
     /// Stops scheduling, restores ColorSync gamma state, and releases native handles.
     /// Mirrors `OnDesktopExit` in the .NET app.
@@ -251,6 +362,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(automaticItem)
         self.automaticMenuRow = automaticRow
 
+        menu.addItem(.separator())
+        let restoreBrightnessItem = NSMenuItem(
+            title: "Restore Brightness to 100%",
+            action: #selector(restoreBrightnessFromMenu),
+            keyEquivalent: ""
+        )
+        restoreBrightnessItem.target = self
+        restoreBrightnessItem.isHidden = true
+        menu.addItem(restoreBrightnessItem)
+        self.restoreBrightnessMenuItem = restoreBrightnessItem
+
         let displayCountItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         displayCountItem.isEnabled = false
         menu.addItem(.separator())
@@ -310,15 +432,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         viewModel?.quit()
     }
 
+    @objc private func restoreBrightnessFromMenu() {
+        viewModel?.restoreBrightnessToFull()
+    }
+
     private func updateQuickControlsMenu(viewModel: MainViewModel) {
         automaticMenuRow?.button.state = viewModel.autoColorTemperature ? .on : .off
         menuStatusItem?.title = viewModel.hasNoDisplays
             ? "No active displays found"
             : "\(viewModel.displays.count) display(s) available"
+        if let item = restoreBrightnessMenuItem {
+            if let shortcut = viewModel.restoreBrightnessShortcut,
+               viewModel.hasBrightnessRecoveryShortcut,
+               let keyEquivalent = menuKeyEquivalent(for: shortcut)
+            {
+                item.isHidden = false
+                item.keyEquivalent = keyEquivalent
+                item.keyEquivalentModifierMask = menuModifierFlags(for: shortcut)
+            } else {
+                item.isHidden = !viewModel.isSoftwareDimmed
+                item.keyEquivalent = ""
+                item.keyEquivalentModifierMask = []
+            }
+        }
     }
 
     func menuWillOpen(_ menu: NSMenu) {
         if let viewModel {
+            hotKeyService?.suspendRestoreBrightnessForMenu()
             // Opening the popup is the moment before a brightness change: re-probe while
             // hardware is down so a recovered panel is back before the slider moves.
             // When hardware is up this is a no-op probe plus a fast re-enumeration.
@@ -327,10 +468,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    func menuDidClose(_ menu: NSMenu) {
+        hotKeyService?.resumeRestoreBrightnessAfterMenu()
+        viewModel?.updateHotKeys()
+    }
+
     func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
         for menuItem in menu.items {
             (menuItem.view as? MenuHoverableRow)?.isMenuHighlighted = menuItem === item
         }
+    }
+
+    private func menuModifierFlags(for shortcut: HotKeyShortcut) -> NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if shortcut.modifiers & HotKeyShortcut.controlModifier != 0 { flags.insert(.control) }
+        if shortcut.modifiers & HotKeyShortcut.optionModifier != 0 { flags.insert(.option) }
+        if shortcut.modifiers & HotKeyShortcut.shiftModifier != 0 { flags.insert(.shift) }
+        if shortcut.modifiers & HotKeyShortcut.commandModifier != 0 { flags.insert(.command) }
+        return flags
+    }
+
+    private func menuKeyEquivalent(for shortcut: HotKeyShortcut) -> String? {
+        switch shortcut.keyCode {
+        case 36, 76: return "\r"
+        case 48: return "\t"
+        case 49: return " "
+        case 51: return "\u{8}"
+        case 53: return "\u{1B}"
+        case 71: return "\u{1C}"
+        case 115: return functionKeyEquivalent(0xF729) // Home
+        case 116: return functionKeyEquivalent(0xF72C) // Page Up
+        case 117: return "\u{7F}"
+        case 119: return functionKeyEquivalent(0xF72B) // End
+        case 121: return functionKeyEquivalent(0xF72D) // Page Down
+        case 122: return functionKeyEquivalent(0xF704) // F1
+        case 120: return functionKeyEquivalent(0xF705) // F2
+        case 99: return functionKeyEquivalent(0xF706) // F3
+        case 118: return functionKeyEquivalent(0xF707) // F4
+        case 96: return functionKeyEquivalent(0xF708) // F5
+        case 97: return functionKeyEquivalent(0xF709) // F6
+        case 98: return functionKeyEquivalent(0xF70A) // F7
+        case 100: return functionKeyEquivalent(0xF70B) // F8
+        case 101: return functionKeyEquivalent(0xF70C) // F9
+        case 109: return functionKeyEquivalent(0xF70D) // F10
+        case 103: return functionKeyEquivalent(0xF70E) // F11
+        case 111: return functionKeyEquivalent(0xF70F) // F12
+        case 105: return functionKeyEquivalent(0xF710) // F13
+        case 107: return functionKeyEquivalent(0xF711) // F14
+        case 113: return functionKeyEquivalent(0xF712) // F15
+        case 106: return functionKeyEquivalent(0xF713) // F16
+        case 64: return functionKeyEquivalent(0xF714) // F17
+        case 79: return functionKeyEquivalent(0xF715) // F18
+        case 80: return functionKeyEquivalent(0xF716) // F19
+        case 90: return functionKeyEquivalent(0xF717) // F20
+        case 123: return functionKeyEquivalent(0xF702) // Left
+        case 124: return functionKeyEquivalent(0xF703) // Right
+        case 125: return functionKeyEquivalent(0xF701) // Down
+        case 126: return functionKeyEquivalent(0xF700) // Up
+        default:
+            let label = HotKeyShortcut.keyLabel(for: shortcut.keyCode)
+            guard !label.hasPrefix("Key ") else { return nil }
+            return label.lowercased()
+        }
+    }
+
+    private func functionKeyEquivalent(_ scalar: UInt32) -> String {
+        String(UnicodeScalar(scalar)!)
     }
 
     // MARK: - Settings window

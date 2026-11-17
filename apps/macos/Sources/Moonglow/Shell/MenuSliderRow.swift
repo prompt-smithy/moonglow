@@ -54,7 +54,7 @@ final class MenuActionRow: MenuHoverableRow {
 final class MenuBrightnessSliderRow: MenuHoverableRow {
 
     init(viewModel: MainViewModel) {
-        super.init(frame: NSRect(x: 0, y: 0, width: 252, height: 52))
+        super.init(frame: NSRect(x: 0, y: 0, width: 252, height: 96))
 
         let hostingView = NSHostingView(rootView: MenuBrightnessSliderContent(viewModel: viewModel))
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -83,21 +83,132 @@ private struct MenuBrightnessSliderContent: View {
             HStack {
                 Text("Brightness")
                 Spacer()
-                Text("\(viewModel.brightness)%")
-                    .monospacedDigit()
+                if viewModel.settings.splitBrightnessControls {
+                    Text("Split")
+                } else {
+                    HStack(spacing: 4) {
+                        Text("\(viewModel.brightness)%")
+                            .monospacedDigit()
+                        if viewModel.showsDualBrightnessMidpoint {
+                            Text(viewModel.brightness >= 50 ? "• HW" : "• SW")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(viewModel.brightness >= 50 ? .primary : .secondary)
+                        }
+                    }
+                }
+                Button {
+                    viewModel.splitBrightnessControls.toggle()
+                } label: {
+                    Image(systemName: viewModel.settings.splitBrightnessControls ? "rectangle.compress.vertical" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 18)
+                }
+                .buttonStyle(.plain)
+                .help(viewModel.settings.splitBrightnessControls ? "Use unified brightness control" : "Show hardware and software controls")
             }
             .font(.system(size: NSFont.systemFontSize))
             .foregroundStyle(.primary)
 
-            TriangleSlider(
-                value: $viewModel.brightness,
-                isEnabled: viewModel.hasBrightnessSupport,
-                label: "Brightness",
-                valueDescription: { "\($0) percent" }
-            )
+            if viewModel.settings.splitBrightnessControls {
+                brightnessSliderRow(
+                    title: "Backlight",
+                    value: $viewModel.hardwareBrightness,
+                    enabled: viewModel.hardwareBrightnessControlEnabled
+                )
+                brightnessSliderRow(
+                    title: "Digital shade",
+                    value: $viewModel.softwareBrightness,
+                    enabled: viewModel.softwareBrightnessControlEnabled,
+                    minimum: viewModel.softwareBrightnessMinimum
+                )
+            } else {
+                brightnessSlider
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
+    }
+
+    private var brightnessSlider: some View {
+        VStack(spacing: 3) {
+            HStack(spacing: 6) {
+                TriangleSlider(
+                    value: $viewModel.brightness,
+                    range: viewModel.brightnessMinimum...100,
+                    isEnabled: viewModel.brightnessControlEnabled,
+                    midpoint: viewModel.showsDualBrightnessMidpoint ? 50 : nil,
+                    label: "Brightness",
+                    valueDescription: { "\($0) percent" }
+                )
+
+                if viewModel.showsBrightnessRecoveryInfo {
+                    Button(action: viewModel.requestBrightnessRecoverySetup) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Brightness limits and recovery shortcut")
+                    .accessibilityLabel("Learn about software brightness and set a recovery shortcut")
+                }
+            }
+
+            if viewModel.showsDualBrightnessMidpoint {
+                HStack {
+                    Text("Software")
+                        .font(.system(size: 9, weight: viewModel.brightness < 50 ? .bold : .medium))
+                        .foregroundStyle(viewModel.brightness < 50 ? .primary : .secondary)
+                    Spacer()
+                    Text("50% (Handoff)")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("Hardware")
+                        .font(.system(size: 9, weight: viewModel.brightness >= 50 ? .bold : .medium))
+                        .foregroundStyle(viewModel.brightness >= 50 ? .primary : .secondary)
+                }
+                .padding(.horizontal, 9)
+            }
+        }
+    }
+
+    private func brightnessSliderRow(
+        title: String,
+        value: Binding<Int>,
+        enabled: Bool,
+        minimum: Int = 1
+    ) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 10))
+                .frame(width: 74, alignment: .leading)
+            TriangleSlider(
+                value: value,
+                range: minimum...100,
+                isEnabled: enabled,
+                label: title,
+                valueDescription: { "\($0) percent" }
+            )
+            Text("\(value.wrappedValue)%")
+                .font(.system(size: 10, design: .monospaced))
+                .frame(width: 32, alignment: .trailing)
+            if viewModel.showsBrightnessRecoveryInfo {
+                Button(action: viewModel.requestBrightnessRecoverySetup) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Brightness capability and recovery shortcut setup")
+                .accessibilityLabel("Learn about brightness and set a recovery shortcut")
+            }
+        }
+        .padding(.leading, 2)
     }
 }
 

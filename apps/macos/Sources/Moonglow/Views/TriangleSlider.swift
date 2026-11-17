@@ -15,6 +15,9 @@ struct TriangleSlider: View {
     /// When false the control is dimmed and inert, matching ``TemperatureSlider``.
     var isEnabled: Bool = true
 
+    /// Optional midpoint (e.g. 50 for HW/SW transition) to render a visual tick mark.
+    var midpoint: Int? = nil
+
     var label: String
     var valueDescription: (Int) -> String
 
@@ -36,6 +39,14 @@ struct TriangleSlider: View {
                 Capsule()
                     .fill(Color(nsColor: .systemGray))
                     .frame(width: max(x, 0), height: trackHeight)
+
+                if let mid = midpoint {
+                    let midX = position(of: mid, width: width)
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color.primary.opacity(0.65))
+                        .frame(width: 2.5, height: trackHeight + 6)
+                        .offset(x: midX - 1.25)
+                }
 
                 SliderThumb(
                     fill: Color(nsColor: .systemGray),
@@ -79,7 +90,10 @@ struct TriangleSlider: View {
         let usable = max(width - travelInset, 1)
         let fraction = min(max(Double((x - (travelInset / 2)) / usable), 0), 1)
         let raw = Double(range.lowerBound) + (fraction * Double(range.upperBound - range.lowerBound))
-        let snapped = (raw / Double(max(step, 1))).rounded() * Double(max(step, 1))
+        var snapped = (raw / Double(max(step, 1))).rounded() * Double(max(step, 1))
+        if let mid = midpoint, abs(snapped - Double(mid)) <= 1.5 {
+            snapped = Double(mid)
+        }
         return clamped(Int(snapped))
     }
 

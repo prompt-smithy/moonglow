@@ -4,6 +4,7 @@
 //! headless [`StateManager`] (the `MainViewModel` equivalent). This crate has no
 //! UI framework or OS backend dependency; Linux backends live in the app crate.
 
+pub mod brightness_plan;
 pub mod ddc;
 pub mod display_info;
 pub mod kelvin;

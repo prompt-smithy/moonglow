@@ -13,6 +13,11 @@
         "nightColorTempK": 5600,
         "manualColorTempK": 3200,
         "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
         "morningStart": "06:00",
         "morningEnd": "07:00",
         "eveningStart": "17:30",
@@ -30,6 +35,11 @@
         "nightColorTempK": 1200,
         "manualColorTempK": 6500,
         "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
         "morningStart": "06:00",
         "morningEnd": "07:00",
         "eveningStart": "17:30",
@@ -47,6 +57,11 @@
         "nightColorTempK": 1200,
         "manualColorTempK": 6500,
         "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
         "morningStart": "06:00",
         "morningEnd": "07:00",
         "eveningStart": "17:30",
@@ -66,10 +81,145 @@
         "nightColorTempK": 900,
         "manualColorTempK": 6600,
         "manualBrightness": 1,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
         "morningStart": "06:00",
         "morningEnd": "07:00",
         "eveningStart": "17:30",
         "eveningEnd": "18:30"
+      }
+    },
+    {
+      "name": "brightness-defaults",
+      "input": {},
+      "expected": {
+        "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
+        "restoreBrightnessShortcut": null
+      }
+    },
+    {
+      "name": "brightness-clamp-low",
+      "input": {
+        "manualBrightness": -2147483648,
+        "manualHardwareBrightness": 0,
+        "manualSoftwareBrightness": -2147483648
+      },
+      "expected": {
+        "manualBrightness": 1,
+        "manualHardwareBrightness": 1,
+        "manualSoftwareBrightness": 1,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false
+      }
+    },
+    {
+      "name": "brightness-clamp-high",
+      "input": {
+        "manualBrightness": 101,
+        "manualHardwareBrightness": 2147483647,
+        "manualSoftwareBrightness": 101
+      },
+      "expected": {
+        "manualBrightness": 100,
+        "manualHardwareBrightness": 100,
+        "manualSoftwareBrightness": 100,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false
+      }
+    },
+    {
+      "name": "brightness-partial-settings",
+      "input": {
+        "hardwareBrightnessEnabled": false,
+        "manualSoftwareBrightness": 37
+      },
+      "expected": {
+        "manualBrightness": 80,
+        "hardwareBrightnessEnabled": false,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 37
+      }
+    },
+    {
+      "name": "recovery-shortcut-takes-priority",
+      "input": {
+        "restoreBrightnessShortcut": "Ctrl+Alt+Home",
+        "increaseBrightnessShortcut": "Ctrl+Alt+Home"
+      },
+      "macosInput": {
+        "restoreBrightnessShortcut": {
+          "keyCode": 115,
+          "modifiers": 6144
+        },
+        "increaseBrightnessShortcut": {
+          "keyCode": 115,
+          "modifiers": 6144
+        }
+      },
+      "expected": {
+        "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
+        "restoreBrightnessShortcut": "Ctrl+Alt+Home",
+        "increaseBrightnessShortcut": null
+      },
+      "macosExpected": {
+        "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
+        "restoreBrightnessShortcut": {
+          "keyCode": 115,
+          "modifiers": 6144
+        },
+        "increaseBrightnessShortcut": null
+      }
+    },
+    {
+      "name": "invalid-recovery-shortcut-becomes-null",
+      "input": {
+        "restoreBrightnessShortcut": "not-a-shortcut"
+      },
+      "expected": {
+        "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
+        "restoreBrightnessShortcut": null
+      }
+    },
+    {
+      "name": "recovery-shortcut-explicitly-cleared",
+      "input": {
+        "restoreBrightnessShortcut": null
+      },
+      "expected": {
+        "manualBrightness": 80,
+        "hardwareBrightnessEnabled": true,
+        "softwareBrightnessEnabled": true,
+        "splitBrightnessControls": false,
+        "manualHardwareBrightness": 80,
+        "manualSoftwareBrightness": 100,
+        "restoreBrightnessShortcut": null
       }
     }
   ]

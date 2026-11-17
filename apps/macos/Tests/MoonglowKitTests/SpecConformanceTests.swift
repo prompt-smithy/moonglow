@@ -28,15 +28,23 @@ struct SpecConformanceTests {
     func settingsNormalizationVectorsMatch() throws {
         let document: SettingsDocument = try Self.load("settings.json")
         for row in document.cases {
-            let actual = row.input.normalized()
-            #expect(actual.manualBrightness == row.expected.manualBrightness, "\(row.name)")
-            #expect(actual.manualColorTempK == row.expected.manualColorTempK, "\(row.name)")
-            #expect(actual.dayColorTempK == row.expected.dayColorTempK, "\(row.name)")
-            #expect(actual.nightColorTempK == row.expected.nightColorTempK, "\(row.name)")
-            #expect(actual.morningStart == row.expected.morningStart, "\(row.name)")
-            #expect(actual.morningEnd == row.expected.morningEnd, "\(row.name)")
-            #expect(actual.eveningStart == row.expected.eveningStart, "\(row.name)")
-            #expect(actual.eveningEnd == row.expected.eveningEnd, "\(row.name)")
+            let actual = (row.macosInput ?? row.input).normalized()
+            let expected = row.macosExpected ?? row.expected
+            #expect(actual.restoreBrightnessShortcut == expected.restoreBrightnessShortcut, "\(row.name)")
+            #expect(actual.increaseBrightnessShortcut == expected.increaseBrightnessShortcut, "\(row.name)")
+            #expect(actual.manualBrightness == expected.manualBrightness, "\(row.name)")
+            #expect(actual.hardwareBrightnessEnabled == expected.hardwareBrightnessEnabled, "\(row.name)")
+            #expect(actual.softwareBrightnessEnabled == expected.softwareBrightnessEnabled, "\(row.name)")
+            #expect(actual.splitBrightnessControls == expected.splitBrightnessControls, "\(row.name)")
+            #expect(actual.manualHardwareBrightness == expected.manualHardwareBrightness, "\(row.name)")
+            #expect(actual.manualSoftwareBrightness == expected.manualSoftwareBrightness, "\(row.name)")
+            #expect(actual.manualColorTempK == expected.manualColorTempK, "\(row.name)")
+            #expect(actual.dayColorTempK == expected.dayColorTempK, "\(row.name)")
+            #expect(actual.nightColorTempK == expected.nightColorTempK, "\(row.name)")
+            #expect(actual.morningStart == expected.morningStart, "\(row.name)")
+            #expect(actual.morningEnd == expected.morningEnd, "\(row.name)")
+            #expect(actual.eveningStart == expected.eveningStart, "\(row.name)")
+            #expect(actual.eveningEnd == expected.eveningEnd, "\(row.name)")
         }
     }
 
@@ -96,6 +104,52 @@ struct SpecConformanceTests {
             let range = TemperatureRange(night: row.night, day: row.day)
             #expect(range.night == row.nightOut, "night for \(row.night)/\(row.day)")
             #expect(range.day == row.dayOut, "day for \(row.night)/\(row.day)")
+        }
+    }
+
+    // MARK: - Brightness routing
+
+    @Test("Brightness routing vectors match exactly")
+    func brightnessRoutingVectorsMatch() throws {
+        let document: BrightnessRoutingDocument = try Self.load("brightness-routing.json")
+        #expect(document.softwareBrightnessFloor == AppSettings.softwareBrightnessFloor)
+
+        for row in document.vectors {
+            let output = BrightnessPlan.computeRouting(
+                master: row.master,
+                split: row.split,
+                manualHardware: row.hardwareInput,
+                manualSoftware: row.softwareInput,
+                hardwareAvailable: row.hardwareAvailable,
+                softwareAvailable: row.softwareAvailable,
+                recoveryRegistered: row.recoveryRegistered
+            )
+            #expect(output.hardware == row.expectedHardware, "\(row.name) hardware")
+            #expect(output.software == row.expectedSoftware, "\(row.name) software")
+        }
+
+        for row in document.transitions {
+            if let expectedMaster = row.expectedMaster {
+                let master = row.preserveOutput == true
+                    ? BrightnessPlan.masterPreservingOutput(.init(hardware: row.hardware, software: row.software ?? 100), hardwareAvailable: row.hardwareAvailable, softwareAvailable: row.softwareAvailable, recoveryRegistered: row.recoveryRegistered)
+                    : BrightnessPlan.splitToUnified(
+                    hardware: row.hardware ?? 80,
+                    software: row.software ?? 100,
+                    hardwareAvailable: row.hardwareAvailable,
+                    softwareAvailable: row.softwareAvailable,
+                    recoveryRegistered: row.recoveryRegistered
+                )
+                #expect(master == expectedMaster, "\(row.name) master")
+            } else if let expectedHw = row.expectedHardware, let expectedSw = row.expectedSoftware {
+                let split = BrightnessPlan.unifiedToSplit(
+                    master: row.master ?? 80,
+                    hardwareAvailable: row.hardwareAvailable,
+                    softwareAvailable: row.softwareAvailable,
+                    recoveryRegistered: row.recoveryRegistered
+                )
+                #expect(split.hardware == expectedHw, "\(row.name) hardware")
+                #expect(split.software == expectedSw, "\(row.name) software")
+            }
         }
     }
 }
@@ -181,6 +235,39 @@ private struct SettingsDocument: Decodable {
         let name: String
         let input: AppSettings
         let expected: AppSettings
+        let macosInput: AppSettings?
+        let macosExpected: AppSettings?
     }
     let cases: [Row]
+}
+
+private struct BrightnessRoutingDocument: Decodable {
+    struct VectorRow: Decodable {
+        let name: String
+        let master: Int
+        let hardwareInput: Int
+        let softwareInput: Int
+        let split: Bool
+        let hardwareAvailable: Bool
+        let softwareAvailable: Bool
+        let recoveryRegistered: Bool
+        let expectedHardware: Int?
+        let expectedSoftware: Int
+    }
+    struct TransitionRow: Decodable {
+        let name: String
+        let master: Int?
+        let hardware: Int?
+        let software: Int?
+        let hardwareAvailable: Bool
+        let softwareAvailable: Bool
+        let recoveryRegistered: Bool
+        let expectedHardware: Int?
+        let expectedSoftware: Int?
+        let expectedMaster: Int?
+        let preserveOutput: Bool?
+    }
+    let softwareBrightnessFloor: Int
+    let vectors: [VectorRow]
+    let transitions: [TransitionRow]
 }

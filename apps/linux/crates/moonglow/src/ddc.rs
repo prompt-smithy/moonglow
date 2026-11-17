@@ -11,6 +11,7 @@ use i2cdev::linux::{LinuxI2CBus, LinuxI2CError, LinuxI2CMessage};
 use moonglow_core::ddc::{self, CHIP_ADDRESS, DEBOUNCE_DELAY, MAX_ATTEMPTS, WRITE_DELAY};
 use moonglow_core::settings::AppSettings;
 use moonglow_core::traits::BrightnessService;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 
@@ -135,6 +136,8 @@ pub struct LinuxDdcService {
 
 struct Inner {
     supported: bool,
+    /// DRM connector names whose sysfs `ddc` link points at an answering I²C bus.
+    supported_connectors: HashSet<String>,
     /// Why the probe came back empty, if anything actionable was found.
     note: Option<String>,
     /// Shared with the worker thread: the latest requested brightness.
@@ -152,6 +155,10 @@ impl LinuxDdcService {
     }
 
     pub fn probe_under(dev_dir: &Path) -> Self {
+        Self::probe_under_with_drm_dir(dev_dir, Path::new("/sys/class/drm"))
+    }
+
+    fn probe_under_with_drm_dir(dev_dir: &Path, drm_dir: &Path) -> Self {
         let buses = enumerate_buses(dev_dir);
         let mut answering = Vec::new();
         let mut denied = 0;
@@ -166,10 +173,19 @@ impl LinuxDdcService {
         if let Some(note) = &note {
             eprintln!("brightness: DDC/CI unavailable ({note})");
         }
-        Self::with_buses(answering, note)
+        let edids = answering
+            .iter()
+            .filter_map(|bus| read_bus_edid(bus))
+            .collect();
+        let supported_connectors = connectors_for_answering_buses(drm_dir, &answering, &edids);
+        Self::with_buses(answering, note, supported_connectors)
     }
 
-    fn with_buses(buses: Vec<PathBuf>, note: Option<String>) -> Self {
+    fn with_buses(
+        buses: Vec<PathBuf>,
+        note: Option<String>,
+        supported_connectors: HashSet<String>,
+    ) -> Self {
         let supported = !buses.is_empty();
         let (notify_tx, notify_rx) = mpsc::channel::<()>();
         // The worker owns its bus handles and applies the latest pending
@@ -200,6 +216,7 @@ impl LinuxDdcService {
         Self {
             inner: Mutex::new(Inner {
                 supported: supported && worker.is_some(),
+                supported_connectors,
                 note,
                 pending_brightness: pending,
                 notify_tx: Some(notify_tx),
@@ -207,6 +224,20 @@ impl LinuxDdcService {
                 disposed: false,
             }),
         }
+    }
+
+    /// DRM connector names backed by a DDC bus that answered the luminance probe.
+    pub fn supported_connectors(&self) -> HashSet<String> {
+        self.inner
+            .lock()
+            .map(|inner| {
+                if inner.supported {
+                    inner.supported_connectors.clone()
+                } else {
+                    HashSet::new()
+                }
+            })
+            .unwrap_or_default()
     }
 
     /// Re-runs the bus probe, e.g. after the display set changed. Disposes
@@ -228,6 +259,7 @@ impl LinuxDdcService {
         Self {
             inner: Mutex::new(Inner {
                 supported: false,
+                supported_connectors: HashSet::new(),
                 note: None,
                 pending_brightness: Arc::new(Mutex::new(DEFAULT_BRIGHTNESS)),
                 notify_tx: Some(notify_tx),
@@ -236,6 +268,129 @@ impl LinuxDdcService {
             }),
         }
     }
+}
+
+/// Stable monitor identity shared by sysfs, I²C EDID and RandR. Reject malformed
+/// EDIDs rather than allowing empty/default identities to claim unrelated outputs.
+pub(crate) fn edid_identity(edid: &[u8]) -> Option<String> {
+    if edid.len() < 128
+        || edid[..8] != [0, 255, 255, 255, 255, 255, 255, 0]
+        || edid[..128].iter().fold(0u8, |sum, b| sum.wrapping_add(*b)) != 0
+    {
+        return None;
+    }
+    Some(format!(
+        "edid-{}",
+        edid[8..18]
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    ))
+}
+
+fn read_bus_edid(path: &Path) -> Option<String> {
+    let mut bus = LinuxI2CBus::new(path).ok()?;
+    let offset = [0u8];
+    let mut edid = [0u8; 128];
+    let mut messages = [
+        LinuxI2CMessage::write(&offset).with_address(0x50),
+        LinuxI2CMessage::read(&mut edid).with_address(0x50),
+    ];
+    bus.transfer(&mut messages).ok()?;
+    edid_identity(&edid)
+}
+
+/// Prefer monitor identity to connector spellings: NVIDIA, modesetting and
+/// proprietary X11 drivers use different names for the same physical output.
+fn connectors_for_answering_buses(
+    drm_dir: &Path,
+    buses: &[PathBuf],
+    edids: &HashSet<String>,
+) -> HashSet<String> {
+    let answering: HashSet<String> = buses
+        .iter()
+        .filter_map(|path| path.file_name()?.to_str().map(str::to_owned))
+        .collect();
+    let mut connectors = edids.clone();
+    if answering.is_empty() {
+        return connectors;
+    }
+    let Ok(entries) = std::fs::read_dir(drm_dir) else {
+        return connectors;
+    };
+    let externals: Vec<_> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let (_, suffix) = name.split_once('-')?;
+            if !name.starts_with("card")
+                || suffix.starts_with("eDP")
+                || suffix.starts_with("LVDS")
+                || std::fs::read_to_string(entry.path().join("status"))
+                    .ok()?
+                    .trim()
+                    != "connected"
+                || std::fs::read_to_string(entry.path().join("enabled"))
+                    .is_ok_and(|v| v.trim() == "disabled")
+            {
+                return None;
+            }
+            Some((name.clone(), suffix.to_owned(), entry.path()))
+        })
+        .collect();
+    let mut suffix_counts = HashMap::<String, usize>::new();
+    for (_, suffix, _) in &externals {
+        *suffix_counts.entry(suffix.clone()).or_default() += 1;
+    }
+    let mut matched = Vec::new();
+    for (name, suffix, path) in &externals {
+        let edid = std::fs::read(path.join("edid"))
+            .ok()
+            .and_then(|bytes| edid_identity(&bytes));
+        let target = std::fs::canonicalize(path.join("ddc"))
+            .ok()
+            .or_else(|| std::fs::read_link(path.join("ddc")).ok());
+        let bus = target.as_ref().and_then(|target| {
+            target
+                .components()
+                .filter_map(|c| c.as_os_str().to_str())
+                .rfind(|c| c.starts_with("i2c-") && c[4..].chars().all(|c| c.is_ascii_digit()))
+        });
+        if edid.as_ref().is_some_and(|key| edids.contains(key))
+            || bus.is_some_and(|bus| answering.contains(bus))
+        {
+            matched.push((name, suffix, edid));
+        }
+    }
+    // Some drivers expose neither a DDC link nor readable EDID. Only infer
+    // complete external coverage when the two counts agree and nothing mapped.
+    if matched.is_empty() && externals.len() == answering.len() {
+        matched = externals
+            .iter()
+            .map(|(name, suffix, path)| {
+                (
+                    name,
+                    suffix,
+                    std::fs::read(path.join("edid"))
+                        .ok()
+                        .and_then(|b| edid_identity(&b)),
+                )
+            })
+            .collect();
+    }
+    if !externals.is_empty() && matched.len() == externals.len() {
+        connectors.insert(format!("all-external-outputs:{}", externals.len()));
+    }
+    for (name, suffix, edid) in matched {
+        connectors.insert(name.clone());
+        if let Some(edid) = edid {
+            connectors.insert(edid);
+        }
+        if suffix_counts.get(suffix) == Some(&1) {
+            connectors.insert(suffix.clone());
+        }
+    }
+    connectors
 }
 
 impl BrightnessService for LinuxDdcService {
@@ -375,5 +530,75 @@ mod tests {
         service.dispose();
         service.dispose();
         assert!(!service.is_supported());
+    }
+
+    fn fake_edid(serial: u8) -> Vec<u8> {
+        let mut edid = vec![0; 128];
+        edid[..8].copy_from_slice(&[0, 255, 255, 255, 255, 255, 255, 0]);
+        edid[8..12].copy_from_slice(&[0x12, 0x34, 0x56, 0x78]);
+        edid[12] = serial;
+        edid[127] = 0u8.wrapping_sub(edid[..127].iter().fold(0u8, |sum, b| sum.wrapping_add(*b)));
+        edid
+    }
+
+    #[test]
+    fn edid_maps_without_ddc_links_and_distinguishes_duplicate_suffixes() {
+        let dir = std::env::temp_dir().join(format!("moonglow-edid-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (name, serial) in [("card0-DP-1", 1), ("card1-DP-1", 2)] {
+            let path = dir.join(name);
+            std::fs::create_dir_all(&path).unwrap();
+            std::fs::write(path.join("status"), "connected").unwrap();
+            std::fs::write(path.join("edid"), fake_edid(serial)).unwrap();
+        }
+        let identity = edid_identity(&fake_edid(2)).unwrap();
+        let capabilities = connectors_for_answering_buses(
+            &dir,
+            &[PathBuf::from("/dev/i2c-7")],
+            &HashSet::from([identity.clone()]),
+        );
+        assert!(capabilities.contains("card1-DP-1"));
+        assert!(capabilities.contains(&identity));
+        assert!(!capabilities.contains("card0-DP-1"));
+        assert!(!capabilities.contains("DP-1"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn missing_ddc_and_edid_use_only_complete_external_coverage() {
+        let dir =
+            std::env::temp_dir().join(format!("moonglow-ddc-fallback-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("card0-HDMI-A-1");
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::write(path.join("status"), "connected").unwrap();
+        let capabilities =
+            connectors_for_answering_buses(&dir, &[PathBuf::from("/dev/i2c-7")], &HashSet::new());
+        assert!(capabilities.contains("card0-HDMI-A-1"));
+        std::fs::write(path.join("enabled"), "disabled").unwrap();
+        assert!(connectors_for_answering_buses(
+            &dir,
+            &[PathBuf::from("/dev/i2c-7")],
+            &HashSet::new()
+        )
+        .is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn muxed_ddc_link_uses_the_last_i2c_adapter() {
+        let dir = std::env::temp_dir().join(format!("moonglow-ddc-mux-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for name in ["card0-DP-1", "card0-DP-2"] {
+            let path = dir.join(name);
+            std::fs::create_dir_all(&path).unwrap();
+            std::fs::write(path.join("status"), "connected").unwrap();
+        }
+        std::os::unix::fs::symlink("../../i2c-1/i2c-7", dir.join("card0-DP-1/ddc")).unwrap();
+        let capabilities =
+            connectors_for_answering_buses(&dir, &[PathBuf::from("/dev/i2c-7")], &HashSet::new());
+        assert!(capabilities.contains("card0-DP-1"));
+        assert!(!capabilities.contains("card0-DP-2"));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

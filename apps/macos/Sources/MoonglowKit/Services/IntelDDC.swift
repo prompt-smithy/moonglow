@@ -1,4 +1,4 @@
-#if arch(x86_64)
+#if !MOONGLOW_APP_SANDBOXED && arch(x86_64)
 import CoreGraphics
 import Foundation
 import IOKit
@@ -179,14 +179,15 @@ public final class IntelDDCBrightnessService: BrightnessService {
 
     private let queue = DispatchQueue(label: "com.prompt-smithy.Moonglow.intel-ddc")
     private let lock = NSLock()
-    private let displayID: CGDirectDisplayID
+    private let displayIDProvider: () -> CGDirectDisplayID
+    private var connectionDisplayID: CGDirectDisplayID?
     private var connection: IntelI2CConnection?
     private var pendingBrightness = AppSettings.defaultManualBrightness
     private var pendingWrite: DispatchWorkItem?
     private var isDisposed = false
 
-    public init(displayID: CGDirectDisplayID) {
-        self.displayID = displayID
+    public init(displayIDProvider: @escaping () -> CGDirectDisplayID = { CGMainDisplayID() }) {
+        self.displayIDProvider = displayIDProvider
         // The first probe runs through refreshSupportAsync from the view model, off the
         // main thread: opening the connection probes the panel with sleeping I2C traffic.
     }
@@ -194,13 +195,13 @@ public final class IntelDDCBrightnessService: BrightnessService {
     public var isSupported: Bool {
         lock.lock()
         defer { lock.unlock() }
-        return connection != nil && !isDisposed
+        return connection != nil && !isDisposed && connectionDisplayID == displayIDProvider()
     }
 
     /// Re-opens the I2C connection when hardware is currently down. Opening probes the panel,
     /// so a late-answering display is picked up without relaunching.
     public func refreshSupport() {
-        _ = openIfNeeded()
+        queue.sync { _ = openIfNeeded() }
     }
 
     /// Probes on the serial queue so the calling thread never sleeps on I2C.
@@ -213,7 +214,12 @@ public final class IntelDDCBrightnessService: BrightnessService {
     /// Opens (and probes) the I2C connection unless hardware is already up. Returns true
     /// when this call newly established support. Safe from any thread.
     private func openIfNeeded() -> Bool {
+        let displayID = displayIDProvider()
         lock.lock()
+        if connectionDisplayID != displayID {
+            connection?.close()
+            connection = nil
+        }
         guard connection == nil, !isDisposed else {
             lock.unlock()
             return false
@@ -233,6 +239,7 @@ public final class IntelDDCBrightnessService: BrightnessService {
             return false
         }
         connection = opened
+        connectionDisplayID = displayID
         return true
     }
 
@@ -278,11 +285,25 @@ public final class IntelDDCBrightnessService: BrightnessService {
         let disposed = isDisposed
         lock.unlock()
 
-        guard let connection, !disposed else { return }
+        guard let connection, !disposed, connectionDisplayID == displayIDProvider() else { return }
 
         for _ in 0..<DDCPacket.maxAttempts {
             Thread.sleep(forTimeInterval: DDCPacket.writeDelay)
             if connection.writeBrightness(percent: percent) { return }
+        }
+        lock.lock()
+        self.connection?.close()
+        self.connection = nil
+        lock.unlock()
+        guard openIfNeeded() else { return }
+        lock.lock()
+        let recovered = self.connection
+        lock.unlock()
+        if recovered?.writeBrightness(percent: percent) != true {
+            lock.lock()
+            self.connection?.close()
+            self.connection = nil
+            lock.unlock()
         }
     }
 }

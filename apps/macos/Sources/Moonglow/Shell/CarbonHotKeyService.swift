@@ -21,11 +21,17 @@ final class CarbonHotKeyService: HotKeyService, @unchecked Sendable {
 
     private var registrations: [EventHotKeyRef] = []
     private var eventHandler: EventHandlerRef?
+    private var assignments: [(action: HotKeyAction, shortcut: HotKeyShortcut?)] = []
+    private var restoreBrightnessSuspendedForMenu = false
 
-    func updateHotKeys(_ assignments: [(action: HotKeyAction, shortcut: HotKeyShortcut?)]) {
+    @discardableResult
+    func updateHotKeys(_ assignments: [(action: HotKeyAction, shortcut: HotKeyShortcut?)]) -> Set<HotKeyAction> {
+        self.assignments = assignments
         unregisterAll()
-        installHandlerIfNeeded()
+        guard installHandlerIfNeeded() else { return [] }
+        var registeredActions = Set<HotKeyAction>()
         for assignment in assignments {
+            if restoreBrightnessSuspendedForMenu && assignment.action == .restoreBrightness { continue }
             guard let shortcut = assignment.shortcut, shortcut.isValid else { continue }
             var reference: EventHotKeyRef?
             let identifier = EventHotKeyID(signature: Self.signature, id: assignment.action.rawValue)
@@ -45,16 +51,33 @@ final class CarbonHotKeyService: HotKeyService, @unchecked Sendable {
                 continue
             }
             registrations.append(reference)
+            registeredActions.insert(assignment.action)
         }
+        return registeredActions
     }
 
-    private func installHandlerIfNeeded() {
-        guard eventHandler == nil else { return }
+    /// Lets the tracking status menu receive the recovery key as its own key equivalent.
+    /// Carbon hot keys are delivered on the app event loop, which may be occupied while
+    /// AppKit tracks an open menu.
+    func suspendRestoreBrightnessForMenu() {
+        guard !restoreBrightnessSuspendedForMenu else { return }
+        restoreBrightnessSuspendedForMenu = true
+        _ = updateHotKeys(assignments)
+    }
+
+    /// Re-registers the recovery key after the menu closes. The view model performs the
+    /// registration update so it can verify success and re-lock brightness if needed.
+    func resumeRestoreBrightnessAfterMenu() {
+        restoreBrightnessSuspendedForMenu = false
+    }
+
+    private func installHandlerIfNeeded() -> Bool {
+        guard eventHandler == nil else { return true }
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
-        InstallEventHandler(
+        let status = InstallEventHandler(
             GetApplicationEventTarget(),
             carbonHotKeyHandler,
             1,
@@ -62,6 +85,11 @@ final class CarbonHotKeyService: HotKeyService, @unchecked Sendable {
             Unmanaged.passUnretained(self).toOpaque(),
             &eventHandler
         )
+        guard status == noErr, eventHandler != nil else {
+            AppLog.shared.log(.lifecycle, "hot-key event handler install failed (OSStatus \(status))")
+            return false
+        }
+        return true
     }
 
     @MainActor

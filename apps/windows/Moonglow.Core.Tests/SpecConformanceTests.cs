@@ -35,7 +35,7 @@ public sealed class SpecConformanceTests
             var settings = JsonSerializer.Deserialize<AppSettings>(row.GetProperty("input").GetRawText(), options)!.Normalized();
             using var actual = JsonDocument.Parse(JsonSerializer.Serialize(settings, options));
             foreach (var expected in row.GetProperty("expected").EnumerateObject())
-                Assert.Equal(expected.Value.GetRawText(), actual.RootElement.GetProperty(expected.Name).GetRawText());
+                Assert.True(JsonElement.DeepEquals(expected.Value, actual.RootElement.GetProperty(expected.Name)), $"{row.GetProperty("name")}: {expected.Name}");
         }
     }
 
@@ -132,7 +132,66 @@ public sealed class SpecConformanceTests
         ManualBrightness = profile.GetProperty("manualBrightness").GetInt32(),
         ManualColorTempK = profile.GetProperty("manualColorTempK").GetInt32(),
         LaunchAtLogin = profile.GetProperty("launchAtLogin").GetBoolean(),
+        HardwareBrightnessEnabled = profile.TryGetProperty("hardwareBrightnessEnabled", out var hw) ? hw.GetBoolean() : true,
+        SoftwareBrightnessEnabled = profile.TryGetProperty("softwareBrightnessEnabled", out var sw) ? sw.GetBoolean() : true,
+        SplitBrightnessControls = profile.TryGetProperty("splitBrightnessControls", out var sp) ? sp.GetBoolean() : false,
+        ManualHardwareBrightness = profile.TryGetProperty("manualHardwareBrightness", out var mhw) ? mhw.GetInt32() : 80,
+        ManualSoftwareBrightness = profile.TryGetProperty("manualSoftwareBrightness", out var msw) ? msw.GetInt32() : 100,
     };
+
+    [Fact]
+    public void BrightnessRoutingVectorsMatch()
+    {
+        using var document = Load("brightness-routing.json");
+        int floor = document.RootElement.GetProperty("softwareBrightnessFloor").GetInt32();
+        Assert.Equal(AppSettings.SoftwareBrightnessFloor, floor);
+
+        foreach (var row in document.RootElement.GetProperty("vectors").EnumerateArray())
+        {
+            int master = row.GetProperty("master").GetInt32();
+            int hwInput = row.GetProperty("hardwareInput").GetInt32();
+            int swInput = row.GetProperty("softwareInput").GetInt32();
+            bool split = row.GetProperty("split").GetBoolean();
+            bool hwAvail = row.GetProperty("hardwareAvailable").GetBoolean();
+            bool swAvail = row.GetProperty("softwareAvailable").GetBoolean();
+            bool recReg = row.GetProperty("recoveryRegistered").GetBoolean();
+
+            var output = BrightnessPlan.ComputeRouting(
+                master, split, hwInput, swInput, hwAvail, swAvail, recReg);
+
+            int? expectedHw = row.GetProperty("expectedHardware").ValueKind == JsonValueKind.Null
+                ? null
+                : row.GetProperty("expectedHardware").GetInt32();
+            int expectedSw = row.GetProperty("expectedSoftware").GetInt32();
+
+            Assert.Equal(expectedHw, output.Hardware);
+            Assert.Equal(expectedSw, output.Software);
+        }
+
+        foreach (var row in document.RootElement.GetProperty("transitions").EnumerateArray())
+        {
+            bool hwAvail = row.GetProperty("hardwareAvailable").GetBoolean();
+            bool swAvail = row.GetProperty("softwareAvailable").GetBoolean();
+            bool recReg = row.GetProperty("recoveryRegistered").GetBoolean();
+
+            if (row.TryGetProperty("expectedMaster", out var expMasterProp))
+            {
+                int? hw = row.GetProperty("hardware").ValueKind == JsonValueKind.Null ? null : row.GetProperty("hardware").GetInt32();
+                int sw = row.GetProperty("software").GetInt32();
+                int master = row.TryGetProperty("preserveOutput", out var preserve) && preserve.GetBoolean()
+                    ? BrightnessPlan.MasterPreservingOutput(new BrightnessPlan.RoutingOutput(hw, sw), hwAvail, swAvail, recReg)
+                    : BrightnessPlan.SplitToUnified(hw!.Value, sw, hwAvail, swAvail, recReg);
+                Assert.Equal(expMasterProp.GetInt32(), master);
+            }
+            else
+            {
+                int master = row.GetProperty("master").GetInt32();
+                var split = BrightnessPlan.UnifiedToSplit(master, hwAvail, swAvail, recReg);
+                Assert.Equal(row.GetProperty("expectedHardware").GetInt32(), split.Hardware);
+                Assert.Equal(row.GetProperty("expectedSoftware").GetInt32(), split.Software);
+            }
+        }
+    }
 
     /// <summary>Vector times are two-element <c>[hour, minute]</c> arrays.</summary>
     private static string TimeFromPair(JsonElement pair)

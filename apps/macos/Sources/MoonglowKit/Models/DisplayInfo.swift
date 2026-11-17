@@ -8,6 +8,8 @@ public struct DisplayInfo: Identifiable, Equatable, Sendable {
     public let name: String
     public let isPrimary: Bool
     public let supportsBrightness: Bool
+    public let supportsHardwareBrightness: Bool
+    public let supportsSoftwareBrightness: Bool
     public let supportsColorTemperature: Bool
 
     public var id: UInt32 { nativeId }
@@ -17,12 +19,16 @@ public struct DisplayInfo: Identifiable, Equatable, Sendable {
         name: String,
         isPrimary: Bool,
         supportsBrightness: Bool,
-        supportsColorTemperature: Bool
+        supportsColorTemperature: Bool,
+        supportsHardwareBrightness: Bool? = nil,
+        supportsSoftwareBrightness: Bool? = nil
     ) {
         self.nativeId = nativeId
         self.name = name
         self.isPrimary = isPrimary
         self.supportsBrightness = supportsBrightness
+        self.supportsHardwareBrightness = supportsHardwareBrightness ?? supportsBrightness
+        self.supportsSoftwareBrightness = supportsSoftwareBrightness ?? supportsColorTemperature
         self.supportsColorTemperature = supportsColorTemperature
     }
 

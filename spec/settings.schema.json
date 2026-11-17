@@ -52,7 +52,36 @@
       "default": 80,
       "minimum": 1,
       "maximum": 100,
-      "description": "Hardware brightness in percent."
+      "description": "Unified brightness value in percent. Hardware is reduced first, then registered software dimming provides extra-low levels."
+    },
+    "hardwareBrightnessEnabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether Moonglow may send hardware backlight commands."
+    },
+    "softwareBrightnessEnabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether Moonglow may dim displays through gamma or a software overlay; a registered restore shortcut is required."
+    },
+    "splitBrightnessControls": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether split hardware backlight and software shade controls are expanded by default."
+    },
+    "manualHardwareBrightness": {
+      "type": "integer",
+      "default": 80,
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Hardware backlight level in percent when split brightness controls are active."
+    },
+    "manualSoftwareBrightness": {
+      "type": "integer",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Software gamma shade in percent when split brightness controls are active."
     },
     "manualColorTempK": {
       "type": "integer",
@@ -82,6 +111,16 @@
     "decreaseTemperatureShortcut": {
       "$ref": "#/$defs/hotKey",
       "description": "Global temperature-down (warmer) shortcut. null disables it."
+    },
+    "restoreBrightnessShortcut": {
+      "$ref": "#/$defs/hotKey",
+      "default": null,
+      "description": "Optional global recovery shortcut that restores brightness to 100% and unlocks software dimming below the default 50% floor."
+    },
+    "restoreBrightnessBoundExternally": {
+      "type": "boolean",
+      "default": false,
+      "description": "Linux only: an external IPC recovery command acknowledged a compositor key binding. Used only when no application shortcut backend exists."
     }
   },
   "$defs": {

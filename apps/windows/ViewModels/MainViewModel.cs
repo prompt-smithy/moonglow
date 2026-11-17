@@ -24,6 +24,7 @@ public sealed class MainViewModel : ObservableObject
     private int _colorTemp;
     private bool _auto;
     private string? _hotkeyMessage;
+    private bool _restoreBrightnessHotkeyRegistered;
 
     public event EventHandler? OpenSettingsRequested;
     public event EventHandler? ExitRequested;
@@ -56,6 +57,7 @@ public sealed class MainViewModel : ObservableObject
         };
 
         _brightnessValue = AppSettings.ClampBrightness(Settings.ManualBrightness);
+        _recoveryRegistrationPending = Settings.RestoreBrightnessShortcut is not null;
         _auto = Settings.AutoColorTemperature;
         _colorTemp = _auto ? _schedule.CurrentTargetTemperature() : AppSettings.ClampKelvin(Settings.ManualColorTempK);
 
@@ -64,6 +66,19 @@ public sealed class MainViewModel : ObservableObject
         RefreshCommand = new RelayCommand(_ => RefreshDisplays());
 
         _schedule.TemperatureApplied += OnScheduleTemperatureApplied;
+        _color.SoftwareBrightnessSupportChanged += (_, _) =>
+        {
+            if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return;
+            try
+            {
+                _dispatcher.BeginInvoke(new Action(() =>
+                {
+                    ApplyBrightnessSettings();
+                    NotifyBrightnessProperties();
+                }));
+            }
+            catch (InvalidOperationException) { }
+        };
 
         RefreshDisplays();
     }
@@ -73,8 +88,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Applies the persisted brightness and (manual) color temperature at launch.</summary>
     public void ApplyInitialState()
     {
-        if (HasBrightnessSupport)
-            _brightness.SetBrightness(_brightnessValue);
+        ApplyBrightnessSettings();
 
         ReapplyColorTemperature();
     }
@@ -87,7 +101,189 @@ public sealed class MainViewModel : ObservableObject
             _color.Apply(_colorTemp);
     }
 
-    public bool HasBrightnessSupport => _brightness.IsSupported;
+    public bool AllActiveDisplaysSupportHardwareBrightness
+        => _brightness.IsSupported && _brightness.AllActiveDisplaysSupportHardware;
+
+    public bool HasHardwareBrightnessSupport
+        => Settings.HardwareBrightnessEnabled && AllActiveDisplaysSupportHardwareBrightness;
+
+    public bool HasSoftwareBrightnessSupport => _color.SupportsSoftwareBrightness;
+
+    public bool HasBrightnessSupport => HasHardwareBrightnessSupport || HasSoftwareBrightnessSupport;
+
+    public bool HasBrightnessRecoveryShortcut
+        => Settings.RestoreBrightnessShortcut is not null && _restoreBrightnessHotkeyRegistered;
+
+    public bool HardwareBrightnessControlEnabled
+        => Settings.HardwareBrightnessEnabled && AllActiveDisplaysSupportHardwareBrightness;
+
+    public bool SoftwareBrightnessControlEnabled
+        => Settings.SoftwareBrightnessEnabled && HasSoftwareBrightnessSupport;
+
+    public bool BrightnessControlEnabled
+        => HardwareBrightnessControlEnabled || SoftwareBrightnessControlEnabled;
+
+    public bool SplitBrightnessControls
+    {
+        get => Settings.SplitBrightnessControls;
+        set
+        {
+            if (Settings.SplitBrightnessControls == value)
+                return;
+            if (value)
+            {
+                var split = BrightnessPlan.UnifiedToSplit(
+                    Settings.ManualBrightness,
+                    HardwareBrightnessControlEnabled,
+                    SoftwareBrightnessControlEnabled,
+                    HasBrightnessRecoveryShortcut
+                );
+                Settings.SplitBrightnessControls = true;
+                Settings.ManualHardwareBrightness = split.Hardware;
+                Settings.ManualSoftwareBrightness = split.Software;
+            }
+            else
+            {
+                int master = BrightnessPlan.SplitToUnified(
+                    Settings.ManualHardwareBrightness,
+                    Settings.ManualSoftwareBrightness,
+                    HardwareBrightnessControlEnabled,
+                    SoftwareBrightnessControlEnabled,
+                    HasBrightnessRecoveryShortcut
+                );
+                Settings.SplitBrightnessControls = false;
+                Settings.ManualBrightness = master;
+                _brightnessValue = master;
+            }
+            _settingsService.Save();
+            ApplyBrightnessSettings();
+            NotifyBrightnessProperties();
+        }
+    }
+
+    public bool HardwareBrightnessEnabled
+    {
+        get => Settings.HardwareBrightnessEnabled;
+        set
+        {
+            if (Settings.HardwareBrightnessEnabled == value)
+                return;
+            if (!value)
+                ReleaseHardwareIfOwned();
+            Settings.HardwareBrightnessEnabled = value;
+            _settingsService.Save();
+            ApplyBrightnessSettings();
+            NotifyBrightnessProperties();
+        }
+    }
+
+    public bool SoftwareBrightnessEnabled
+    {
+        get => Settings.SoftwareBrightnessEnabled;
+        set
+        {
+            if (Settings.SoftwareBrightnessEnabled == value)
+                return;
+            if (!value)
+                _color.SetSoftwareBrightness(AppSettings.MaxBrightnessPercent);
+            Settings.SoftwareBrightnessEnabled = value;
+            _settingsService.Save();
+            ApplyBrightnessSettings();
+            NotifyBrightnessProperties();
+        }
+    }
+
+    public int HardwareBrightness
+    {
+        get => AppSettings.ClampBrightness(Settings.ManualHardwareBrightness);
+        set
+        {
+            if (!HardwareBrightnessControlEnabled)
+                return;
+            int normalized = AppSettings.ClampBrightness(value);
+            if (Settings.ManualHardwareBrightness == normalized)
+                return;
+            Settings.ManualHardwareBrightness = normalized;
+            _settingsService.ScheduleSave();
+            OnPropertyChanged(nameof(HardwareBrightness));
+            _lastBrightnessAvailability = null;
+            ApplyBrightnessSettings();
+        }
+    }
+
+    public int SoftwareBrightness
+    {
+        get
+        {
+            if (!HasBrightnessRecoveryShortcut)
+                return Math.Max(AppSettings.ClampBrightness(Settings.ManualSoftwareBrightness), AppSettings.SoftwareBrightnessFloor);
+            return AppSettings.ClampBrightness(Settings.ManualSoftwareBrightness);
+        }
+        set
+        {
+            if (!SoftwareBrightnessControlEnabled)
+                return;
+            int normalized = Math.Max(AppSettings.ClampBrightness(value), SoftwareBrightnessMinimum);
+            if (Settings.ManualSoftwareBrightness == normalized)
+                return;
+            Settings.ManualSoftwareBrightness = normalized;
+            _settingsService.ScheduleSave();
+            OnPropertyChanged(nameof(SoftwareBrightness));
+            _lastBrightnessAvailability = null;
+            ApplyBrightnessSettings();
+        }
+    }
+
+    public string BrightnessDisplayText
+    {
+        get
+        {
+            if (Settings.SplitBrightnessControls)
+            {
+                if (HardwareBrightnessControlEnabled && SoftwareBrightnessControlEnabled)
+                    return $"HW {HardwareBrightness}% / SW {SoftwareBrightness}%";
+                if (HardwareBrightnessControlEnabled)
+                    return $"{HardwareBrightness}%";
+                if (SoftwareBrightnessControlEnabled)
+                    return $"{SoftwareBrightness}%";
+            }
+            return $"{Brightness}%";
+        }
+    }
+
+    public bool ShowBrightnessInfoButton
+        => !HardwareBrightnessControlEnabled
+            || (Settings.SoftwareBrightnessEnabled && HasSoftwareBrightnessSupport && !HasBrightnessRecoveryShortcut);
+
+    public string BrightnessStatus
+    {
+        get
+        {
+            if (!Settings.HardwareBrightnessEnabled && !Settings.SoftwareBrightnessEnabled)
+                return "Hardware and software brightness are disabled in Settings.";
+            if (HardwareBrightnessControlEnabled)
+            {
+                if (SoftwareBrightnessControlEnabled)
+                    return HasBrightnessRecoveryShortcut
+                        ? "Hardware brightness is available. Software dimming provides extra-low levels."
+                        : "Hardware brightness is available. Software dimming is limited to 50% until a restore shortcut is registered.";
+                return "Hardware brightness is available. Software Digital Shade is disabled in Settings.";
+            }
+            if (Settings.HardwareBrightnessEnabled && !AllActiveDisplaysSupportHardwareBrightness)
+                return SoftwareBrightnessControlEnabled
+                    ? (HasBrightnessRecoveryShortcut
+                        ? "At least one display lacks hardware brightness. Software dimming is applied across all displays."
+                        : "At least one display lacks hardware brightness. Software dimming is limited to 50% until a restore shortcut is registered.")
+                    : "All connected displays must support hardware brightness, or software brightness must be enabled.";
+            if (!HasSoftwareBrightnessSupport)
+                return "Hardware brightness is unavailable, and software brightness is not supported by this display backend.";
+            if (!Settings.SoftwareBrightnessEnabled)
+                return "Software Digital Shade is disabled in Settings.";
+            return HasBrightnessRecoveryShortcut
+                ? "Software brightness is available. The recovery shortcut restores it to 100%."
+                : "Software dimming is limited to 50% until a restore shortcut is registered.";
+        }
+    }
 
     public bool HasColorSupport => _monitors.Snapshot().Count > 0;
 
@@ -95,18 +291,26 @@ public sealed class MainViewModel : ObservableObject
 
     public int Brightness
     {
-        get => _brightnessValue;
+        get
+        {
+            if (!HardwareBrightnessControlEnabled && SoftwareBrightnessControlEnabled && !HasBrightnessRecoveryShortcut)
+                return Math.Max(_brightnessValue, AppSettings.SoftwareBrightnessFloor);
+            return _brightnessValue;
+        }
         set
         {
-            if (!SetProperty(ref _brightnessValue, AppSettings.ClampBrightness(value)))
+            if (Settings.SplitBrightnessControls || !BrightnessControlEnabled)
+                return;
+            if (!SetProperty(ref _brightnessValue, Math.Max(AppSettings.ClampBrightness(value), BrightnessMinimum)))
                 return;
 
+            _recoveryRegistrationPending = false;
+            _recoveryFloorHoldsPreference = false;
             Settings.ManualBrightness = _brightnessValue;
             _settingsService.ScheduleSave();
 
-            // The setting persists regardless; hardware only moves with a capable display.
-            if (HasBrightnessSupport)
-                _brightness.SetBrightness(_brightnessValue);
+            _lastBrightnessAvailability = null;
+            ApplyBrightnessSettings();
         }
     }
 
@@ -180,9 +384,146 @@ public sealed class MainViewModel : ObservableObject
     /// the keys do nothing without brightness-capable hardware.</summary>
     public void NudgeBrightness(int direction)
     {
-        if (!HasBrightnessSupport)
+        if (!BrightnessControlEnabled)
             return;
-        Brightness = Brightness + direction * AppSettings.HotkeyBrightnessStep;
+        if (Settings.SplitBrightnessControls)
+        {
+            if (direction > 0)
+            {
+                if (SoftwareBrightnessControlEnabled && SoftwareBrightness < 100)
+                    SoftwareBrightness += direction * AppSettings.HotkeyBrightnessStep;
+                else if (HardwareBrightnessControlEnabled)
+                    HardwareBrightness += direction * AppSettings.HotkeyBrightnessStep;
+            }
+            else
+            {
+                if (HardwareBrightnessControlEnabled && HardwareBrightness > 1)
+                    HardwareBrightness += direction * AppSettings.HotkeyBrightnessStep;
+                else if (SoftwareBrightnessControlEnabled)
+                    SoftwareBrightness += direction * AppSettings.HotkeyBrightnessStep;
+            }
+        }
+        else
+        {
+            Brightness += direction * AppSettings.HotkeyBrightnessStep;
+        }
+    }
+
+    public void RestoreBrightnessToFull()
+    {
+        _lastBrightnessAvailability = null;
+        _recoveryRegistrationPending = false;
+        _recoveryFloorHoldsPreference = false;
+        _brightnessValue = AppSettings.MaxBrightnessPercent;
+        Settings.ManualBrightness = _brightnessValue;
+        Settings.ManualHardwareBrightness = AppSettings.MaxBrightnessPercent;
+        Settings.ManualSoftwareBrightness = AppSettings.MaxBrightnessPercent;
+        _settingsService.ScheduleSave();
+        NotifyBrightnessProperties();
+        ApplyBrightnessSettings();
+    }
+
+    /// <summary>Updates the safety gate from the OS registration result.</summary>
+    public void SetRestoreBrightnessHotkeyRegistered(bool registered)
+    {
+        _restoreBrightnessHotkeyRegistered = registered;
+        OnPropertyChanged(nameof(HasBrightnessRecoveryShortcut));
+        ApplyBrightnessSettings();
+        NotifyBrightnessProperties();
+    }
+
+    private bool _hardwareOwned;
+    private bool _recoveryRegistrationPending;
+    private bool _recoveryFloorHoldsPreference;
+    private BrightnessPlan.RoutingOutput? _lastBrightnessRoute;
+    private (bool Hardware, bool Software, bool Recovery)? _lastBrightnessAvailability;
+
+    public int SoftwareBrightnessMinimum => HasBrightnessRecoveryShortcut ? 1 : AppSettings.SoftwareBrightnessFloor;
+    public int BrightnessMinimum => !HardwareBrightnessControlEnabled && SoftwareBrightnessControlEnabled ? SoftwareBrightnessMinimum : 1;
+
+    private void ReleaseHardwareIfOwned()
+    {
+        if (!_hardwareOwned)
+            return;
+        if (_brightness.IsSupported)
+            _brightness.SetBrightness(AppSettings.MaxBrightnessPercent);
+        _hardwareOwned = false;
+    }
+
+    private void ApplyBrightnessSettings()
+    {
+        bool hardwareUsable = HardwareBrightnessControlEnabled;
+        bool softwareUsable = SoftwareBrightnessControlEnabled;
+        var availability = (Hardware: hardwareUsable, Software: softwareUsable, Recovery: HasBrightnessRecoveryShortcut);
+        if (!Settings.SplitBrightnessControls && _lastBrightnessAvailability is { } previous && _lastBrightnessRoute is { } output)
+        {
+            bool recoveryChanged = previous.Recovery != availability.Recovery;
+            bool keepPreference = recoveryChanged && (_recoveryRegistrationPending || _recoveryFloorHoldsPreference
+                || (previous.Recovery && output.Software < AppSettings.SoftwareBrightnessFloor));
+            if (recoveryChanged && previous.Recovery && output.Software < AppSettings.SoftwareBrightnessFloor)
+                _recoveryFloorHoldsPreference = true;
+            bool changed = previous.Hardware != availability.Hardware || (previous.Hardware &&
+                (previous.Software != availability.Software || (recoveryChanged && !keepPreference)));
+            if ((previous.Hardware || previous.Software) && (availability.Hardware || availability.Software) && changed)
+            {
+                _brightnessValue = BrightnessPlan.MasterPreservingOutput(output, hardwareUsable, softwareUsable, availability.Recovery);
+                Settings.ManualBrightness = _brightnessValue;
+                _settingsService.ScheduleSave();
+            }
+        }
+        if (availability.Recovery)
+        {
+            _recoveryRegistrationPending = false;
+            _recoveryFloorHoldsPreference = false;
+        }
+
+        var route = BrightnessPlan.ComputeRouting(
+            _brightnessValue,
+            Settings.SplitBrightnessControls,
+            Settings.ManualHardwareBrightness,
+            Settings.ManualSoftwareBrightness,
+            hardwareUsable,
+            softwareUsable,
+            HasBrightnessRecoveryShortcut
+        );
+
+        if (route.Hardware.HasValue)
+        {
+            _brightness.SetBrightness(route.Hardware.Value);
+            _hardwareOwned = true;
+        }
+        else
+        {
+            ReleaseHardwareIfOwned();
+        }
+
+        _color.SetSoftwareBrightness(route.Software);
+        _lastBrightnessRoute = route;
+        _lastBrightnessAvailability = availability;
+        OnPropertyChanged(nameof(BrightnessDisplayText));
+    }
+
+    private void NotifyBrightnessProperties()
+    {
+        OnPropertyChanged(nameof(BrightnessDisplayText));
+        OnPropertyChanged(nameof(BrightnessMinimum));
+        OnPropertyChanged(nameof(SoftwareBrightnessMinimum));
+        OnPropertyChanged(nameof(HasHardwareBrightnessSupport));
+        OnPropertyChanged(nameof(AllActiveDisplaysSupportHardwareBrightness));
+        OnPropertyChanged(nameof(HasSoftwareBrightnessSupport));
+        OnPropertyChanged(nameof(HasBrightnessSupport));
+        OnPropertyChanged(nameof(HasBrightnessRecoveryShortcut));
+        OnPropertyChanged(nameof(HardwareBrightnessEnabled));
+        OnPropertyChanged(nameof(SoftwareBrightnessEnabled));
+        OnPropertyChanged(nameof(SplitBrightnessControls));
+        OnPropertyChanged(nameof(HardwareBrightnessControlEnabled));
+        OnPropertyChanged(nameof(SoftwareBrightnessControlEnabled));
+        OnPropertyChanged(nameof(HardwareBrightness));
+        OnPropertyChanged(nameof(SoftwareBrightness));
+        OnPropertyChanged(nameof(BrightnessControlEnabled));
+        OnPropertyChanged(nameof(ShowBrightnessInfoButton));
+        OnPropertyChanged(nameof(BrightnessStatus));
+        OnPropertyChanged(nameof(Brightness));
     }
 
     /// <summary>One shortcut step cooler or warmer. Manual keys must not fight
@@ -207,11 +548,13 @@ public sealed class MainViewModel : ObservableObject
     public string DecreaseBrightnessHotkeyText => HotkeyText(HotkeySlot.DecreaseBrightness, Settings.DecreaseBrightnessShortcut);
     public string IncreaseTemperatureHotkeyText => HotkeyText(HotkeySlot.IncreaseTemperature, Settings.IncreaseTemperatureShortcut);
     public string DecreaseTemperatureHotkeyText => HotkeyText(HotkeySlot.DecreaseTemperature, Settings.DecreaseTemperatureShortcut);
+    public string RestoreBrightnessHotkeyText => HotkeyText(HotkeySlot.RestoreBrightness, Settings.RestoreBrightnessShortcut);
 
     public bool HasIncreaseBrightnessHotkey => Settings.IncreaseBrightnessShortcut is not null;
     public bool HasDecreaseBrightnessHotkey => Settings.DecreaseBrightnessShortcut is not null;
     public bool HasIncreaseTemperatureHotkey => Settings.IncreaseTemperatureShortcut is not null;
     public bool HasDecreaseTemperatureHotkey => Settings.DecreaseTemperatureShortcut is not null;
+    public bool HasRestoreBrightnessHotkey => Settings.RestoreBrightnessShortcut is not null;
 
     public void BeginCapture(HotkeySlot slot)
     {
@@ -256,6 +599,7 @@ public sealed class MainViewModel : ObservableObject
         Settings.DecreaseBrightnessShortcut = AppSettings.DefaultDecreaseBrightnessShortcut;
         Settings.IncreaseTemperatureShortcut = AppSettings.DefaultIncreaseTemperatureShortcut;
         Settings.DecreaseTemperatureShortcut = AppSettings.DefaultDecreaseTemperatureShortcut;
+        Settings.RestoreBrightnessShortcut = null;
         _settingsService.Save();
         CapturingSlot = null;
         HotkeyMessage = null;
@@ -276,6 +620,8 @@ public sealed class MainViewModel : ObservableObject
             Settings.IncreaseTemperatureShortcut = null;
         if (keep != HotkeySlot.DecreaseTemperature && Settings.DecreaseTemperatureShortcut == canonical)
             Settings.DecreaseTemperatureShortcut = null;
+        if (keep != HotkeySlot.RestoreBrightness && Settings.RestoreBrightnessShortcut == canonical)
+            Settings.RestoreBrightnessShortcut = null;
     }
 
     private void SetSlotGesture(HotkeySlot slot, string? gesture)
@@ -294,6 +640,9 @@ public sealed class MainViewModel : ObservableObject
             case HotkeySlot.DecreaseTemperature:
                 Settings.DecreaseTemperatureShortcut = gesture;
                 break;
+            case HotkeySlot.RestoreBrightness:
+                Settings.RestoreBrightnessShortcut = gesture;
+                break;
         }
     }
 
@@ -307,6 +656,9 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(HasDecreaseBrightnessHotkey));
         OnPropertyChanged(nameof(HasIncreaseTemperatureHotkey));
         OnPropertyChanged(nameof(HasDecreaseTemperatureHotkey));
+        OnPropertyChanged(nameof(RestoreBrightnessHotkeyText));
+        OnPropertyChanged(nameof(HasRestoreBrightnessHotkey));
+        NotifyBrightnessProperties();
         OnPropertyChanged(nameof(CapturingSlot));
         OnPropertyChanged(nameof(HotkeyMessage));
     }
@@ -458,10 +810,10 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Re-enumerates displays and re-probes hardware support.</summary>
     public void RefreshDisplays()
     {
-        bool hadBrightnessSupport = HasBrightnessSupport;
+        bool hadHardwareBrightnessSupport = HasHardwareBrightnessSupport;
         _brightness.RefreshSupport();
         _monitors.Refresh();
-        PublishDisplays(hadBrightnessSupport);
+        PublishDisplays(hadHardwareBrightnessSupport);
     }
 
     /// <summary>Re-enumerates displays on a worker thread. DDC probing can block while a
@@ -471,7 +823,7 @@ public sealed class MainViewModel : ObservableObject
         if (Interlocked.Exchange(ref _refreshInProgress, 1) == 1)
             return;
 
-        bool hadBrightnessSupport = HasBrightnessSupport;
+        bool hadHardwareBrightnessSupport = HasHardwareBrightnessSupport;
         Task.Run(() =>
         {
             try
@@ -493,7 +845,7 @@ public sealed class MainViewModel : ObservableObject
 
             try
             {
-                _dispatcher.BeginInvoke(new Action(() => PublishDisplays(hadBrightnessSupport)));
+                _dispatcher.BeginInvoke(new Action(() => PublishDisplays(hadHardwareBrightnessSupport)));
             }
             catch (InvalidOperationException)
             {
@@ -502,7 +854,7 @@ public sealed class MainViewModel : ObservableObject
         });
     }
 
-    private void PublishDisplays(bool hadBrightnessSupport)
+    private void PublishDisplays(bool hadHardwareBrightnessSupport)
     {
         Displays.Clear();
 
@@ -521,11 +873,9 @@ public sealed class MainViewModel : ObservableObject
         if (Displays.Count == 0)
             Displays.Add("No displays detected.");
 
-        // Hardware that answered late can take the persisted values now.
-        if (!hadBrightnessSupport && HasBrightnessSupport)
-            _brightness.SetBrightness(_brightnessValue);
+        ApplyBrightnessSettings();
 
-        OnPropertyChanged(nameof(HasBrightnessSupport));
+        NotifyBrightnessProperties();
         OnPropertyChanged(nameof(HasColorSupport));
         OnPropertyChanged(nameof(HasNoDisplays));
         OnPropertyChanged(nameof(ManualColorEnabled));

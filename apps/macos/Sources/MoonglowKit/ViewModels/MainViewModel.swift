@@ -33,6 +33,10 @@ public final class MainViewModel: ObservableObject {
     /// Active displays, refreshed on demand.
     @Published public private(set) var displays: [DisplayInfo] = []
 
+    /// Actions the operating system accepted. A configured recovery shortcut is not
+    /// considered safe until Carbon confirms that it is registered.
+    @Published public private(set) var registeredHotKeys: Set<HotKeyAction> = []
+
     /// The temperature currently on screen. In automatic mode this tracks the schedule
     /// rather than the saved manual value, which is why it is stored separately.
     @Published private var displayedTemperature: Int
@@ -44,6 +48,8 @@ public final class MainViewModel: ObservableObject {
     public var onShowSettings: (() -> Void)?
     /// Raised when the user asks to quit.
     public var onQuit: (() -> Void)?
+    /// Raised when the user clicks software brightness before configuring recovery.
+    public var onBrightnessRecoverySetupRequested: (() -> Void)?
 
     // MARK: - Init
 
@@ -66,6 +72,7 @@ public final class MainViewModel: ObservableObject {
 
         let loaded = store.load()
         self.settings = loaded
+        self.recoveryRegistrationPending = loaded.restoreBrightnessShortcut != nil
         self.displayedTemperature = loaded.autoColorTemperature
             ? ScheduleCalculator.temperature(for: loaded, at: Date())
             : loaded.manualColorTempK
@@ -85,8 +92,70 @@ public final class MainViewModel: ObservableObject {
 
     public var hasNoDisplays: Bool { displays.isEmpty }
 
+    public var allDisplaysSupportHardwareBrightness: Bool {
+        !displays.isEmpty
+            && brightnessService.isHardwareSupported
+            && displays.allSatisfy(\.supportsHardwareBrightness)
+    }
+
+    public var hasHardwareBrightnessSupport: Bool {
+        settings.hardwareBrightnessEnabled && brightnessService.isHardwareSupported
+            && displays.contains(where: \.supportsHardwareBrightness)
+    }
+
+    public var hasSoftwareBrightnessSupport: Bool {
+        brightnessService.isSoftwareSupported
+            && !displays.isEmpty
+            && displays.allSatisfy(\.supportsSoftwareBrightness)
+    }
+
     public var hasBrightnessSupport: Bool {
-        brightnessService.isSupported && displays.contains { $0.supportsBrightness }
+        hasHardwareBrightnessSupport || hasSoftwareBrightnessSupport
+    }
+
+    public var hasBrightnessRecoveryShortcut: Bool {
+        settings.restoreBrightnessShortcut != nil && registeredHotKeys.contains(.restoreBrightness)
+    }
+
+    /// Whether the slider can safely change brightness in this build.
+    public var brightnessControlEnabled: Bool {
+        hardwareBrightnessControlEnabled || softwareBrightnessControlEnabled
+    }
+
+    public var hardwareBrightnessControlEnabled: Bool {
+        settings.hardwareBrightnessEnabled && brightnessService.isHardwareSupported
+            && displays.contains(where: \.supportsHardwareBrightness)
+    }
+
+    public var softwareBrightnessControlEnabled: Bool {
+        settings.softwareBrightnessEnabled && hasSoftwareBrightnessSupport
+    }
+
+    /// Software brightness stays limited to 50% until the reset action is registered.
+    public var requiresBrightnessRecoverySetup: Bool {
+        settings.softwareBrightnessEnabled
+            && hasSoftwareBrightnessSupport
+            && !hasBrightnessRecoveryShortcut
+    }
+
+    public var showsBrightnessRecoveryInfo: Bool {
+        !hardwareBrightnessControlEnabled
+            || (settings.softwareBrightnessEnabled && hasSoftwareBrightnessSupport && !hasBrightnessRecoveryShortcut)
+    }
+
+    public var showsDualBrightnessMidpoint: Bool {
+        !settings.splitBrightnessControls
+            && hardwareBrightnessControlEnabled
+            && softwareBrightnessControlEnabled
+            && allDisplaysSupportHardwareBrightness
+    }
+
+    public var softwareBrightnessMinimum: Int { hasBrightnessRecoveryShortcut ? 1 : AppSettings.softwareBrightnessFloor }
+    public var brightnessMinimum: Int { !hardwareBrightnessControlEnabled && softwareBrightnessControlEnabled ? softwareBrightnessMinimum : 1 }
+    public var isSoftwareDimmed: Bool { (lastBrightnessRoute?.software ?? 100) < 100 }
+
+    private var routedSoftwareAvailable: Bool {
+        softwareBrightnessControlEnabled && (settings.splitBrightnessControls || !hardwareBrightnessControlEnabled || allDisplaysSupportHardwareBrightness)
     }
 
     public var hasColorSupport: Bool {
@@ -94,9 +163,35 @@ public final class MainViewModel: ObservableObject {
     }
 
     public var brightnessStatus: String {
-        hasBrightnessSupport
-            ? "Brightness control is available."
-            : "Brightness control is unavailable for the detected display connection."
+        if !settings.hardwareBrightnessEnabled && !settings.softwareBrightnessEnabled {
+            return "Hardware and software brightness are disabled in Settings."
+        }
+        if hardwareBrightnessControlEnabled {
+            if !allDisplaysSupportHardwareBrightness {
+                return "Hardware brightness controls the capable display. Use Digital Shade in split controls to dim all displays."
+            }
+            if softwareBrightnessControlEnabled {
+                return hasBrightnessRecoveryShortcut
+                    ? "Hardware brightness is available. Software dimming provides extra-low levels."
+                    : "Hardware brightness is available. Software dimming is limited to 50% until a restore shortcut is registered."
+            }
+            return "Hardware brightness is available. Software Digital Shade is disabled in Settings."
+        }
+        if settings.hardwareBrightnessEnabled && brightnessService.isHardwareSupported && !allDisplaysSupportHardwareBrightness {
+            if softwareBrightnessControlEnabled {
+                return "At least one display lacks hardware brightness. Software dimming is applied across all displays."
+            }
+            return "All connected displays must support hardware brightness, or software brightness must be enabled."
+        }
+        if hasSoftwareBrightnessSupport {
+            if !settings.softwareBrightnessEnabled {
+                return "Software Digital Shade is disabled in Settings."
+            }
+            return hasBrightnessRecoveryShortcut
+                ? "Software brightness is available. The recovery shortcut restores it to 100%."
+                : "Software dimming is limited to 50% until a restore shortcut is registered."
+        }
+        return "Brightness control is unavailable for the detected display connection."
     }
 
     /// Explains a disabled brightness slider when DDC hardware is up but no display can
@@ -104,11 +199,11 @@ public final class MainViewModel: ObservableObject {
     /// external panel, so a MacBook with the built-in panel as main reports no control
     /// rather than dimming the wrong screen. Nil when there is nothing to explain.
     public var brightnessLimitation: String? {
-        guard !hasBrightnessSupport, !hasNoDisplays, brightnessService.isSupported else {
+        guard !hasHardwareBrightnessSupport, !hasSoftwareBrightnessSupport,
+              !hasNoDisplays, brightnessService.isHardwareSupported else {
             return nil
         }
-        return "Hardware brightness is ready, but it controls the main display only when"
-            + " that display is external. Make an external display the main display to enable it."
+        return "Hardware brightness controls the primary external display. Make an external display the main display to enable it."
     }
 
     public var colorStatus: String {
@@ -163,13 +258,101 @@ public final class MainViewModel: ObservableObject {
     // MARK: - Brightness
 
     public var brightness: Int {
-        get { settings.manualBrightness }
+        get {
+            if !hardwareBrightnessControlEnabled && softwareBrightnessControlEnabled && !hasBrightnessRecoveryShortcut {
+                return max(settings.manualBrightness, AppSettings.softwareBrightnessFloor)
+            }
+            return settings.manualBrightness
+        }
         set {
-            let clamped = AppSettings.clampBrightness(newValue)
+            guard !settings.splitBrightnessControls, brightnessControlEnabled else { return }
+            let clamped = max(AppSettings.clampBrightness(newValue), brightnessMinimum)
             guard clamped != settings.manualBrightness else { return }
 
+            recoveryRegistrationPending = false
+            recoveryFloorHoldsPreference = false
             mutateSettings { $0.manualBrightness = clamped }
-            brightnessService.setBrightness(percent: clamped)
+            lastBrightnessAvailability = nil
+            applyBrightnessSettings()
+        }
+    }
+
+    public var hardwareBrightness: Int {
+        get { settings.manualHardwareBrightness }
+        set {
+            guard hardwareBrightnessControlEnabled else { return }
+            let value = AppSettings.clampBrightness(newValue)
+            guard value != settings.manualHardwareBrightness else { return }
+            mutateSettings { $0.manualHardwareBrightness = value }
+            lastBrightnessAvailability = nil
+            applyBrightnessSettings()
+        }
+    }
+
+    public var softwareBrightness: Int {
+        get {
+            if !hasBrightnessRecoveryShortcut {
+                return max(settings.manualSoftwareBrightness, AppSettings.softwareBrightnessFloor)
+            }
+            return settings.manualSoftwareBrightness
+        }
+        set {
+            guard softwareBrightnessControlEnabled else { return }
+            let value = max(AppSettings.clampBrightness(newValue), softwareBrightnessMinimum)
+            guard value != settings.manualSoftwareBrightness else { return }
+            mutateSettings { $0.manualSoftwareBrightness = value }
+            lastBrightnessAvailability = nil
+            applyBrightnessSettings()
+        }
+    }
+
+    public var hardwareBrightnessEnabled: Bool {
+        get { settings.hardwareBrightnessEnabled }
+        set {
+            guard newValue != settings.hardwareBrightnessEnabled else { return }
+            if !newValue {
+                releaseHardwareIfOwned()
+            }
+            mutateSettings { $0.hardwareBrightnessEnabled = newValue }
+            applyBrightnessSettings()
+        }
+    }
+
+    public var softwareBrightnessEnabled: Bool {
+        get { settings.softwareBrightnessEnabled }
+        set {
+            guard newValue != settings.softwareBrightnessEnabled else { return }
+            if !newValue { brightnessService.setSoftwareBrightness(percent: 100) }
+            mutateSettings { $0.softwareBrightnessEnabled = newValue }
+            applyBrightnessSettings()
+        }
+    }
+
+    public var splitBrightnessControls: Bool {
+        get { settings.splitBrightnessControls }
+        set {
+            guard newValue != settings.splitBrightnessControls else { return }
+            if newValue {
+                let split = BrightnessPlan.unifiedToSplit(
+                    master: settings.manualBrightness,
+                    hardwareAvailable: hardwareBrightnessControlEnabled,
+                    softwareAvailable: routedSoftwareAvailable,
+                    recoveryRegistered: hasBrightnessRecoveryShortcut
+                )
+                mutateSettings {
+                    $0.splitBrightnessControls = true
+                    $0.manualHardwareBrightness = split.hardware
+                    $0.manualSoftwareBrightness = split.software
+                }
+            } else {
+                let output = BrightnessPlan.computeRouting(master: settings.manualBrightness, split: true, manualHardware: settings.manualHardwareBrightness, manualSoftware: settings.manualSoftwareBrightness, hardwareAvailable: hardwareBrightnessControlEnabled, softwareAvailable: softwareBrightnessControlEnabled, recoveryRegistered: hasBrightnessRecoveryShortcut)
+                let master = BrightnessPlan.masterPreservingOutput(output, hardwareAvailable: hardwareBrightnessControlEnabled, softwareAvailable: softwareBrightnessControlEnabled && (!hardwareBrightnessControlEnabled || allDisplaysSupportHardwareBrightness), recoveryRegistered: hasBrightnessRecoveryShortcut)
+                mutateSettings {
+                    $0.splitBrightnessControls = false
+                    $0.manualBrightness = master
+                }
+            }
+            applyBrightnessSettings()
         }
     }
 
@@ -367,13 +550,47 @@ public final class MainViewModel: ObservableObject {
     public var confirmAutomaticModeExit: () -> Bool = { false }
 
     public func increaseBrightness() {
-        guard hasBrightnessSupport else { return }
-        brightness += Self.hotKeyBrightnessStep
+        guard brightnessControlEnabled else { return }
+        if settings.splitBrightnessControls {
+            if softwareBrightnessControlEnabled && softwareBrightness < 100 {
+                softwareBrightness += Self.hotKeyBrightnessStep
+            } else if hardwareBrightnessControlEnabled {
+                hardwareBrightness += Self.hotKeyBrightnessStep
+            }
+        } else {
+            brightness += Self.hotKeyBrightnessStep
+        }
     }
 
     public func decreaseBrightness() {
-        guard hasBrightnessSupport else { return }
-        brightness -= Self.hotKeyBrightnessStep
+        guard brightnessControlEnabled else { return }
+        if settings.splitBrightnessControls {
+            if hardwareBrightnessControlEnabled && hardwareBrightness > 1 {
+                hardwareBrightness -= Self.hotKeyBrightnessStep
+            } else if softwareBrightnessControlEnabled {
+                softwareBrightness -= Self.hotKeyBrightnessStep
+            }
+        } else {
+            brightness -= Self.hotKeyBrightnessStep
+        }
+    }
+
+    /// Restores full brightness even if display capability detection is temporarily stale.
+    public func restoreBrightnessToFull() {
+        lastBrightnessAvailability = nil
+        recoveryRegistrationPending = false
+        recoveryFloorHoldsPreference = false
+        colorService.invalidate()
+        mutateSettings {
+            $0.manualBrightness = 100
+            $0.manualHardwareBrightness = 100
+            $0.manualSoftwareBrightness = 100
+        }
+        applyBrightnessSettings()
+    }
+
+    public func requestBrightnessRecoverySetup() {
+        onBrightnessRecoverySetupRequested?()
     }
 
     /// Raises the colour temperature by one step. In automatic mode the user is asked
@@ -416,6 +633,11 @@ public final class MainViewModel: ObservableObject {
         set { assignShortcut(newValue, to: \.decreaseTemperatureShortcut) }
     }
 
+    public var restoreBrightnessShortcut: HotKeyShortcut? {
+        get { settings.restoreBrightnessShortcut }
+        set { assignShortcut(newValue, to: \.restoreBrightnessShortcut) }
+    }
+
     /// Assigns a shortcut, stealing it from whichever slot holds it so one combination
     /// can never fire two actions. A modifier-less shortcut is refused; nil clears.
     private func assignShortcut(
@@ -434,9 +656,13 @@ public final class MainViewModel: ObservableObject {
             $0[keyPath: keyPath] = value
         }
         updateHotKeys()
+        if keyPath == \.restoreBrightnessShortcut {
+            applyBrightnessSettings()
+        }
     }
 
     private static let shortcutKeyPaths: [WritableKeyPath<AppSettings, HotKeyShortcut?>] = [
+        \.restoreBrightnessShortcut,
         \.increaseBrightnessShortcut,
         \.decreaseBrightnessShortcut,
         \.increaseTemperatureShortcut,
@@ -445,12 +671,14 @@ public final class MainViewModel: ObservableObject {
 
     /// Pushes the current assignments to the platform registration.
     public func updateHotKeys() {
-        hotKeyService.updateHotKeys([
+        registeredHotKeys = hotKeyService.updateHotKeys([
             (action: .increaseBrightness, shortcut: settings.increaseBrightnessShortcut),
             (action: .decreaseBrightness, shortcut: settings.decreaseBrightnessShortcut),
             (action: .increaseTemperature, shortcut: settings.increaseTemperatureShortcut),
             (action: .decreaseTemperature, shortcut: settings.decreaseTemperatureShortcut),
+            (action: .restoreBrightness, shortcut: settings.restoreBrightnessShortcut),
         ])
+        if lastBrightnessRoute != nil { applyBrightnessSettings() }
     }
 
     // MARK: - Lifecycle
@@ -459,9 +687,7 @@ public final class MainViewModel: ObservableObject {
     /// windows exist, and again whenever a late DDC probe newly establishes support.
     /// Idempotent: it only applies the current settings to currently capable displays.
     public func applyInitialState() {
-        if hasBrightnessSupport {
-            brightnessService.setBrightness(percent: brightness)
-        }
+        applyBrightnessSettings()
         if !autoColorTemperature && hasColorSupport {
             colorService.apply(kelvin: displayedTemperature)
         }
@@ -474,11 +700,67 @@ public final class MainViewModel: ObservableObject {
 
     // MARK: - Private
 
+    private var hardwareOwned = false
+    private var recoveryRegistrationPending = false
+    private var recoveryFloorHoldsPreference = false
+    private var lastBrightnessRoute: BrightnessPlan.RoutingOutput?
+    private var lastBrightnessAvailability: (hardware: Bool, software: Bool, recovery: Bool)?
+
+    private func releaseHardwareIfOwned() {
+        guard hardwareOwned else { return }
+        hardwareOwned = false
+        if brightnessService.isHardwareSupported {
+            brightnessService.setHardwareBrightness(percent: 100)
+        }
+    }
+
     private func mutateSettings(_ change: (inout AppSettings) -> Void) {
         var copy = settings
         change(&copy)
         settings = copy.normalized()
         store.scheduleSave(settings)
+    }
+
+    private func applyBrightnessSettings() {
+        let availability = (hardware: hardwareBrightnessControlEnabled, software: routedSoftwareAvailable, recovery: hasBrightnessRecoveryShortcut)
+        if !settings.splitBrightnessControls, let previous = lastBrightnessAvailability, let output = lastBrightnessRoute {
+            let recoveryChanged = previous.recovery != availability.recovery
+            let keepPreference = recoveryChanged && (recoveryRegistrationPending || recoveryFloorHoldsPreference
+                || (previous.recovery && output.software < AppSettings.softwareBrightnessFloor))
+            if recoveryChanged && previous.recovery && output.software < AppSettings.softwareBrightnessFloor {
+                recoveryFloorHoldsPreference = true
+            }
+            let changed = previous.hardware != availability.hardware || (previous.hardware &&
+                (previous.software != availability.software || (recoveryChanged && !keepPreference)))
+            if (previous.hardware || previous.software) && (availability.hardware || availability.software) && changed {
+                let master = BrightnessPlan.masterPreservingOutput(output, hardwareAvailable: availability.hardware, softwareAvailable: availability.software, recoveryRegistered: availability.recovery)
+                mutateSettings { $0.manualBrightness = master }
+            }
+        }
+        if availability.recovery {
+            recoveryRegistrationPending = false
+            recoveryFloorHoldsPreference = false
+        }
+        let plan = BrightnessPlan.computeRouting(
+            master: settings.manualBrightness,
+            split: settings.splitBrightnessControls,
+            manualHardware: settings.manualHardwareBrightness,
+            manualSoftware: settings.manualSoftwareBrightness,
+            hardwareAvailable: hardwareBrightnessControlEnabled,
+            softwareAvailable: routedSoftwareAvailable,
+            recoveryRegistered: hasBrightnessRecoveryShortcut
+        )
+
+        if let hw = plan.hardware {
+            brightnessService.setHardwareBrightness(percent: hw)
+            hardwareOwned = true
+        } else {
+            releaseHardwareIfOwned()
+        }
+
+        brightnessService.setSoftwareBrightness(percent: plan.software)
+        lastBrightnessRoute = plan
+        lastBrightnessAvailability = availability
     }
 
     private func setTemperatureTarget(_ value: Int, isDay: Bool) {

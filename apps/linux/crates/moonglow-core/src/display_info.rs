@@ -15,6 +15,10 @@ pub struct DisplayInfo {
     pub identifier: String,
     pub is_primary: bool,
     pub supports_brightness: bool,
+    #[serde(default)]
+    pub supports_hardware_brightness: bool,
+    #[serde(default)]
+    pub supports_software_brightness: bool,
     pub supports_color_temperature: bool,
 }
 
@@ -33,8 +37,19 @@ impl DisplayInfo {
             identifier: identifier.into(),
             is_primary,
             supports_brightness,
+            supports_hardware_brightness: supports_brightness,
+            supports_software_brightness: supports_color_temperature,
             supports_color_temperature,
         }
+    }
+
+    /// Sets the two brightness paths independently while preserving the
+    /// combined `supports_brightness` field used by older display consumers.
+    pub fn with_brightness_modes(mut self, hardware: bool, software: bool) -> Self {
+        self.supports_hardware_brightness = hardware;
+        self.supports_software_brightness = software;
+        self.supports_brightness = hardware || software;
+        self
     }
 
     /// Human-readable capability line shown under the display name.

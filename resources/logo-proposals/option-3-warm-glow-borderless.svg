@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="245.760" fill="#ffb300"/>
+  <path d="M 716.342 648.537 A 245.760 245.760 0 1 1 375.463 307.658 A 258.048 258.048 0 0 0 716.342 648.537 Z" fill="#FFFDF5" />
+  <line x1="872.000" y1="512.000" x2="947.000" y2="512.000" stroke="#18181c" stroke-width="74.000" stroke-linecap="round"/>
+  <line x1="766.558" y1="766.558" x2="819.591" y2="819.591" stroke="#18181c" stroke-width="74.000" stroke-linecap="round"/>
+  <line x1="512.000" y1="872.000" x2="512.000" y2="947.000" stroke="#18181c" stroke-width="74.000" stroke-linecap="round"/>
+  <line x1="257.442" y1="766.558" x2="204.409" y2="819.591" stroke="#18181c" stroke-width="74.000" stroke-linecap="round"/>
+  <line x1="152.000" y1="512.000" x2="77.000" y2="512.000" stroke="#18181c" stroke-width="74.000" stroke-linecap="round"/>
+  <line x1="257.442" y1="257.442" x2="204.409" y2="204.409" stroke="#18181c" stroke-width="74.000" stroke-linecap="round"/>
+  <line x1="512.000" y1="152.000" x2="512.000" y2="77.000" stroke="#18181c" stroke-width="74.000" stroke-linecap="round"/>
+  <line x1="766.558" y1="257.442" x2="819.591" y2="204.409" stroke="#18181c" stroke-width="74.000" stroke-linecap="round"/>
+</svg>

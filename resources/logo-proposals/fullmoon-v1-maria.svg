@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="moon-clip">
+      <circle cx="512" cy="512" r="215"/>
+    </clipPath>
+  </defs>
+  <rect width="1024" height="1024" rx="245.760" fill="#ffb300"/>
+  <!-- Moon Body -->
+  <g clip-path="url(#moon-clip)">
+    <circle cx="512" cy="512" r="215" fill="#18181c"/>
+    <!-- Lunar Maria Shades -->
+    <path d="M 440 380 Q 480 340 540 370 Q 570 410 520 450 Q 460 460 430 420 Z" fill="#2a2a34" opacity="0.9"/>
+    <path d="M 540 430 Q 590 410 630 440 Q 640 490 590 510 Q 550 500 540 450 Z" fill="#262630" opacity="0.85"/>
+    <path d="M 420 480 Q 460 470 480 520 Q 470 570 430 580 Q 390 550 410 500 Z" fill="#252530" opacity="0.8"/>
+    <path d="M 500 540 Q 560 530 580 580 Q 550 630 490 610 Q 470 570 500 540 Z" fill="#292934" opacity="0.85"/>
+    <!-- Subtle depth craters -->
+    <circle cx="410" cy="400" r="24" fill="#0e0e12" opacity="0.6"/>
+    <circle cx="410" cy="400" r="20" fill="#22222a" opacity="0.7"/>
+    <circle cx="610" cy="540" r="18" fill="#0e0e12" opacity="0.6"/>
+    <circle cx="610" cy="540" r="15" fill="#22222a" opacity="0.7"/>
+    <circle cx="460" cy="620" r="28" fill="#0e0e12" opacity="0.5"/>
+    <circle cx="460" cy="620" r="23" fill="#252530" opacity="0.8"/>
+  </g>
+  <line x1="857.000" y1="512.000" x2="947.000" y2="512.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="755.952" y1="755.952" x2="819.591" y2="819.591" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="512.000" y1="857.000" x2="512.000" y2="947.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="268.048" y1="755.952" x2="204.409" y2="819.591" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="167.000" y1="512.000" x2="77.000" y2="512.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="268.048" y1="268.048" x2="204.409" y2="204.409" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="512.000" y1="167.000" x2="512.000" y2="77.000" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+  <line x1="755.952" y1="268.048" x2="819.591" y2="204.409" stroke="#18181c" stroke-width="72.000" stroke-linecap="round"/>
+</svg>

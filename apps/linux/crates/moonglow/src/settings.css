@@ -1,0 +1,36 @@
+/* Keep these overrides local to Moonglow; let Adwaita supply theme colors. */
+.moonglow-settings { font-size: 13px; }
+.moonglow-settings .caption,
+.moonglow-settings row .subtitle,
+.moonglow-settings preferencesgroup > box > box.header .description {
+  font-size: 11px;
+}
+.moonglow-settings .heading,
+.moonglow-settings row .title { font-size: 13px; }
+.moonglow-settings preferencespage > scrolledwindow > viewport > clamp > box {
+  margin: 12px 14px;
+  border-spacing: 12px;
+}
+.moonglow-settings preferencesgroup > box,
+.moonglow-settings preferencesgroup > box box.labels { border-spacing: 4px; }
+.moonglow-settings preferencesgroup > box > box.header { margin-bottom: 2px; }
+.moonglow-settings row { min-height: 36px; }
+.moonglow-settings row > box.header { min-height: 36px; padding: 4px 10px; }
+.moonglow-settings row .title { margin: 0; }
+.moonglow-settings row .subtitle { margin-top: 2px; margin-bottom: 0; }
+.moonglow-settings button { min-height: 26px; padding: 2px 8px; }
+.moonglow-settings dropdown > button { min-height: 26px; padding: 2px 6px; }
+.moonglow-settings headerbar { min-height: 38px; }
+.moonglow-settings headerbar button { padding: 2px 6px; }
+.moonglow-settings viewswitcher { min-height: 32px; }
+.moonglow-settings viewswitcher button.toggle { min-height: 32px; padding: 0; }
+.moonglow-settings viewswitcher button.toggle label { font-size: 12px; }
+.moonglow-settings viewswitcher button.toggle > stack > box.wide {
+  padding: 2px 8px; border-spacing: 4px;
+}
+.moonglow-settings viewswitcher button.toggle > stack > box.narrow { padding-top: 2px; }
+.moonglow-settings viewswitcher button.toggle > stack > box.narrow > label {
+  min-height: 16px; padding-bottom: 2px;
+}
+.moonglow-settings viewswitcherbar actionbar > revealer > box { padding-top: 2px; }
+.moonglow-settings scale { padding: 6px 0; }
