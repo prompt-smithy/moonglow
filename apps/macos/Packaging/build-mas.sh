@@ -100,6 +100,8 @@ bash "$script_dir/build-app.sh"
 # --- Provisioning profile and entitlements ----------------------------------
 
 cp "$profile" "$app_dir/Contents/embedded.provisionprofile"
+# Strip quarantine and other extended attributes inherited from downloaded profiles before signing
+xattr -cr "$app_dir"
 
 cp "$script_dir/AppStoreSandbox.entitlements" "$entitlements"
 /usr/libexec/PlistBuddy -c "Add :com.apple.application-identifier string $application_id" "$entitlements"
