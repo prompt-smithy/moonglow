@@ -116,7 +116,8 @@ hides every hardware control. `MoonglowKit.BuildFlavor` exposes the choice to th
 `CFBundleShortVersionString` must match `VERSION`.
 
 Settings opens the privacy policy in the browser. Once the updated policy is on the public
-`main` branch, enter its URL in App Store Connect. [Privacy policy](https://github.com/prompt-smithy/moonglow/blob/main/PRIVACY.md)
+`main` branch, enter its URL in App Store Connect.
+[Privacy policy](https://github.com/prompt-smithy/moonglow/blob/main/PRIVACY.md)
 
 For a local ad-hoc build, explicitly clear the identity:
 
@@ -130,10 +131,10 @@ dims all gamma-capable displays. The unified 50% hardware/software handoff is us
 active display supports hardware brightness. Backlights that Moonglow has never managed are left
 untouched. Disabling an owned hardware route releases it once to 100%. Software dimming changes
 the image rather than the physical backlight and has a 50% floor until a recovery shortcut is
-registered. Both engines can be switched independently in Settings. Login-item management requires macOS 13 or
-later; on macOS 12 the Launch at login toggle is replaced by a note. Without a Developer ID identity, the build script uses an ad-hoc signature and does not
-notarize the app. For public releases, use a Developer ID identity and enable notarization as
-described above.
+registered. Both engines can be switched independently in Settings. Login-item management requires
+macOS 13 or later; on macOS 12 the Launch at login toggle is replaced by a note. Without a Developer
+ID identity, the build script uses an ad-hoc signature and does not notarize the app. For public
+releases, use a Developer ID identity and enable notarization as described above.
 
 To preserve the normal outputs when making a separate verification build, set alternate output
 directories:
@@ -176,9 +177,9 @@ container, matching the original design.
 
 The direct build uses a private API isolated in `Sources/MoonglowKit/Services/NativeBridge.swift`,
 so it is distributed directly and through Homebrew rather than the Mac App Store. The Mac App Store
-build compiles that path out entirely, so it contains no private API and no hardware controls. Public direct-download releases are Developer ID signed,
-and the release DMG is notarized and stapled. Builds made without a Developer ID identity use an
-ad-hoc signature for local testing.
+build compiles that path out entirely, so it contains no private API and no hardware controls.
+Public direct-download releases are Developer ID signed, and the release DMG is notarized and
+stapled. Builds made without a Developer ID identity use an ad-hoc signature for local testing.
 
 Startup is a login item registered through `SMAppService.mainApp`, which registers *the running
 bundle*: the toggle in the settings window does nothing when Moonglow is launched
