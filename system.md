@@ -159,8 +159,6 @@ runs the native GTK regression under Xvfb, checks Clippy with warnings denied, a
 Windows CI builds the net48 WPF app and runs core/platform tests. The portable platform tests source-link
 the production display workers and replace only native WMI/gamma boundaries.
 
-The follow-up audit of `41810a0` is recorded in [`docs/fable-review-verification.md`](docs/fable-review-verification.md).
-
 ---
 
 ## 4. Multi-Agent Relay Protocol

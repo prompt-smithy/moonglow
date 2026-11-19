@@ -4,7 +4,7 @@ Reviewer: Claude (Fable 5.2) · Date: 2026-11-16 · Branch: `codex/macos-sandbox
 
 ## Scope and method
 
-The working tree holds one large uncommitted change (58 files, +2715/−255): the **dual hardware/software brightness** feature from `docs/plans/dual-brightness-control.md`, the **restore-brightness recovery shortcut**, and the **macOS App Sandbox prototype** build flavour. I read that diff in full on all three platforms, plus the surrounding services it depends on (macOS `NativeBridge`, `IntelDDC`, `SettingsStore`, `ScheduleService`; Windows `ColorTemperatureService`, `BrightnessService`, `MonitorService`, `SettingsService`, `App.xaml.cs`; Linux `state.rs`, `traits.rs`, `ddc.rs`, `displays.rs`, `x11.rs`, `wlr.rs`, `shortcuts*.rs`, `settings_ui.rs`).
+The working tree holds one large uncommitted change (58 files, +2715/−255): the **dual hardware/software brightness** feature, the **restore-brightness recovery shortcut**, and the **macOS App Sandbox prototype** build flavour. I read that diff in full on all three platforms, plus the surrounding services it depends on (macOS `NativeBridge`, `IntelDDC`, `SettingsStore`, `ScheduleService`; Windows `ColorTemperatureService`, `BrightnessService`, `MonitorService`, `SettingsService`, `App.xaml.cs`; Linux `state.rs`, `traits.rs`, `ddc.rs`, `displays.rs`, `x11.rs`, `wlr.rs`, `shortcuts*.rs`, `settings_ui.rs`).
 
 No code was changed by this review.
 
@@ -309,7 +309,7 @@ Fix: add `spec/vectors/brightness-routing.json` with rows of `{ master | hardwar
 
 `AGENTS.md` makes `system.md` the architectural source of truth and requires it to be updated with any behaviour or contract change. Its current content describes a "Muxage Shell & Relay Bar", PTY multiplexing and a document relay engine; nothing in it relates to this repository, and the dual-brightness change did not touch it.
 
-Fix: replace it with the real architecture: the three apps, `spec/` as the contract, and per platform the settings store → state/view model → {schedule, colour service, brightness router → hardware/software backends, hot-key service}, with a Mermaid diagram. The routing diagram in `docs/plans/dual-brightness-control.md` is a good starting point once H2 is decided.
+Fix: replace it with the real architecture: the three apps, `spec/` as the contract, and per platform the settings store → state/view model → {schedule, colour service, brightness router → hardware/software backends, hot-key service}, with a Mermaid diagram.
 
 ---
 

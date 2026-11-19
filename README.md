@@ -38,6 +38,8 @@ Keeping them together does not let them share code, but it does let them share:
 [`spec/README.md`](spec/README.md) is the contract. It documents the canonical settings
 schema, the drift that already exists between platforms, and the conformance matrix.
 
+Platform architecture and current brightness routing are documented in [system.md](system.md).
+
 ```bash
 # Golden vectors live here
 spec/vectors/kelvin.json

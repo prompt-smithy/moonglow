@@ -2,11 +2,9 @@ Status: ready-for-review
 
 ## Resolution
 
-- Restored `docs/fable-review-verification.md` and `docs/plans/dual-brightness-control.md` from
-  Git and checked the references in `system.md` and `fable_review.md`.
-- Rewrapped the privacy policy, login-item and ad-hoc signing, and direct-download signing
-  paragraphs in `apps/macos/README.md`. Verified the wording and links match the previous revision
-  and all three paragraphs fit within 100 columns.
+- Removed the historical review audit and superseded dual-brightness plan. The root README points
+  to `system.md` for current architecture and `spec/` for the shared contract.
+- Removed references to the deleted files from `system.md` and `fable_review.md`.
 
 ## Pending release work
 
