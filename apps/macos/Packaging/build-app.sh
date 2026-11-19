@@ -14,7 +14,13 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd "$script_dir/.." && pwd)"
 monorepo_dir="$(cd "$repo_dir/../.." && pwd)"
 moonglow_version="${MOONGLOW_VERSION:-$(tr -d '[:space:]' < "$monorepo_dir/VERSION")}"
-moonglow_build="${MOONGLOW_BUILD:-3}"
+# CFBundleVersion is maintained in Info.plist and must increase with every Store upload.
+default_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$script_dir/Info.plist")"
+moonglow_build="${MOONGLOW_BUILD:-$default_build}"
+if [[ ! "$moonglow_build" =~ ^0*[1-9][0-9]*$ ]]; then
+    echo "error: CFBundleVersion must be a positive integer build number" >&2
+    exit 1
+fi
 version_dir="$monorepo_dir/release/$moonglow_version"
 artifacts_dir="${MOONGLOW_ARTIFACTS_DIR:-$repo_dir/artifacts}"
 release_dir="${MOONGLOW_RELEASE_DIR:-$version_dir/macOs}"
@@ -33,6 +39,10 @@ notarize="${MOONGLOW_NOTARIZE:-0}"
 notary_keychain_profile="${MOONGLOW_NOTARY_KEYCHAIN_PROFILE:-}"
 sandbox_prototype="${MOONGLOW_APP_SANDBOXED:-0}"
 bundle_identifier="${MOONGLOW_BUNDLE_IDENTIFIER:-com.prompt-smithy.Moonglow}"
+bundle_display_name="${MOONGLOW_BUNDLE_DISPLAY_NAME:-Moonglow}"
+bundle_name="${MOONGLOW_BUNDLE_NAME:-Moonglow}"
+# Set to 1 to produce only the signed app for Store packaging.
+skip_packaging="${MOONGLOW_SKIP_PACKAGING:-0}"
 signing_entitlements=()
 if [ "$sandbox_prototype" = "1" ]; then
     signing_entitlements=(--entitlements "$script_dir/AppStoreSandbox.entitlements")
@@ -44,10 +54,20 @@ x86_64_triple="x86_64-apple-macosx$deployment_target"
 arm64_scratch_path="$build_dir/arm64"
 x86_64_scratch_path="$build_dir/x86_64"
 
+if [ "$notarize" = "1" ] && [ -z "$notary_keychain_profile" ]; then
+    echo "error: set MOONGLOW_NOTARY_KEYCHAIN_PROFILE for notarization" >&2
+    exit 1
+fi
+
 if [ -z "${MOONGLOW_SIGNING_IDENTITY+x}" ]; then
     signing_identity="$(security find-identity -v -p codesigning 2>/dev/null \
         | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' \
         | head -n 1 || true)"
+fi
+
+if [ "$notarize" = "1" ] && [ -z "$signing_identity" ]; then
+    echo "error: notarization requires a Developer ID Application identity" >&2
+    exit 1
 fi
 
 if [ -n "$signing_identity" ]; then
@@ -109,15 +129,7 @@ rm -rf \
     "$app_dir" \
     "$dmg_staging_dir" \
     "$iconset_dir"
-mkdir -p "$version_dir/linux" "$version_dir/windows" "$version_dir/macOs"
-mkdir -p "$release_dir" "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" "$iconset_dir"
-rm -f \
-    "$release_dir/Night-Mode-Controller-macOS-universal.zip" \
-    "$release_dir/Night-Mode-Controller-macOS-universal.dmg" \
-    "$release_dir/Amber-macOS-arm64.zip" \
-    "$release_dir/Amber-macOS-arm64.dmg" \
-    "$zip_path" \
-    "$dmg_path"
+mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" "$iconset_dir"
 
 lipo -create \
     "$arm64_bin_dir/Moonglow" \
@@ -139,8 +151,8 @@ plutil -replace CFBundleVersion -string "$moonglow_build" "$app_dir/Contents/Inf
 plutil -insert MoonglowInstallationID -string "$moonglow_version ($moonglow_build)" "$app_dir/Contents/Info.plist"
 if [ "$sandbox_prototype" = "1" ]; then
     plutil -replace CFBundleIdentifier -string "$bundle_identifier" "$app_dir/Contents/Info.plist"
-    plutil -replace CFBundleDisplayName -string "Moonglow Sandbox Prototype" "$app_dir/Contents/Info.plist"
-    plutil -replace CFBundleName -string "Moonglow Sandbox Prototype" "$app_dir/Contents/Info.plist"
+    plutil -replace CFBundleDisplayName -string "$bundle_display_name" "$app_dir/Contents/Info.plist"
+    plutil -replace CFBundleName -string "$bundle_name" "$app_dir/Contents/Info.plist"
 fi
 
 sips -z 16 16 "$icon_source" --out "$iconset_dir/icon_16x16.png" >/dev/null
@@ -155,10 +167,36 @@ sips -z 512 512 "$icon_source" --out "$iconset_dir/icon_512x512.png" >/dev/null
 cp "$icon_source" "$iconset_dir/icon_512x512@2x.png"
 iconutil -c icns "$iconset_dir" -o "$app_dir/Contents/Resources/Moonglow.icns"
 
-# Sign the executable first, then the containing bundle. --deep is intentionally avoided for
-# signing because it can hide incorrectly signed nested code.
+# Signing the app seals its executable and resources, including the codeless tray-icon bundle.
 sign_app "$app_dir"
 codesign --verify --strict --verbose=2 "$app_dir"
+
+if [ "$skip_packaging" = "1" ]; then
+    echo "Built $app_dir (packaging skipped)"
+    exit 0
+fi
+
+# Notarize and staple the app itself before it is zipped. The Homebrew cask installs the ZIP, so the
+# ticket must travel inside the .app for a first launch to pass Gatekeeper without a network lookup.
+if [ "$notarize" = "1" ]; then
+    notarize_zip="$artifacts_dir/Moonglow-notarize.zip"
+    ditto -c -k --sequesterRsrc --keepParent "$app_dir" "$notarize_zip"
+    xcrun notarytool submit "$notarize_zip" \
+        --keychain-profile "$notary_keychain_profile" \
+        --wait
+    rm -f "$notarize_zip"
+    xcrun stapler staple "$app_dir"
+    xcrun stapler validate "$app_dir"
+fi
+
+mkdir -p "$version_dir/linux" "$version_dir/windows" "$release_dir"
+rm -f \
+    "$release_dir/Night-Mode-Controller-macOS-universal.zip" \
+    "$release_dir/Night-Mode-Controller-macOS-universal.dmg" \
+    "$release_dir/Amber-macOS-arm64.zip" \
+    "$release_dir/Amber-macOS-arm64.dmg" \
+    "$zip_path" \
+    "$dmg_path"
 
 ditto -c -k --sequesterRsrc --keepParent "$app_dir" "$zip_path"
 
@@ -173,14 +211,6 @@ sign_disk_image "$dmg_path"
 codesign --verify --strict "$dmg_path"
 
 if [ "$notarize" = "1" ]; then
-    if [ -z "$signing_identity" ]; then
-        echo "error: notarization requires a Developer ID Application identity" >&2
-        exit 1
-    fi
-    if [ -z "$notary_keychain_profile" ]; then
-        echo "error: set MOONGLOW_NOTARY_KEYCHAIN_PROFILE for notarization" >&2
-        exit 1
-    fi
     xcrun notarytool submit "$dmg_path" \
         --keychain-profile "$notary_keychain_profile" \
         --wait

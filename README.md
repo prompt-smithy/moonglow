@@ -13,9 +13,9 @@ apps share a product, a behavioural contract, and a release process, not source 
 |---|---|---|---|
 | [`apps/windows`](apps/windows) | C# / .NET Framework 4.8 / WPF | `Moonglow.csproj` | Tray app, Inno Setup installer |
 | [`apps/linux`](apps/linux) | Rust (GTK4 / libadwaita) | `moonglow` + `moonglow-core` | Desktop app, global shortcuts, deb/rpm/AUR |
-| [`apps/macos`](apps/macos) | Swift / SwiftUI | `Moonglow` + `MoonglowKit` | Menu bar app, DMG/ZIP |
+| [`apps/macos`](apps/macos) | Swift / SwiftUI | `Moonglow` + `MoonglowKit` | Menu bar app, DMG/ZIP and Mac App Store packaging |
 
-The Windows app's data handling is described in the [privacy policy](PRIVACY.md).
+See the [privacy policy](PRIVACY.md) for how Moonglow handles data on each platform.
 
 ## Why a monorepo
 
@@ -86,9 +86,9 @@ Linux archives contain the executable, desktop entry, icons, manual, and udev ru
 installs these files; for a portable archive, extract it and run `usr/bin/moonglow` from its
 versioned directory. Linux cross-builds target glibc 2.31 or later. Windows portable builds
 require .NET Framework 4.8. macOS artifacts are universal Intel/Apple Silicon. The automated CI
-artifacts are ad-hoc signed for testing; public macOS releases are Developer ID signed, and the
-release DMG is notarized and stapled. See the [macOS README](apps/macos/README.md) for download and
-packaging details.
+artifacts are ad-hoc signed for testing. Public direct-download builds use Developer ID signing
+and notarization. The software-only App Store build uses its own signing and installer package.
+See the [macOS README](apps/macos/README.md) for download and packaging details.
 
 The **Release artifacts** workflow builds and tests on all three native runners. Run it manually
 or push a tag matching `VERSION` (for example `v1.0.2`); its `moonglow-release` artifact contains

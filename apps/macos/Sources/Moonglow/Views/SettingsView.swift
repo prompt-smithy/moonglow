@@ -42,6 +42,11 @@ struct SettingsView: View {
                     shortcutsSection
                     displaysSection
                 }
+
+                if let privacyPolicyURL = URL(string: "https://github.com/prompt-smithy/moonglow/blob/main/PRIVACY.md") {
+                    Link("Privacy Policy", destination: privacyPolicyURL)
+                        .font(.system(size: 12))
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -71,10 +76,14 @@ struct SettingsView: View {
         card {
             VStack(alignment: .leading, spacing: 8) {
                 sectionTitle("Brightness controls")
-                Toggle("Enable Hardware Backlight Control (DDC/CI)", isOn: $viewModel.hardwareBrightnessEnabled)
+                if viewModel.supportsHardwareBrightnessBackend {
+                    Toggle("Enable Hardware Backlight Control (DDC/CI)", isOn: $viewModel.hardwareBrightnessEnabled)
+                }
                 Toggle("Enable Digital Shade (Software Dimming)", isOn: $viewModel.softwareBrightnessEnabled)
-                Toggle("Show split sliders in the menu by default", isOn: $viewModel.splitBrightnessControls)
-                caption("When multiple displays are connected, hardware control is used only if every active display supports it. Otherwise Moonglow uses software dimming across all displays.")
+                if viewModel.supportsHardwareBrightnessBackend {
+                    Toggle("Show split sliders in the menu by default", isOn: $viewModel.splitBrightnessControls)
+                    caption("When multiple displays are connected, hardware control is used only if every active display supports it. Otherwise Moonglow uses software dimming across all displays.")
+                }
                 if viewModel.hasSoftwareBrightnessSupport {
                     Divider()
                     caption(viewModel.hasBrightnessRecoveryShortcut
@@ -225,17 +234,22 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 sectionTitle("Startup")
 
-                Toggle("Launch at login", isOn: $viewModel.launchAtLogin)
-                    .font(.system(size: 13))
-                    .foregroundStyle(theme.primaryTextColor)
-                    .toggleStyle(.switch)
-                    .tint(Color(nsColor: .systemGray))
+                if #available(macOS 13.0, *) {
+                    Toggle("Launch at login", isOn: $viewModel.launchAtLogin)
+                        .font(.system(size: 13))
+                        .foregroundStyle(theme.primaryTextColor)
+                        .toggleStyle(.switch)
+                        .tint(Color(nsColor: .systemGray))
 
-                caption(viewModel.launchAtLoginStatus)
+                    caption(viewModel.launchAtLoginStatus)
 
-                if viewModel.loginItemRequiresApproval {
-                    Button("Open Login Items…") { viewModel.openLoginItemsSettings() }
-                        .controlSize(.small)
+                    if viewModel.loginItemRequiresApproval {
+                        Button("Open Login Items…") { viewModel.openLoginItemsSettings() }
+                            .controlSize(.small)
+                    }
+                } else {
+                    // SMAppService, which registers the login item, needs macOS 13.
+                    caption("Launch at login requires macOS 13 or later.")
                 }
             }
         }

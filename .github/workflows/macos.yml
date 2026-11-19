@@ -56,3 +56,22 @@ jobs:
         run: |
           swift build --scratch-path .build-sandbox
           swift test --scratch-path .build-sandbox
+
+      - name: Check the sandboxed release binary
+        env:
+          MOONGLOW_APP_SANDBOXED: '1'
+        run: |
+          swift build --configuration release --scratch-path .build-sandbox
+          binary="$(swift build --configuration release --scratch-path .build-sandbox --show-bin-path)/Moonglow"
+          binary_details="$RUNNER_TEMP/moonglow-sandbox-binary.txt"
+          otool -L "$binary" > "$binary_details"
+          strings -a "$binary" >> "$binary_details"
+          if grep -E 'IOAVService|DCPAVServiceProxy|IOFramebuffer|CoreDisplay\.framework|IOKit\.framework|--sandbox-gamma-probe|Homebrew Hardware Build|Open Source Code' "$binary_details"; then
+            echo "error: hardware APIs, the debug probe, or distribution links found in the sandboxed release" >&2
+            exit 1
+          fi
+
+      - name: Lint packaging scripts and Info.plist
+        run: |
+          for script in Packaging/*.sh; do bash -n "$script"; done
+          plutil -lint Packaging/Info.plist Packaging/AppStoreSandbox.entitlements

@@ -70,7 +70,12 @@ public final class MainViewModel: ObservableObject {
         self.loginItemService = loginItemService
         self.hotKeyService = hotKeyService
 
-        let loaded = store.load()
+        var loaded = store.load()
+        // The software-only build has no hardware path, so a split layout restored from settings
+        // would show controls that cannot act. Force the unified slider.
+        if !BuildFlavor.supportsHardwareBrightness {
+            loaded.splitBrightnessControls = false
+        }
         self.settings = loaded
         self.recoveryRegistrationPending = loaded.restoreBrightnessShortcut != nil
         self.displayedTemperature = loaded.autoColorTemperature
@@ -91,6 +96,9 @@ public final class MainViewModel: ObservableObject {
     // MARK: - Displays
 
     public var hasNoDisplays: Bool { displays.isEmpty }
+
+    /// Whether this build can offer hardware backlight controls. False in the Mac App Store build.
+    public var supportsHardwareBrightnessBackend: Bool { BuildFlavor.supportsHardwareBrightness }
 
     public var allDisplaysSupportHardwareBrightness: Bool {
         !displays.isEmpty
@@ -163,8 +171,13 @@ public final class MainViewModel: ObservableObject {
     }
 
     public var brightnessStatus: String {
-        if !settings.hardwareBrightnessEnabled && !settings.softwareBrightnessEnabled {
-            return "Hardware and software brightness are disabled in Settings."
+        if !settings.softwareBrightnessEnabled {
+            if !supportsHardwareBrightnessBackend {
+                return "Digital Shade is disabled in Settings."
+            }
+            if !settings.hardwareBrightnessEnabled {
+                return "Hardware and software brightness are disabled in Settings."
+            }
         }
         if hardwareBrightnessControlEnabled {
             if !allDisplaysSupportHardwareBrightness {
@@ -331,7 +344,7 @@ public final class MainViewModel: ObservableObject {
     public var splitBrightnessControls: Bool {
         get { settings.splitBrightnessControls }
         set {
-            guard newValue != settings.splitBrightnessControls else { return }
+            guard supportsHardwareBrightnessBackend, newValue != settings.splitBrightnessControls else { return }
             if newValue {
                 let split = BrightnessPlan.unifiedToSplit(
                     master: settings.manualBrightness,

@@ -33,8 +33,12 @@ def main():
         if re.search(pattern, file.read_text(), re.M).group(1) != version:
             parser.error(f"{file.relative_to(ROOT)} must match VERSION ({version})")
     with (ROOT / "apps/macos/Packaging/Info.plist").open("rb") as plist:
-        if plistlib.load(plist)["CFBundleShortVersionString"] != version:
+        info = plistlib.load(plist)
+        if info["CFBundleShortVersionString"] != version:
             parser.error("macOS Info.plist must match VERSION")
+        build = info.get("CFBundleVersion")
+        if not isinstance(build, str) or not re.fullmatch(r"0*[1-9][0-9]*", build):
+            parser.error("macOS Info.plist CFBundleVersion must be a positive integer build number")
     host = {"Darwin": "macOs", "Windows": "windows", "Linux": "linux"}.get(platform.system())
     if host is None:
         parser.error("unsupported build host")

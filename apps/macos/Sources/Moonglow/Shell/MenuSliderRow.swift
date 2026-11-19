@@ -96,16 +96,18 @@ private struct MenuBrightnessSliderContent: View {
                         }
                     }
                 }
-                Button {
-                    viewModel.splitBrightnessControls.toggle()
-                } label: {
-                    Image(systemName: viewModel.settings.splitBrightnessControls ? "rectangle.compress.vertical" : "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 18, height: 18)
+                if viewModel.supportsHardwareBrightnessBackend {
+                    Button {
+                        viewModel.splitBrightnessControls.toggle()
+                    } label: {
+                        Image(systemName: viewModel.settings.splitBrightnessControls ? "rectangle.compress.vertical" : "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 18, height: 18)
+                    }
+                    .buttonStyle(.plain)
+                    .help(viewModel.settings.splitBrightnessControls ? "Use unified brightness control" : "Show hardware and software controls")
                 }
-                .buttonStyle(.plain)
-                .help(viewModel.settings.splitBrightnessControls ? "Use unified brightness control" : "Show hardware and software controls")
             }
             .font(.system(size: NSFont.systemFontSize))
             .foregroundStyle(.primary)

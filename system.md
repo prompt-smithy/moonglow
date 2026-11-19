@@ -28,6 +28,7 @@ flowchart TD
         StateManager["StateManager / MainViewModel"]
         ScheduleCalc["Schedule Calculator"]
         BrightnessRouter["BrightnessPlan / Router"]
+        BuildFlavor["macOS BuildFlavor\nMOONGLOW_APP_SANDBOXED"]
     end
 
     subgraph Services["Hardware & OS Services"]
@@ -53,7 +54,7 @@ flowchart TD
     StateManager --> BrightnessRouter
 
     ScheduleCalc --> ColorService
-    BrightnessRouter --> HwBrightness
+    BrightnessRouter -->|"macOS direct, Windows and Linux"| HwBrightness
     BrightnessRouter --> SwBrightness
 
     StateManager <--> ShortcutService
@@ -64,6 +65,7 @@ flowchart TD
     Identity --> DisplayService
     Identity --> HwBrightness
     SwBrightness --> ColorService
+    BuildFlavor -.->|"Sandbox: unified software controls"| StateManager
 ```
 
 ---
@@ -84,10 +86,14 @@ The single source of truth for configuration keys, default values, validation ra
 
 1. **macOS (`apps/macos`)**:
    - Written in Swift and SwiftUI.
-   - Core logic in `MoonglowKit` (`MainViewModel`, `AppSettings`, `BrightnessPlan`, `ScheduleService`, `NativeBridge`).
+   - Core logic in `MoonglowKit` (`MainViewModel`, `AppSettings`, `BrightnessPlan`, `ScheduleService`, `NativeBridge`, `BuildFlavor`).
    - App shell in `Moonglow` (`AppDelegate`, `MenuSliderRow`, `CarbonHotKeyService`).
    - Backends: Intel DDC, Apple Silicon AVService proxy, CoreGraphics gamma ramps.
-   - Flavours: standard menu bar app and software-only App Sandbox prototype. Core defaults remain canonical; the sandbox shell injects neutral first-launch defaults into `SettingsStore`.
+   - `MOONGLOW_APP_SANDBOXED` selects the feature set at compile time.
+     - **Direct / Homebrew** uses `Packaging/build-app.sh` for the app, ZIP and DMG. Public builds use Developer ID signing and staple the notarized app before making either archive. This build includes DDC/CI and split brightness controls.
+     - **Mac App Store** uses `Packaging/build-mas.sh` to assemble the software-only release app with `build-app.sh` in app-only mode. It checks the provisioning profile against the team and bundle ID, signs and verifies the app with profile-matched entitlements, then produces a signed `.pkg`. `BuildFlavor.isAppStore` forces a unified brightness slider. The app shell links the public privacy policy from Settings.
+     - `build-sandbox-prototype.sh` packages the Store feature set for local testing. The sandbox app shell supplies neutral first-launch defaults to `SettingsStore`.
+   - Both packaged builds seal the codeless SwiftPM tray-icon bundle in the app's `Contents/Resources` directory.
    - Hardware DDC targets the current primary external display. Intel reopens after target changes or repeated failures; Apple Silicon matches a unique external `DCPAVServiceProxy` by valid EDID vendor/product/serial before probing. Ambiguous matches fall back to software.
    - A backend publishes hardware support only after the luminance probe succeeds.
 
@@ -147,7 +153,8 @@ flowchart TD
 
 ### 3.2 Verification
 
-macOS CI builds/tests the standard and sandbox flavours. Linux CI tests the complete workspace,
+macOS CI builds and tests the standard and sandbox flavours and checks the sandboxed release
+binary for private hardware APIs and the gamma debug probe. Linux CI tests the complete workspace,
 runs the native GTK regression under Xvfb, checks Clippy with warnings denied, and verifies formatting.
 Windows CI builds the net48 WPF app and runs core/platform tests. The portable platform tests source-link
 the production display workers and replace only native WMI/gamma boundaries.

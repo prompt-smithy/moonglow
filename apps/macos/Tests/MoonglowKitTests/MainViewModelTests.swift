@@ -8,6 +8,24 @@ import Testing
 @MainActor
 struct MainViewModelTests {
 
+    @Test("The build flavor controls split brightness availability")
+    func buildFlavorControlsSplitBrightness() {
+        var settings = AppSettings.default
+        settings.splitBrightnessControls = true
+        let harness = makeHarness(settings: settings)
+        #if MOONGLOW_APP_SANDBOXED
+        #expect(!harness.viewModel.supportsHardwareBrightnessBackend)
+        #expect(!harness.viewModel.splitBrightnessControls)
+        harness.viewModel.splitBrightnessControls = true
+        #expect(!harness.viewModel.splitBrightnessControls)
+        harness.viewModel.softwareBrightnessEnabled = false
+        #expect(harness.viewModel.brightnessStatus == "Digital Shade is disabled in Settings.")
+        #else
+        #expect(harness.viewModel.supportsHardwareBrightnessBackend)
+        #expect(harness.viewModel.splitBrightnessControls)
+        #endif
+    }
+
     @Test("Explicit restore wins over a concurrent hardware capability change")
     func restoreWinsOverCapabilityChange() {
         var settings = AppSettings.default
@@ -52,9 +70,11 @@ struct MainViewModelTests {
         #expect(!h.viewModel.showsDualBrightnessMidpoint)
         #expect(h.brightness.appliedHardware == [55])
         #expect(h.brightness.appliedSoftware == [100])
+        #if !MOONGLOW_APP_SANDBOXED
         h.viewModel.splitBrightnessControls = true
         #expect(h.viewModel.hardwareBrightness == 55)
         #expect(h.viewModel.softwareBrightness == 100)
+        #endif
     }
 
     @Test("Software floor preserves preferences through recovery re-registration")
@@ -95,11 +115,13 @@ struct MainViewModelTests {
         settings.manualBrightness = 25
         let h = makeHarness(settings: settings)
         h.viewModel.applyInitialState()
+        #if !MOONGLOW_APP_SANDBOXED
         h.viewModel.splitBrightnessControls = true
         #expect(h.brightness.appliedHardware.last == 1)
         #expect(h.brightness.appliedSoftware.last == 75)
         h.viewModel.splitBrightnessControls = false
         #expect(h.viewModel.brightness == 25)
+        #endif
         h.viewModel.hardwareBrightnessEnabled = false
         let writes = h.brightness.appliedHardware
         #expect(writes.last == 100)
@@ -532,6 +554,7 @@ struct MainViewModelTests {
         #expect(harness.viewModel.brightness == AppSettings.defaultManualBrightness)
     }
 
+    #if !MOONGLOW_APP_SANDBOXED
     @Test("Split-mode hot keys cascade software to hardware and back")
     func splitModeHotKeysCascade() {
         var settings = AppSettings.default
@@ -555,6 +578,7 @@ struct MainViewModelTests {
         #expect(harness.viewModel.hardwareBrightness == 80)
         #expect(harness.viewModel.softwareBrightness == 100)
     }
+    #endif
 
     @Test("Saved brightness survives late hardware probe without overwrite")
     func savedBrightnessSurvivesLateProbe() {

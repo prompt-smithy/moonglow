@@ -1,10 +1,10 @@
 # Moonglow Privacy Policy
 
-Last updated: 4 November 2026
+Last updated: 19 November 2026
 
-This policy applies to the Windows version of Moonglow, including its Microsoft Store,
-installer, and portable editions. It describes how the app and its maintainers handle
-information.
+This policy applies to every platform version of Moonglow: Windows (including its Microsoft Store,
+installer, and portable editions), macOS (including the Mac App Store, Homebrew, and direct
+downloads), and Linux. It describes how the app and its maintainers handle information.
 
 ## Information handled by the app
 
@@ -17,7 +17,7 @@ To provide its features, Moonglow accesses the following information locally:
 
 - Connected display names, identifiers, capabilities, and brightness or color settings,
   so it can detect and control supported displays.
-- Your device's local time and Windows appearance setting, so it can apply your schedule
+- Your device's local time and appearance setting, so it can apply your schedule
   and match light or dark mode.
 - Running process names and process identifiers, solely to check whether another copy of
   Moonglow is already running. This information is not saved as an application-usage history.
@@ -28,6 +28,8 @@ Moonglow does not capture your screen contents or access your browsing history, 
 camera, microphone, or geographic location.
 
 ## Information stored on your device
+
+### Windows
 
 Moonglow saves your brightness, color-temperature, schedule, startup, and keyboard-shortcut
 preferences in your Windows user profile. Settings are normally stored at
@@ -47,16 +49,36 @@ path in your Windows user configuration.
 These files rely on Windows file permissions for protection; Moonglow does not encrypt
 them separately.
 
+### macOS
+
+On macOS, settings are stored at `~/Library/Application Support/Moonglow/settings.json`. In the
+Mac App Store build, which runs in the macOS App Sandbox, the same files are kept inside the app's
+container at `~/Library/Containers/com.prompt-smithy.Moonglow/Data/Library/Application Support/Moonglow/`.
+
+Diagnostic logs are written to `~/Library/Logs/Moonglow/Moonglow.log`, with up to three rotated
+backup copies. The logs record brightness and colour-temperature routing, display detection, and
+technical errors. They are not uploaded automatically. In the Mac App Store build they are kept
+inside the app's container.
+
+If you enable launch at login, macOS records the registration through its `SMAppService` login-item
+system.
+
+### Linux
+
+On Linux, settings are stored at `~/.config/moonglow/settings.json` (or under `$XDG_CONFIG_HOME`).
+The application log is stored at `~/.local/state/moonglow/moonglow.log` (or under `$XDG_STATE_HOME`),
+and launch at login is recorded as a desktop autostart entry in your user configuration folder.
+
 ## Your choices and deletion
 
 You can change preferences, disable automatic scheduling, clear shortcuts, and turn off
 launch at sign-in in the app's settings.
 
-Settings remain on your device until removed. Diagnostic logs remain until rotated,
-deleted by you, or cleared by Windows. Uninstalling the app may leave some local files.
-To remove remaining app data, first disable launch at sign-in and exit Moonglow, then delete
-its settings folder and diagnostic log files, including backup copies. If you previously
-used Amber, remove its old settings too if you do not want them imported again.
+Settings remain on your device until removed. Diagnostic logs remain until rotated or deleted.
+Uninstalling the app may leave local files. To remove them, first disable launch at sign-in and
+exit Moonglow, then delete the settings folder and diagnostic logs, including backup copies, at
+the locations listed above. For the Mac App Store build, these files are inside the app's container.
+If you previously used Amber, remove its old settings too if you do not want them imported again.
 
 ## Support and third-party services
 

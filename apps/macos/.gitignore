@@ -60,3 +60,9 @@ release/*.zip
 ._*
 .AppleDouble
 .LSOverride
+
+# Signing material for the Mac App Store build. Never commit provisioning profiles or certificates.
+*.provisionprofile
+*.mobileprovision
+*.p12
+*.cer

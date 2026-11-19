@@ -173,7 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         viewModel.applyInitialState()
         viewModel.applyLoginItemState(isFirstLaunchAfterInstall: isFirstLaunchAfterInstall)
-#if MOONGLOW_APP_SANDBOXED
+#if DEBUG && MOONGLOW_APP_SANDBOXED
         runSandboxGammaProbeIfRequested()
 #endif
         if isFirstLaunchAfterInstall {
@@ -182,7 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         schedule.start()
     }
 
-    /// Explains the safety requirement and points to the hardware build and public source.
+    /// Explains the software-dimming safety requirement and how to unlock lower levels.
     private func presentBrightnessRecoveryNotice() {
         guard let viewModel else { return }
         NSApp.activate(ignoringOtherApps: true)
@@ -191,14 +191,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let softwareBrightnessEnabled = viewModel.settings.softwareBrightnessEnabled
         let softwarePathAvailable = softwareBrightnessAvailable && softwareBrightnessEnabled
         let recoveryShortcutReady = viewModel.hasBrightnessRecoveryShortcut
+        // The software-only build has no hardware path, so the hardware sentence is omitted entirely.
         let hardwareContext: String
-        if !viewModel.settings.hardwareBrightnessEnabled {
+        if !viewModel.supportsHardwareBrightnessBackend {
+            hardwareContext = ""
+        } else if !viewModel.settings.hardwareBrightnessEnabled {
             hardwareContext = "Hardware Backlight is disabled in Settings."
         } else if viewModel.allDisplaysSupportHardwareBrightness {
             hardwareContext = "Hardware backlight control is available on every active display."
         } else {
             hardwareContext = "Hardware brightness controls the primary external display when available. Digital Shade in split controls dims all displays."
         }
+        // Lead-in for the sentences below; empty when there is no hardware context to report.
+        let lead = hardwareContext.isEmpty ? "" : hardwareContext + " "
         let alert = NSAlert()
         alert.messageText = softwarePathAvailable
             ? (recoveryShortcutReady ? "Software brightness is ready" : "Dim below 50% with a recovery shortcut")
@@ -207,12 +212,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             : "Brightness control is unavailable"
         if softwarePathAvailable {
             alert.informativeText = recoveryShortcutReady
-                ? "\(hardwareContext) Digital Shade changes the image rather than the physical backlight. Your global recovery shortcut restores the image to 100% immediately."
-                : "\(hardwareContext) Digital Shade changes the image rather than the physical backlight. Software dimming is available down to 50%. Register a global shortcut that restores brightness to 100% to unlock lower values."
+                ? "\(lead)Digital Shade changes the image rather than the physical backlight. Your global recovery shortcut restores the image to 100% immediately."
+                : "\(lead)Digital Shade changes the image rather than the physical backlight. Software dimming is available down to 50%. Register a global shortcut that restores brightness to 100% to unlock lower values."
         } else if softwareBrightnessAvailable {
-            alert.informativeText = "\(hardwareContext) Software Digital Shade is turned off in Settings. Enable it to dim down to 50%. A global Restore brightness to 100% shortcut unlocks lower levels."
+            alert.informativeText = "\(lead)Software Digital Shade is turned off in Settings. Enable it to dim down to 50%. A global Restore brightness to 100% shortcut unlocks lower levels."
         } else {
-            alert.informativeText = "\(hardwareContext) macOS does not provide a usable software gamma ramp for this display session. Use the display's physical controls or connect a compatible external display."
+            alert.informativeText = "\(lead)macOS does not provide a usable software gamma ramp for this display session. Use the display's physical controls or connect a compatible external display."
         }
         alert.alertStyle = .informational
         if softwareBrightnessAvailable {
@@ -221,31 +226,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 : "Open Settings"
             alert.addButton(withTitle: title)
         }
-        #if MOONGLOW_APP_SANDBOXED
-        alert.addButton(withTitle: "Homebrew Hardware Build")
-        alert.addButton(withTitle: "Open Source Code")
-        #endif
         alert.addButton(withTitle: "OK")
 
         let response = alert.runModal()
         if softwareBrightnessAvailable && response == .alertFirstButtonReturn {
             showSettingsWindow()
-            return
         }
-        #if MOONGLOW_APP_SANDBOXED
-        if response == (softwareBrightnessAvailable ? .alertSecondButtonReturn : .alertFirstButtonReturn) {
-            if let url = URL(string: "https://github.com/prompt-smithy/homebrew-apps/blob/main/Casks/moonglow.rb") {
-                NSWorkspace.shared.open(url)
-            }
-        } else if response == (softwareBrightnessAvailable ? .alertThirdButtonReturn : .alertSecondButtonReturn) {
-            if let url = URL(string: "https://github.com/prompt-smithy/moonglow") {
-                NSWorkspace.shared.open(url)
-            }
-        }
-#endif
     }
 
-#if MOONGLOW_APP_SANDBOXED
+#if DEBUG && MOONGLOW_APP_SANDBOXED
     private func runSandboxGammaProbeIfRequested() {
         guard ProcessInfo.processInfo.arguments.contains("--sandbox-gamma-probe") else { return }
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("moonglow-sandbox-probe-\(UUID().uuidString).json")
